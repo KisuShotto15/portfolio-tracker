@@ -11,6 +11,8 @@ body{font-family:var(--font-sans,system-ui);background:var(--color-background-te
 .app{display:flex;min-height:100vh}
 .sb{width:200px;min-width:200px;background:var(--color-background-primary);border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;padding:.875rem 0}
 .sb-logo{padding:0 1rem .875rem;font-size:17px;font-weight:500;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:.5rem}
+.sb-sync{padding:.5rem 1rem;font-size:11px;display:flex;align-items:center;gap:5px;color:var(--color-text-secondary)}
+.sync-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .nb{display:flex;align-items:center;gap:8px;padding:9px 1rem;cursor:pointer;border:none;background:transparent;color:var(--color-text-secondary);font-size:14px;width:100%;text-align:left}
 .nb:hover{background:var(--color-background-secondary);color:var(--color-text-primary)}
 .nb.active{background:#2a2a2a;color:#fff;font-weight:500;border-left:2px solid #5DCAA5;padding-left:calc(1rem - 2px)}
@@ -78,6 +80,10 @@ tr:hover td{background:rgba(128,128,128,0.08)}
 <div class="app">
 <nav class="sb">
   <div class="sb-logo">Portfolio</div>
+  <div class="sb-sync">
+    <span class="sync-dot" id="sync-dot" style="background:#888"></span>
+    <span id="sync-label">Loading...</span>
+  </div>
   <button class="nb active" onclick="showPage('summary',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
     Summary
@@ -233,6 +239,15 @@ tr:hover td{background:rgba(128,128,128,0.08)}
       <div id="okx-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
     <div class="fc">
+      <h3>Cloud sync</h3>
+      <p class="hint">Data syncs automatically to Cloudflare KV on every change.</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btns btnp" onclick="forcePull()">Pull from cloud</button>
+        <button class="btn btns" onclick="forcePush()">Push to cloud</button>
+      </div>
+      <div id="cloud-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
+    </div>
+    <div class="fc">
       <h3>Data</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
         <button class="btn btns" onclick="exportAllJSON()">Export JSON backup</button>
@@ -262,6 +277,8 @@ tr:hover td{background:rgba(128,128,128,0.08)}
 <script>
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
+var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
+var DATA_TOKEN   = '151322';
 var SUMMARY_CATS = ['Groceries','Discretionary','Services','Help others','Health','Emergency','Income'];
 var CATS         = ['Groceries','Discretionary','Services','Help others','Health','Emergency','Zelle','Income','Other'];
 var CCOLORS      = {Groceries:'#1D9E75',Discretionary:'#378ADD',Services:'#7F77DD','Help others':'#EF9F27',Health:'#5DCAA5',Emergency:'#E24B4A',Zelle:'#a78bfa',Income:'#1D9E75',Other:'#D85A30'};
@@ -275,9 +292,82 @@ var S = {
   okxBalance:null,     okxUpdated:null
 };
 var mChart=null, cChart=null, undoStack=[], redoStack=[];
+var syncTimer=null, syncPending=false;
 
-function save(){ try{ localStorage.setItem('ft12',JSON.stringify(S)); }catch(e){} }
-function load(){ try{ var s=localStorage.getItem('ft12'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} }
+function setSyncStatus(state, msg){
+  var dot=document.getElementById('sync-dot');
+  var lbl=document.getElementById('sync-label');
+  var colors={synced:'#5DCAA5', syncing:'#EF9F27', offline:'#888', error:'#E24B4A'};
+  if(dot) dot.style.background=colors[state]||'#888';
+  if(lbl) lbl.textContent=msg||state;
+}
+
+function saveLocal(){ try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
+function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} }
+
+async function pushToCloud(){
+  try{
+    setSyncStatus('syncing','Syncing...');
+    var r=await fetch(DATA_URL+'/data',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+DATA_TOKEN},
+      body:JSON.stringify(S)
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    setSyncStatus('synced','Synced');
+    var cs=document.getElementById('cloud-status');
+    if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US');
+  }catch(e){
+    setSyncStatus('offline','Offline (local only)');
+    console.warn('push failed:',e.message);
+  }
+}
+
+async function pullFromCloud(){
+  try{
+    setSyncStatus('syncing','Loading...');
+    var r=await fetch(DATA_URL+'/data',{
+      headers:{'Authorization':'Bearer '+DATA_TOKEN}
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var res=await r.json();
+    if(res.data){
+      S=Object.assign({},S,res.data);
+      saveLocal();
+      setSyncStatus('synced','Synced');
+      return true;
+    }
+    setSyncStatus('synced','Synced (no cloud data yet)');
+    return false;
+  }catch(e){
+    setSyncStatus('offline','Offline (local only)');
+    console.warn('pull failed:',e.message);
+    return false;
+  }
+}
+
+function save(){
+  saveLocal();
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(pushToCloud, 1500);
+}
+
+async function forcePull(){
+  var cs=document.getElementById('cloud-status');
+  if(cs) cs.textContent='Pulling...';
+  var ok=await pullFromCloud();
+  if(ok){
+    populateWalletSelects(); updateRateUI(); renderSummary();
+    if(cs) cs.textContent='Pulled from cloud at '+new Date().toLocaleTimeString('en-US');
+  } else {
+    if(cs) cs.textContent='No cloud data found.';
+  }
+}
+async function forcePush(){
+  var cs=document.getElementById('cloud-status');
+  if(cs) cs.textContent='Pushing...';
+  await pushToCloud();
+}
 
 function snapshot(){ undoStack.push(JSON.stringify(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
 function doUndo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); save(); renderTx(); renderSummary(); updateUndoBtns(); }
@@ -374,7 +464,6 @@ function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function tagCat(cat){ var m={Groceries:'tG',Discretionary:'tB',Services:'tP','Help others':'tA',Health:'tG',Emergency:'tR',Zelle:'tZ',Income:'tG',Other:'tX'}; return m[cat]||'tX'; }
-
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return (b.seq!==undefined?b.seq:b.id)-(a.seq!==undefined?a.seq:a.id); }); }
 
 function renderTx(){
@@ -389,8 +478,7 @@ function renderTx(){
   var totalDebits=data.filter(function(t){ return t.type==='Debit'&&inSummary(t); }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var rows=data.map(function(t){
     var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'-';
-    var isTrk=isTracker(t.wallet,t);
-    var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
+    var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
     var trk=isTrk?'<span class="badge-t">tracker</span>':'';
     var wTag=t.wallet==='Binance'?'tBinance':'tX';
     return '<tr><td style="white-space:nowrap">'+t.date+'</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+t.desc+'">'+t.desc+'</td><td><span class="tag '+wTag+'">'+(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td><span class="tag '+tagCat(t.category)+'">'+t.category+'</span></td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
@@ -553,7 +641,7 @@ function handleCSV(file){
       var type=rawType==='Exchange'?'Debit':rawType;
       var cat=normCat((r['Category']||r['category']||'').trim());
       var amt=parseAmt(r['Amount']||r['amount']||r['USD']||r['usd']||'0');
-      var isNotImported=String(r['Tracker']||r['tracker']||'')===('1');
+      var isNotImported=String(r['Tracker']||r['tracker']||'')==='1';
       if(!date||!desc||!amt) return;
       var k=date+'|'+desc+'|'+amt; if(keys[k]){ skipped++; return; } keys[k]=1;
       S.transactions.push({id:Date.now()+Math.random(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported});
@@ -594,7 +682,7 @@ function importJSON(file){
   reader.readAsText(file);
 }
 
-function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ localStorage.removeItem('ft12'); location.reload(); } }
+function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ localStorage.removeItem('ft13'); location.reload(); } }
 
 function showPage(id,btn){
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
@@ -608,13 +696,17 @@ function showPage(id,btn){
   else if(id==='holdings') renderHoldings();
 }
 
-function init(){
-  load();
+async function init(){
+  loadLocal();
   var today=new Date().toISOString().slice(0,10);
   document.getElementById('tx-date').value=today;
   document.getElementById('po-date').value=today;
   document.getElementById('tf-month').value=today.slice(0,7);
-  populateWalletSelects(); updateRateUI(); fetchRate(false); renderSummary();
+  populateWalletSelects(); updateRateUI();
+  var pulled=await pullFromCloud();
+  if(pulled){ populateWalletSelects(); updateRateUI(); }
+  renderSummary();
+  fetchRate(false);
 }
 init();
 </script>
