@@ -80,4 +80,5 @@ tr:hover td{background:rgba(128,128,128,0.08)}
   .frow-break{display:block;width:100%;height:0}
   #tf-cat,#tf-wallet{flex:1;min-width:0}
   #tf-month{flex:1;min-width:0;font-size:11px}
+  .wgrid{grid-template-columns:repeat(2,1fr)}
 }
