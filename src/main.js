@@ -187,7 +187,7 @@ async function fetchWalletHoldings(){
   var res = await fetch(ANKR_URL, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ jsonrpc:'2.0', method:'ankr_getAccountBalance',
-      params:{ blockchain:['bsc'], walletAddress:TREZOR_ADDRESS, onlyWhitelisted:false }, id:1 })
+      params:{ blockchain:['eth','arbitrum','base','bsc'], walletAddress:TREZOR_ADDRESS, onlyWhitelisted:false }, id:1 })
   });
   var json = await res.json();
   if(json.error) throw new Error(json.error.message);
@@ -195,7 +195,8 @@ async function fetchWalletHoldings(){
   S.walletHoldings = assets
     .filter(function(a){ return parseFloat(a.balanceUsd) > 1; })
     .map(function(a){ return { symbol:a.tokenSymbol, name:a.tokenName,
-      balance:parseFloat(a.balance), balanceUsd:parseFloat(a.balanceUsd), price:parseFloat(a.tokenPrice) }; })
+      balance:parseFloat(a.balance), balanceUsd:parseFloat(a.balanceUsd), price:parseFloat(a.tokenPrice),
+      network:a.blockchain }; })
     .sort(function(a,b){ return b.balanceUsd - a.balanceUsd; });
   S.walletHoldingsUpdated = new Date().toLocaleTimeString('en-US');
   save(); return S.walletHoldings;
@@ -207,9 +208,13 @@ function renderWalletHoldings(){
   if(upd && S.walletHoldingsUpdated) upd.textContent = 'Updated '+S.walletHoldingsUpdated;
   var data = S.walletHoldings || [];
   if(!data.length){ wrap.innerHTML='<div class="empty">No on-chain holdings found (or not yet loaded)</div>'; return; }
+  var netLabel={'eth':'ETH','arbitrum':'ARB','base':'BASE','bsc':'BSC'};
+  var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#378ADD','bsc':'#EF9F27'};
   var rows = data.map(function(h){
+    var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
     return '<tr><td style="font-weight:500">'+h.symbol+'</td>'
       +'<td style="color:var(--color-text-secondary);font-size:12px">'+h.name+'</td>'
+      +'<td><span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+nc+'22;color:'+nc+';font-weight:600">'+net+'</span></td>'
       +'<td>'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
       +'<td>'+fmtUSD(h.price)+'</td>'
       +'<td style="font-weight:500">'+fmtUSD(h.balanceUsd)+'</td></tr>';
@@ -217,7 +222,7 @@ function renderWalletHoldings(){
   var total = data.reduce(function(s,h){ return s+h.balanceUsd; },0);
   wrap.innerHTML = '<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px">'
     +'<div class="mc-l">Trezor Total</div><div class="mc-v b">'+fmtUSD(total)+'</div></div>'
-    +'<table><thead><tr><th>Symbol</th><th>Name</th><th>Balance</th><th>Price</th><th>Value</th></tr></thead>'
+    +'<table><thead><tr><th>Symbol</th><th>Name</th><th>Network</th><th>Balance</th><th>Price</th><th>Value</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table>';
 }
 async function refreshWalletHoldings(){
