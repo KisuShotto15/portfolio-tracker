@@ -420,9 +420,16 @@ function showPage(id,btn){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings') renderHoldings();
+  document.querySelector('.sb').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
 }
 
 // Expose functions needed by inline HTML event handlers
+function toggleSidebar(){
+  document.querySelector('.sb').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+}
+window.toggleSidebar = toggleSidebar;
 window.showPage = showPage;
 window.fetchRate = fetchRate;
 window.addTx = addTx;

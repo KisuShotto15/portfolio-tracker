@@ -7,6 +7,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
+<button class="hamburger" onclick="toggleSidebar()">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="4" x2="15" y2="4"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="12" x2="15" y2="12"/></svg>
+</button>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 <div class="app">
 <nav class="sb">
   <div class="sb-logo">Portfolio</div>
