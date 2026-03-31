@@ -542,6 +542,55 @@ window.clearAll = clearAll;
 window.handleCSV = handleCSV;
 window.save = save;
 
+function renderCalcCards(cardsId, resultId, cards){
+  document.getElementById(cardsId).innerHTML = cards.map(function(c){
+    var color = c.green ? 'var(--color-accent)' : c.red ? '#E24B4A' : 'var(--color-text-primary)';
+    return '<div class="fc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:9px;padding:.75rem .625rem">'
+      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">'+c.label+'</div>'
+      +'<div class="bdv-val" style="font-size:18px;font-weight:500;color:'+color+'">'+c.value+'</div>'
+      +'<div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">'+c.sub+'</div>'
+      +'</div>';
+  }).join('');
+  document.getElementById(resultId).style.display = 'block';
+}
+
+function calcBDV(){
+  var bank = parseFloat(document.getElementById('bdv-input').value)||0;
+  var charge   = bank > 0 ? bank / (1.01 * 1.015) : 0;
+  var received = charge * 0.967;
+  var lost     = bank - received;
+  var lostPct  = bank > 0 ? (lost / bank) * 100 : 0;
+  renderCalcCards('bdv-cards','bdv-result',[
+    { label:'Bpay recharge', value:'$'+charge.toFixed(2),   sub:'charged on card' },
+    { label:'You receive',   value:'$'+received.toFixed(2), sub:'after Bpay fee', green:true },
+    { label:'Total lost',    value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of balance', red:true },
+  ]);
+}
+window.calcBDV = calcBDV;
+
+function calcWalletUpfront(bank, walletFeeRate, resultId, cardsId){
+  bank = bank || 0;
+  var cardCharge = bank > 0 ? bank / 1.02515 : 0;
+  var received   = bank > 0 ? cardCharge / (1 + walletFeeRate) : 0;
+  var walletFee  = cardCharge - received;
+  var lost       = bank - received;
+  var lostPct    = bank > 0 ? (lost / bank) * 100 : 0;
+  renderCalcCards(cardsId, resultId, [
+    { label:'You Recharge', value:'$'+received.toFixed(2), sub:'deposited to wallet', green:true },
+    { label:'Wallet fee',   value:'$'+walletFee.toFixed(2),sub:'charged upfront' },
+    { label:'Total lost',   value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of balance', red:true },
+  ]);
+}
+
+function calcWally(){
+  calcWalletUpfront(parseFloat(document.getElementById('wally-input').value), 0.03745, 'wally-result', 'wally-cards');
+}
+function calcZinli(){
+  calcWalletUpfront(parseFloat(document.getElementById('zinli-input').value), 0.0375, 'zinli-result', 'zinli-cards');
+}
+window.calcWally = calcWally;
+window.calcZinli = calcZinli;
+
 async function init(){
   loadLocal();
   var today=new Date().toISOString().slice(0,10);
@@ -555,5 +604,6 @@ async function init(){
   fetchRate(false);
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
+  calcBDV(); calcWally(); calcZinli();
 }
 init();

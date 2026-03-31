@@ -161,10 +161,55 @@
   </div>
 
   <div id="page-tools" class="page">
-    <div class="fc">
-      <h3>Tools</h3>
-      <p class="hint">Calculators and utilities coming soon.</p>
+
+    <div class="tool-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Bpay</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Bpay keeps 3.3% of the recharge</span></span>
+      </div>
+      <div class="field-row" style="max-width:300px;margin-bottom:.875rem">
+        <div class="field">
+          <span class="field-lbl">Tarjeta BDV (bank balance $)</span>
+          <input type="number" id="bdv-input" placeholder="0.00" step="0.01" oninput="calcBDV()"/>
+        </div>
+      </div>
+      <div id="bdv-result">
+        <div id="bdv-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
+      </div>
     </div>
+
+    <div class="tool-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Wally</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Wally fee: 3.5% + 7% ITBMS on commission = 3.745% charged upfront</span></span>
+      </div>
+      <div class="field-row" style="max-width:300px;margin-bottom:.875rem">
+        <div class="field">
+          <span class="field-lbl">Tarjeta BDV (bank balance $)</span>
+          <input type="number" id="wally-input" placeholder="0.00" step="0.01" oninput="calcWally()"/>
+        </div>
+      </div>
+      <div id="wally-result">
+        <div id="wally-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Zinli</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Zinli fee: 3.75% charged upfront</span></span>
+      </div>
+      <div class="field-row" style="max-width:300px;margin-bottom:.875rem">
+        <div class="field">
+          <span class="field-lbl">Tarjeta BDV (bank balance $)</span>
+          <input type="number" id="zinli-input" placeholder="0.00" step="0.01" oninput="calcZinli()"/>
+        </div>
+      </div>
+      <div id="zinli-result">
+        <div id="zinli-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
+      </div>
+    </div>
+
   </div>
 
   <div id="page-settings" class="page">
