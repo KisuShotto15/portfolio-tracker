@@ -39,6 +39,10 @@
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,12 5,7 9,9 15,3"/></svg>
     Holdings
   </button>
+  <button class="nb" onclick="showPage('tools',this)">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><path d="M11.5 9v6M9 11.5h6"/></svg>
+    Tools
+  </button>
   <button class="nb" style="margin-top:auto" onclick="showPage('settings',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
     Settings
@@ -101,7 +105,6 @@
       <button id="btn-redo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Redo" onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <button class="btn btns" onclick="exportCSV()">Export CSV</button>
       <button class="btn btns" onclick="showPage('import',null)">Import CSV</button>
-      <button class="btn btns" style="color:#E24B4A" onclick="clearAllTx()">Clear all</button>
     </div>
     <div id="tx-wrap"></div>
   </div>
@@ -154,6 +157,13 @@
       </div>
       <p class="hint" style="margin-top:6px">Live token balances from your Trezor across ETH, ARB, BASE and BSC. Read-only — not counted in any totals.</p>
       <div id="wh-wrap"></div>
+    </div>
+  </div>
+
+  <div id="page-tools" class="page">
+    <div class="fc">
+      <h3>Tools</h3>
+      <p class="hint">Calculators and utilities coming soon.</p>
     </div>
   </div>
 
