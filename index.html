@@ -145,6 +145,15 @@
       <button class="btn btnp" onclick="addHolding()">Add</button>
     </div>
     <div id="po-wrap"></div>
+    <div class="fc" style="margin-top:1rem">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <h3 style="margin:0">On-chain Holdings</h3>
+        <span id="wh-updated" style="font-size:11px;color:var(--color-text-secondary)"></span>
+        <button class="btn btns" style="margin-left:auto;padding:4px 9px" onclick="refreshWalletHoldings()">&#8635; Refresh</button>
+      </div>
+      <p class="hint" style="margin-top:6px">Live token balances from your Trezor (BSC). Read-only — not counted in any totals.</p>
+      <div id="wh-wrap"></div>
+    </div>
   </div>
 
   <div id="page-settings" class="page">

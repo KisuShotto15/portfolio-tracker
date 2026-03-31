@@ -15,7 +15,8 @@ var S = {
   binanceBalance:null, binanceUpdated:null,
   bybitBalance:null,   bybitUpdated:null,
   okxBalance:null,     okxUpdated:null,
-  trezorBalance:null,  trezorUpdated:null
+  trezorBalance:null,  trezorUpdated:null,
+  walletHoldings:[],   walletHoldingsUpdated:null
 };
 var mChart=null, cChart=null, undoStack=[], redoStack=[];
 var syncTimer=null, syncPending=false;
@@ -166,6 +167,7 @@ function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getE
 var TREZOR_ADDRESS = '0xe0c19374255aCDA45aC2727A5359f0Cfe59cF29B';
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
+var ANKR_URL       = 'https://rpc.ankr.com/multichain/';
 async function fetchTrezorBalance(){
   var padded = '000000000000000000000000' + TREZOR_ADDRESS.slice(2).toLowerCase();
   var data   = '0x70a08231' + padded;
@@ -179,6 +181,50 @@ async function fetchTrezorBalance(){
   S.trezorBalance = parseFloat(balance.toFixed(2));
   S.trezorUpdated = new Date().toLocaleTimeString('en-US');
   save(); return S.trezorBalance;
+}
+
+async function fetchWalletHoldings(){
+  var res = await fetch(ANKR_URL, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ jsonrpc:'2.0', method:'ankr_getAccountBalance',
+      params:{ blockchain:['bsc'], walletAddress:TREZOR_ADDRESS, onlyWhitelisted:false }, id:1 })
+  });
+  var json = await res.json();
+  if(json.error) throw new Error(json.error.message);
+  var assets = (json.result && json.result.assets) || [];
+  S.walletHoldings = assets
+    .filter(function(a){ return parseFloat(a.balanceUsd) > 1; })
+    .map(function(a){ return { symbol:a.tokenSymbol, name:a.tokenName,
+      balance:parseFloat(a.balance), balanceUsd:parseFloat(a.balanceUsd), price:parseFloat(a.tokenPrice) }; })
+    .sort(function(a,b){ return b.balanceUsd - a.balanceUsd; });
+  S.walletHoldingsUpdated = new Date().toLocaleTimeString('en-US');
+  save(); return S.walletHoldings;
+}
+function renderWalletHoldings(){
+  var wrap = document.getElementById('wh-wrap');
+  var upd  = document.getElementById('wh-updated');
+  if(!wrap) return;
+  if(upd && S.walletHoldingsUpdated) upd.textContent = 'Updated '+S.walletHoldingsUpdated;
+  var data = S.walletHoldings || [];
+  if(!data.length){ wrap.innerHTML='<div class="empty">No on-chain holdings found (or not yet loaded)</div>'; return; }
+  var rows = data.map(function(h){
+    return '<tr><td style="font-weight:500">'+h.symbol+'</td>'
+      +'<td style="color:var(--color-text-secondary);font-size:12px">'+h.name+'</td>'
+      +'<td>'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
+      +'<td>'+fmtUSD(h.price)+'</td>'
+      +'<td style="font-weight:500">'+fmtUSD(h.balanceUsd)+'</td></tr>';
+  }).join('');
+  var total = data.reduce(function(s,h){ return s+h.balanceUsd; },0);
+  wrap.innerHTML = '<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px">'
+    +'<div class="mc-l">Trezor Total</div><div class="mc-v b">'+fmtUSD(total)+'</div></div>'
+    +'<table><thead><tr><th>Symbol</th><th>Name</th><th>Balance</th><th>Price</th><th>Value</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>';
+}
+async function refreshWalletHoldings(){
+  var wrap = document.getElementById('wh-wrap');
+  if(wrap) wrap.innerHTML='<div class="empty">Loading...</div>';
+  try{ await fetchWalletHoldings(); renderWalletHoldings(); }
+  catch(e){ if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+e.message+'</div>'; }
 }
 
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
@@ -439,7 +485,7 @@ function showPage(id,btn){
   else if(id==='transactions') renderTx();
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
-  else if(id==='holdings') renderHoldings();
+  else if(id==='holdings'){ renderHoldings(); renderWalletHoldings(); }
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -480,6 +526,7 @@ window.testOKX = testOKX;
 window.clearOKX = clearOKX;
 window.fetchBinanceBalance = fetchBinanceBalance;
 window.fetchTrezorBalance = fetchTrezorBalance;
+window.refreshWalletHoldings = refreshWalletHoldings;
 window.fetchBybitBalance = fetchBybitBalance;
 window.fetchOKXBalance = fetchOKXBalance;
 window.forcePull = forcePull;
@@ -502,5 +549,6 @@ async function init(){
   renderSummary();
   fetchRate(false);
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
+  fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
 }
 init();
