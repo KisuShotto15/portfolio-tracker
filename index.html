@@ -91,11 +91,13 @@
     <div class="frow">
       <input type="search" id="tf-search" placeholder="Search transactions..." oninput="renderTx()" style="min-width:180px"/>
       <select id="tf-type" onchange="renderTx()"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
+      <div class="frow-break"></div>
       <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Groceries</option><option>Discretionary</option><option>Services</option><option>Help others</option><option>Health</option><option>Emergency</option><option>Zelle</option><option>Income</option><option>Other</option></select>
       <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
       <input type="month" id="tf-month" onchange="renderTx()"/>
-      <button id="btn-undo" class="btn btns" style="opacity:0.35" onclick="doUndo()">&#8617; Undo</button>
-      <button id="btn-redo" class="btn btns" style="opacity:0.35" onclick="doRedo()">&#8618; Redo</button>
+      <div class="frow-break"></div>
+      <button id="btn-undo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Undo" onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="btn-redo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Redo" onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <button class="btn btns" onclick="exportCSV()">Export CSV</button>
       <button class="btn btns" onclick="showPage('import',null)">Import CSV</button>
       <button class="btn btns" style="color:#E24B4A" onclick="clearAllTx()">Clear all</button>
