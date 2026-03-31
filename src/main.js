@@ -14,7 +14,8 @@ var S = {
   budgetTotal:600,
   binanceBalance:null, binanceUpdated:null,
   bybitBalance:null,   bybitUpdated:null,
-  okxBalance:null,     okxUpdated:null
+  okxBalance:null,     okxUpdated:null,
+  trezorBalance:null,  trezorUpdated:null
 };
 var mChart=null, cChart=null, undoStack=[], redoStack=[];
 var syncTimer=null, syncPending=false;
@@ -162,6 +163,24 @@ async function testOKX(){
 }
 function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getElementById('okx-status').textContent='Reset.'; renderWallets(); }
 
+var TREZOR_ADDRESS = '0xe0c19374255aCDA45aC2727A5359f0Cfe59cF29B';
+var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
+var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
+async function fetchTrezorBalance(){
+  var padded = '000000000000000000000000' + TREZOR_ADDRESS.slice(2).toLowerCase();
+  var data   = '0x70a08231' + padded;
+  var res = await fetch(BSC_RPC, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ jsonrpc:'2.0', method:'eth_call', params:[{to:BSC_USDT, data:data},'latest'], id:1 })
+  });
+  var json = await res.json();
+  if(json.error) throw new Error(json.error.message);
+  var balance = parseInt(json.result, 16) / 1e18;
+  S.trezorBalance = parseFloat(balance.toFixed(2));
+  S.trezorUpdated = new Date().toLocaleTimeString('en-US');
+  save(); return S.trezorBalance;
+}
+
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
 function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; document.getElementById('usd-preview').textContent=(S.rate&&a>0)?(a/S.rate).toFixed(2):'-'; }
 
@@ -296,7 +315,7 @@ function calcTrackerBal(name){
 
 function renderWallets(){
   var grid=document.getElementById('w-grid'); var cards=[];
-  var apiTotal=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0);
+  var apiTotal=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
   var trackerNames=['Zelle'];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
   var trackerTotal=trackerNames.reduce(function(s,n){ return s+calcTrackerBal(n); },0);
@@ -310,6 +329,7 @@ function renderWallets(){
   cards.push(apiCard('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'fetchBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'fetchBybitBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'fetchOKXBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
+  cards.push(apiCard('Trezor (BSC USDT)',true,S.trezorBalance,S.trezorUpdated,'fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   trackerNames.forEach(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){ return w.name===name; });
     var del=mw?'<button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+mw.id+')">Remove</button>':'';
@@ -459,6 +479,7 @@ window.clearBybit = clearBybit;
 window.testOKX = testOKX;
 window.clearOKX = clearOKX;
 window.fetchBinanceBalance = fetchBinanceBalance;
+window.fetchTrezorBalance = fetchTrezorBalance;
 window.fetchBybitBalance = fetchBybitBalance;
 window.fetchOKXBalance = fetchOKXBalance;
 window.forcePull = forcePull;
@@ -480,5 +501,6 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   renderSummary();
   fetchRate(false);
+  fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
 }
 init();
