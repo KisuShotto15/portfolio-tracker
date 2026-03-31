@@ -84,12 +84,12 @@
       </div>
       <div class="field-row">
         <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-        <div class="field"><span class="field-lbl">Category</span><select id="tx-cat"><option>Groceries</option><option>Discretionary</option><option>Services</option><option>Help others</option><option>Health</option><option>Emergency</option><option>Zelle</option><option>Income</option><option>Other</option></select></div>
+        <div class="field"><span class="field-lbl">Category</span><select id="tx-cat"><option value="">—</option><option>Groceries</option><option>Discretionary</option><option>Services</option><option>Help others</option><option>Health</option><option>Emergency</option><option>Zelle</option><option>Income</option><option>Other</option></select></div>
         <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES to USD</option></select></div>
         <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" oninput="updateVesPreview()"/></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
-        <button class="btn btn-add" onclick="addTx()">Add</button>
+        <button class="btn btn-add" onclick="addTxOrUpdate()">Add</button>
         <span id="ves-hint" style="display:none;font-size:12px;color:var(--color-text-secondary)">approx <span id="usd-preview">-</span> USD</span>
       </div>
     </div>
