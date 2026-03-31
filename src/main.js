@@ -422,12 +422,15 @@ function showPage(id,btn){
   else if(id==='holdings') renderHoldings();
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
+  document.body.classList.remove('nav-open');
 }
 
 // Expose functions needed by inline HTML event handlers
 function toggleSidebar(){
-  document.querySelector('.sb').classList.toggle('open');
+  var sb=document.querySelector('.sb');
+  sb.classList.toggle('open');
   document.getElementById('overlay').classList.toggle('open');
+  document.body.classList.toggle('nav-open');
 }
 window.toggleSidebar = toggleSidebar;
 window.showPage = showPage;
