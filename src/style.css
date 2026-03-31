@@ -37,6 +37,11 @@ body{font-family:var(--font-sans,system-ui);background:var(--color-background-te
 .btnp:hover{opacity:.85}
 .btnd{color:#E24B4A;border-color:transparent;padding:3px 7px}
 .btnd:hover{background:rgba(226,75,74,.12)}
+.btn-edit-tx,.btnd{opacity:0;transition:opacity .15s}
+.btn-edit-tx{background:none;border:none;cursor:pointer;color:var(--color-text-secondary);padding:3px 5px;border-radius:5px;vertical-align:middle}
+.btn-edit-tx:hover{color:#5DCAA5}
+.btnd:hover{background:rgba(226,75,74,.12)}
+tr:hover .btn-edit-tx,tr:hover .btnd{opacity:1}
 .btns{padding:5px 10px;font-size:13px}
 .btn-add{border:1.5px solid #5DCAA5;color:#5DCAA5;font-weight:500;padding:7px 20px;font-size:14px}
 table{width:100%;border-collapse:collapse;font-size:14px}

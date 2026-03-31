@@ -253,13 +253,56 @@ function addTx(){
 }
 
 function deleteTx(id){ snapshot(); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); save(); renderTx(); renderSummary(); }
+
+var editingTxId = null;
+function editTx(id){
+  var t=S.transactions.find(function(x){ return x.id===id; }); if(!t) return;
+  editingTxId=id;
+  document.getElementById('tx-date').value=t.date;
+  document.getElementById('tx-desc').value=t.desc;
+  document.getElementById('tx-wallet').value=t.wallet||'';
+  document.getElementById('tx-type').value=t.type;
+  document.getElementById('tx-cat').value=t.category;
+  document.getElementById('tx-cur').value=t.originalCurrency||'USD';
+  document.getElementById('tx-amount').value=t.originalCurrency==='VES'&&t.amountVES?t.amountVES:t.amountUSD;
+  toggleVesHint();
+  var btn=document.querySelector('.btn-add');
+  btn.textContent='Update'; btn.style.background='#5DCAA5';
+  document.getElementById('tx-desc').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function cancelEditTx(){
+  editingTxId=null;
+  var btn=document.querySelector('.btn-add');
+  btn.textContent='Add'; btn.style.background='';
+}
+function addTxOrUpdate(){
+  if(editingTxId) updateTx(); else addTx();
+}
+function updateTx(){
+  var date=document.getElementById('tx-date').value;
+  var desc=document.getElementById('tx-desc').value.trim();
+  var wallet=document.getElementById('tx-wallet').value;
+  var type=document.getElementById('tx-type').value;
+  var cat=document.getElementById('tx-cat').value;
+  var cur=document.getElementById('tx-cur').value;
+  var amt=parseFloat(document.getElementById('tx-amount').value);
+  if(!date||!desc||isNaN(amt)||amt<=0){ alert('Date, note and amount are required'); return; }
+  var amtUSD=amt, amtVES=null;
+  if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
+  snapshot();
+  var t=S.transactions.find(function(x){ return x.id===editingTxId; });
+  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; }
+  document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
+  cancelEditTx(); save(); renderTx(); renderSummary();
+}
 function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); save(); renderHoldings(); }
 function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); save(); renderWallets(); populateWalletSelects(); }
 
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function tagCat(cat){ var m={Groceries:'tG',Discretionary:'tB',Services:'tP','Help others':'tA',Health:'tG',Emergency:'tR',Zelle:'tZ',Income:'tG',Other:'tX'}; return m[cat]||'tX'; }
-function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return (b.seq!==undefined?b.seq:b.id)-(a.seq!==undefined?a.seq:a.id); }); }
+function fmtCat(cat){ return cat||'—'; }
+function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
 
 function renderTx(){
   var wrap=document.getElementById('tx-wrap');
@@ -277,7 +320,7 @@ function renderTx(){
     var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
     var trk=isTrk?'<span class="badge-t">tracker</span>':'';
     var wTag=t.wallet==='Binance'?'tBinance':'tX';
-    return '<tr><td style="white-space:nowrap">'+t.date+'</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+t.desc+'">'+t.desc+'</td><td><span class="tag '+wTag+'">'+(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td><span class="tag '+tagCat(t.category)+'">'+t.category+'</span></td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
+    return '<tr><td style="white-space:nowrap">'+t.date+'</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+t.desc+'">'+t.desc+'</td><td><span class="tag '+wTag+'">'+(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td>'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+t.category+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td style="white-space:nowrap"><button class="btn-edit-tx" title="Edit" onclick="editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
   }).join('');
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:7px">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div><table><thead><tr><th>Date</th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
@@ -508,6 +551,8 @@ window.showPage = showPage;
 window.fetchRate = fetchRate;
 window.addTx = addTx;
 window.deleteTx = deleteTx;
+window.editTx = editTx;
+window.addTxOrUpdate = addTxOrUpdate;
 window.doUndo = doUndo;
 window.doRedo = doRedo;
 window.exportCSV = exportCSV;
