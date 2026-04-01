@@ -275,13 +275,21 @@ function editTx(id){
   document.getElementById('tx-amount').value=t.originalCurrency==='VES'&&t.amountVES?t.amountVES:t.amountUSD;
   toggleVesHint();
   var btn=document.querySelector('.btn-add');
-  btn.textContent='Update'; btn.style.background='#5DCAA5';
+  btn.textContent='Confirm';
+  var cancelBtn=document.getElementById('btn-cancel-edit'); if(cancelBtn) cancelBtn.style.display='';
   document.getElementById('tx-desc').scrollIntoView({behavior:'smooth',block:'center'});
 }
 function cancelEditTx(){
   editingTxId=null;
   var btn=document.querySelector('.btn-add');
-  btn.textContent='Add'; btn.style.background='';
+  btn.textContent='Add';
+  var cancelBtn=document.getElementById('btn-cancel-edit'); if(cancelBtn) cancelBtn.style.display='none';
+  var today=new Date().toISOString().slice(0,10);
+  document.getElementById('tx-date').value=today;
+  document.getElementById('tx-desc').value='';
+  document.getElementById('tx-amount').value='';
+  document.getElementById('tx-cur').value='USD';
+  toggleVesHint();
 }
 function addTxOrUpdate(){
   if(editingTxId) updateTx(); else addTx();
@@ -378,7 +386,7 @@ function renderMonthlyChart(){
 
 function renderCatChart(month){
   var map={};
-  S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&inSummary(t); }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
+  S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
   var cats=Object.keys(map); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
   if(cChart) cChart.destroy();
   if(!cats.length){ document.getElementById('cat-leg').innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>'; return; }
@@ -436,14 +444,13 @@ function renderBudget(){
   sel.onchange=renderBudget;
   var month=sel.value||months[0];
   document.getElementById('bud-total').value=S.budgetTotal;
-  var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&inSummary(t); });
+  var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&CATS.indexOf(t.category)>=0; });
   var spent=debits.reduce(function(s,t){ return s+t.amountUSD; },0);
   var left=S.budgetTotal-spent; var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
   var html='<div class="fc"><div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:14px"><span>Spent: <strong style="color:#E24B4A">'+fmtUSD(spent)+'</strong> / <strong>'+fmtUSD(S.budgetTotal)+'</strong></span><span style="color:'+bc+';font-weight:500">'+pct+'%</span></div><div class="pb"><div class="pf" style="width:'+pct+'%;background:'+bc+'"></div></div><div style="margin-top:6px;font-size:12px;color:'+(left>=0?'#5DCAA5':'#E24B4A')+'">'+(left>=0?'Remaining: '+fmtUSD(left):'Exceeded: '+fmtUSD(Math.abs(left)))+'</div></div><div class="fc">';
-  CATS.filter(function(c){ return c!=='Zelle'&&c!=='Income'; }).forEach(function(cat){
+  CATS.filter(function(c){ return c!=='Income'; }).forEach(function(cat){
     var s=debits.filter(function(t){ return t.category===cat; }).reduce(function(a,t){ return a+t.amountUSD; },0);
-    if(!s) return;
     var cp=S.budgetTotal>0?Math.min(100,Math.round(s/S.budgetTotal*100)):0;
     html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span class="tag '+tagCat(cat)+'" style="min-width:95px">'+cat+'</span><div style="flex:1"><div class="pb"><div class="pf" style="width:'+cp+'%;background:'+(CCOLORS[cat]||'#888')+'"></div></div></div><span style="font-weight:500;min-width:70px;text-align:right">'+fmtUSD(s)+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+cp+'%</span></div>';
   });
