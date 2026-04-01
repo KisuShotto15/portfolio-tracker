@@ -634,6 +634,7 @@ window.addTx = addTx;
 window.deleteTx = deleteTx;
 window.editTx = editTx;
 window.addTxOrUpdate = addTxOrUpdate;
+window.cancelEditTx = cancelEditTx;
 window.doUndo = doUndo;
 window.doRedo = doRedo;
 window.exportCSV = exportCSV;
