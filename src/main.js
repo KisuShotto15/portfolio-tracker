@@ -4,9 +4,11 @@ var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
 var DATA_TOKEN   = '151322';
-var SUMMARY_CATS = ['Groceries','Discretionary','Services','Help others','Health','Emergency','Income'];
-var CATS         = ['Groceries','Discretionary','Services','Help others','Health','Emergency','Zelle','Income','Other'];
-var CCOLORS      = {Groceries:'#1D9E75',Discretionary:'#378ADD',Services:'#7F77DD','Help others':'#EF9F27',Health:'#5DCAA5',Emergency:'#E24B4A',Zelle:'#a78bfa',Income:'#1D9E75',Other:'#D85A30'};
+var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
+var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
+var CCOLORS      = {Income:'#1D9E75',Home:'#7F77DD',Groceries:'#1D9E75',Transport:'#378ADD',Health:'#5DCAA5',Business:'#EF9F27',Discretionary:'#378ADD',Support:'#EF9F27',Investments:'#F5A623',Savings:'#5DCAA5',
+  // legacy — kept so old transactions still render with a color
+  Services:'#7F77DD','Help others':'#EF9F27',Emergency:'#E24B4A',Zelle:'#a78bfa',Other:'#D85A30'};
 
 var S = {
   rate:null, rateDate:null,
@@ -16,9 +18,14 @@ var S = {
   bybitBalance:null,   bybitUpdated:null,
   okxBalance:null,     okxUpdated:null,
   trezorBalance:null,  trezorUpdated:null,
-  walletHoldings:[],   walletHoldingsUpdated:null
+  walletHoldings:[],   walletHoldingsUpdated:null,
+  snapshots:[]
 };
-var mChart=null, cChart=null, undoStack=[], redoStack=[];
+var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
+var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
+var GROUP_BUSINESS=['Business'];
+var GROUP_LIFESTYLE=['Discretionary','Support'];
+var GROUP_FINANCIAL=['Investments','Savings'];
 var syncTimer=null, syncPending=false;
 
 function setSyncStatus(state, msg){
@@ -300,7 +307,8 @@ function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function
 
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function tagCat(cat){ var m={Groceries:'tG',Discretionary:'tB',Services:'tP','Help others':'tA',Health:'tG',Emergency:'tR',Zelle:'tZ',Income:'tG',Other:'tX'}; return m[cat]||'tX'; }
+function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB',Support:'tA',Investments:'tA',Savings:'tG',
+  Services:'tP','Help others':'tA',Emergency:'tR',Zelle:'tZ',Other:'tX'}; return m[cat]||'tX'; }
 function fmtCat(cat){ return cat||'—'; }
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
 
@@ -328,21 +336,31 @@ function renderTx(){
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
 function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
 
+function groupSum(txDebit, cats){ return cats.reduce(function(s,c){ return s+txDebit.filter(function(t){ return t.category===c; }).reduce(function(a,t){ return a+t.amountUSD; },0); },0); }
+
 function renderSummary(){
   populateSumMonth();
   var month=document.getElementById('sum-month').value;
   var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
-  var debits=txM.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var txD=txM.filter(function(t){ return t.type==='Debit'; });
+  var debits=txD.reduce(function(s,t){ return s+t.amountUSD; },0);
   var credits=txM.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var net=credits-debits, left=S.budgetTotal-debits;
-  var usdtTotal=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0);
+  var net=credits-debits;
+  var essential=groupSum(txD,GROUP_ESSENTIAL);
+  var business=groupSum(txD,GROUP_BUSINESS);
+  var lifestyle=groupSum(txD,GROUP_LIFESTYLE);
+  var financial=groupSum(txD,GROUP_FINANCIAL);
+  var savRate=credits>0?Math.round((net/credits)*100):0;
+  function mc(label,val,cls,sub){ return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+fmtUSD(val)+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
   document.getElementById('sum-cards').innerHTML=
-    '<div class="mc"><div class="mc-l">Income</div><div class="mc-v g">'+fmtUSD(credits)+'</div></div>'
-   +'<div class="mc"><div class="mc-l">Expenses</div><div class="mc-v r">'+fmtUSD(debits)+'</div></div>'
-   +'<div class="mc"><div class="mc-l">Net</div><div class="mc-v '+(net>=0?'g':'r')+'">'+fmtUSD(net)+'</div></div>'
-   +'<div class="mc"><div class="mc-l">Budget remaining</div><div class="mc-v '+(left>=0?'a':'r')+'">'+fmtUSD(left)+'</div></div>'
-   +'<div class="mc"><div class="mc-l">USDT balance</div><div class="mc-v b">'+fmtUSD(usdtTotal)+'</div></div>';
-  renderMonthlyChart(); renderCatChart(month);
+    mc('Income',credits,'g')
+   +mc('Essential',essential,'r','Home · Groceries · Transport · Health')
+   +mc('Business',business,'a','')
+   +mc('Lifestyle',lifestyle,'b','Discretionary · Support')
+   +mc('Financial',financial,'g','Investments · Savings')
+   +mc('Net',net,net>=0?'g':'r')
+   +'<div class="mc"><div class="mc-l">Savings rate</div><div class="mc-v '+(savRate>=0?'g':'r')+'">'+savRate+'%</div></div>';
+  renderEquityChart(); renderMonthlyChart(); renderCatChart(month);
 }
 
 function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
@@ -367,6 +385,46 @@ function renderCatChart(month){
   cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'65%'}});
   document.getElementById('cat-leg').innerHTML=cats.map(function(c,i){ return '<div style="display:flex;align-items:center;gap:6px;font-size:13px"><span style="width:9px;height:9px;border-radius:2px;background:'+colors[i]+';flex-shrink:0"></span><span style="color:var(--color-text-secondary);flex:1">'+c+'</span><span style="font-weight:500">$'+vals[i].toLocaleString('en-US',{minimumFractionDigits:2})+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+(total>0?Math.round(vals[i]/total*100):0)+'%</span></div>'; }).join('');
 }
+
+function renderEquityChart(){
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var el=document.getElementById('chart-equity'); if(!el) return;
+  var wrap=document.getElementById('equity-wrap');
+  if(!snaps.length){
+    if(wrap) wrap.innerHTML='<div style="color:var(--color-text-secondary);font-size:13px;padding:1rem 0">No snapshots yet. Record your first one to start the equity curve.</div>';
+    return;
+  }
+  var labels=snaps.map(function(s){ return s.date; });
+  var vals=snaps.map(function(s){ return s.total; });
+  var first=vals[0], last=vals[vals.length-1], pnl=last-first, pnlPct=first>0?((pnl/first)*100).toFixed(1):0;
+  if(wrap) wrap.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:.75rem;font-size:13px">'
+    +'<span>First: <strong>'+fmtUSD(first)+'</strong></span>'
+    +'<span>Latest: <strong>'+fmtUSD(last)+'</strong></span>'
+    +'<span>P&amp;L: <strong style="color:'+(pnl>=0?'#1D9E75':'#E24B4A')+'">'+(pnl>=0?'+':'')+fmtUSD(pnl)+' ('+pnlPct+'%)</strong></span>'
+    +'</div>';
+  if(eChart) eChart.destroy();
+  eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[{data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.08)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
+}
+
+function getTotalBalance(){
+  var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
+  var manual=S.manualWallets.reduce(function(s,w){ return s+calcTrackerBal(w.name); },0);
+  return parseFloat((api+manual).toFixed(2));
+}
+
+function recordSnapshot(){
+  var auto=getTotalBalance();
+  var val=parseFloat(prompt('Record portfolio snapshot\n\nAuto-sum from wallets: $'+auto.toFixed(2)+'\n\nEnter total (or leave to use auto-sum):',auto.toFixed(2)));
+  if(isNaN(val)||val<0) return;
+  if(!S.snapshots) S.snapshots=[];
+  var today=new Date().toISOString().slice(0,10);
+  var existing=S.snapshots.findIndex(function(s){ return s.date===today; });
+  if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
+  S.snapshots.push({id:Date.now(),date:today,total:val});
+  save(); renderEquityChart();
+}
+
+function deleteSnapshot(id){ S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; }); save(); renderEquityChart(); }
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
 function renderBudget(){
@@ -464,7 +522,14 @@ function populateWalletSelects(){
 }
 
 function parseDate(raw){ if(!raw) return null; var s=raw.trim(); var d=new Date(s); if(!isNaN(d.getTime())) return d.toISOString().slice(0,10); var m=s.match(/(\w+)\s+(\d+),?\s+(\d{4})/); if(m){ d=new Date(m[1]+' '+m[2]+' '+m[3]); if(!isNaN(d.getTime())) return d.toISOString().slice(0,10); } return null; }
-function normCat(raw){ var c=(raw||'').toLowerCase(); if(c.indexOf('groceries')>=0) return 'Groceries'; if(c.indexOf('discretionary')>=0) return 'Discretionary'; if(c.indexOf('services')>=0) return 'Services'; if(c.indexOf('help')>=0) return 'Help others'; if(c.indexOf('health')>=0) return 'Health'; if(c.indexOf('emergency')>=0) return 'Emergency'; if(c.indexOf('zelle')>=0||c.indexOf('exchange')>=0) return 'Zelle'; if(c.indexOf('income')>=0) return 'Income'; return raw||'Other'; }
+function normCat(raw){ var c=(raw||'').toLowerCase();
+  if(c==='income') return 'Income'; if(c==='home') return 'Home'; if(c==='groceries') return 'Groceries';
+  if(c==='transport') return 'Transport'; if(c==='health') return 'Health'; if(c==='business') return 'Business';
+  if(c==='discretionary') return 'Discretionary'; if(c==='support'||c.indexOf('help')>=0) return 'Support';
+  if(c==='investments') return 'Investments'; if(c==='savings'||c.indexOf('emergency')>=0) return 'Savings';
+  // legacy mappings for old imports
+  if(c.indexOf('services')>=0) return 'Services'; if(c.indexOf('zelle')>=0) return 'Zelle'; if(c.indexOf('other')>=0) return 'Other';
+  return raw||''; }
 
 function handleCSV(file){
   if(!file) return;
@@ -525,10 +590,14 @@ function importJSON(file){
 function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ localStorage.removeItem('ft13'); location.reload(); } }
 
 function showPage(id,btn){
+  var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import'];
+  if(pages.indexOf(id)<0) id='summary';
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('active'); });
   document.getElementById('page-'+id).classList.add('active');
   if(btn) btn.classList.add('active');
+  else { var nb=document.querySelector('.nb[onclick*="\''+id+'\'"]'); if(nb) nb.classList.add('active'); }
+  window.location.hash = id;
   if(id==='summary') renderSummary();
   else if(id==='transactions') renderTx();
   else if(id==='budget') renderBudget();
@@ -612,6 +681,8 @@ function calcBDV(){
   ]);
 }
 window.calcBDV = calcBDV;
+window.recordSnapshot = recordSnapshot;
+window.deleteSnapshot = deleteSnapshot;
 
 function calcWalletUpfront(bank, walletFeeRate, resultId, cardsId){
   bank = bank || 0;
@@ -645,7 +716,8 @@ async function init(){
   populateWalletSelects(); updateRateUI();
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
-  renderSummary();
+  var hash=(window.location.hash||'').replace('#','');
+  showPage(hash||'summary', null);
   fetchRate(false);
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
