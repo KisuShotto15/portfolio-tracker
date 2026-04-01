@@ -42,6 +42,7 @@ body{font-family:var(--font-sans,system-ui);background:var(--color-background-te
 .btn-edit-tx:hover{color:#5DCAA5}
 .btnd:hover{background:rgba(226,75,74,.12)}
 tr:hover .btn-edit-tx,tr:hover .btnd{opacity:1}
+.wcard .btnd{opacity:1}
 .btns{padding:5px 10px;font-size:13px}
 .btn-add{border:1.5px solid #5DCAA5;color:#5DCAA5;font-weight:500;padding:7px 20px;font-size:14px}
 table{width:100%;border-collapse:collapse;font-size:14px}
