@@ -11,7 +11,7 @@ var CCOLORS      = {Income:'#1D9E75',Home:'#7F77DD',Groceries:'#1D9E75',Transpor
   Services:'#7F77DD','Help others':'#EF9F27',Emergency:'#E24B4A',Zelle:'#a78bfa',Other:'#D85A30'};
 
 var S = {
-  rate:null, rateDate:null,
+  rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
   budgetTotal:600,
   binanceBalance:null, binanceUpdated:null,
@@ -113,9 +113,10 @@ function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return 
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
 
 async function fetchRate(force){
-  if(!force&&S.rate&&S.rateDate){ updateRateUI(); return; }
+  var stale=S.rateFetchedAt&&(Date.now()-S.rateFetchedAt>60*60*1000);
+  if(!force&&S.rate&&S.rateDate&&!stale){ updateRateUI(); return; }
   document.getElementById('rate-display').textContent='...';
-  try{ var r=await fetch(RATE_URL); var d=await r.json(); if(d.rate&&parseFloat(d.rate)>10){ S.rate=parseFloat(parseFloat(d.rate).toFixed(2)); S.rateDate='today ('+d.source+')'; save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
+  try{ var r=await fetch(RATE_URL); var d=await r.json(); if(d.rate&&parseFloat(d.rate)>10){ S.rate=parseFloat(parseFloat(d.rate).toFixed(2)); S.rateDate='today ('+d.source+')'; S.rateFetchedAt=Date.now(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
   if(!S.rate) showManualRate(); else updateRateUI();
 }
 function showManualRate(){
@@ -409,7 +410,8 @@ function renderEquityChart(){
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
   var manual=S.manualWallets.reduce(function(s,w){ return s+calcTrackerBal(w.name); },0);
-  return parseFloat((api+manual).toFixed(2));
+  var zelle=calcTrackerBal('Zelle');
+  return parseFloat((api+manual+zelle).toFixed(2));
 }
 
 function recordSnapshot(){
@@ -722,5 +724,6 @@ async function init(){
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   calcBDV(); calcWally(); calcZinli();
+  setInterval(function(){ fetchRate(false); }, 60*60*1000);
 }
 init();
