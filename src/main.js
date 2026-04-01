@@ -287,6 +287,9 @@ function cancelEditTx(){
   var today=new Date().toISOString().slice(0,10);
   document.getElementById('tx-date').value=today;
   document.getElementById('tx-desc').value='';
+  document.getElementById('tx-wallet').value='';
+  document.getElementById('tx-type').value='Debit';
+  document.getElementById('tx-cat').value='';
   document.getElementById('tx-amount').value='';
   document.getElementById('tx-cur').value='USD';
   toggleVesHint();
