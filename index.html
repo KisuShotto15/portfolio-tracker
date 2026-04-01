@@ -56,6 +56,14 @@
     </div>
     <div class="cgrid" id="sum-cards"></div>
     <div class="cw">
+      <div class="cleg" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Equity curve</span>
+        <button class="btn btns" style="padding:3px 10px;font-size:12px" onclick="recordSnapshot()">+ Record snapshot</button>
+      </div>
+      <div id="equity-wrap"></div>
+      <div style="position:relative;height:200px"><canvas id="chart-equity"></canvas></div>
+    </div>
+    <div class="cw">
       <div class="cleg" id="mc-leg"></div>
       <div style="position:relative;height:210px"><canvas id="chart-monthly"></canvas></div>
     </div>
@@ -84,7 +92,7 @@
       </div>
       <div class="field-row">
         <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-        <div class="field"><span class="field-lbl">Category</span><select id="tx-cat"><option value="">—</option><option>Groceries</option><option>Discretionary</option><option>Services</option><option>Help others</option><option>Health</option><option>Emergency</option><option>Zelle</option><option>Income</option><option>Other</option></select></div>
+        <div class="field"><span class="field-lbl">Category</span><select id="tx-cat"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Support</option><option>Investments</option><option>Savings</option></select></div>
         <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES to USD</option></select></div>
         <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" oninput="updateVesPreview()"/></div>
       </div>
@@ -97,7 +105,7 @@
       <input type="search" id="tf-search" placeholder="Search transactions..." oninput="renderTx()" style="min-width:180px"/>
       <select id="tf-type" onchange="renderTx()"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div class="frow-break"></div>
-      <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Groceries</option><option>Discretionary</option><option>Services</option><option>Help others</option><option>Health</option><option>Emergency</option><option>Zelle</option><option>Income</option><option>Other</option></select>
+      <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Support</option><option>Investments</option><option>Savings</option></select>
       <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
       <input type="month" id="tf-month" onchange="renderTx()"/>
       <div class="frow-break"></div>
