@@ -355,22 +355,32 @@ function renderSummary(){
   var month=document.getElementById('sum-month').value;
   var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
   var txD=txM.filter(function(t){ return t.type==='Debit'; });
-  var debits=txD.reduce(function(s,t){ return s+t.amountUSD; },0);
-  var credits=txM.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var net=credits-debits;
+  var txC=txM.filter(function(t){ return t.type==='Credit'; });
+  // Income = only new money entering (Income category credits)
+  var income=txC.filter(function(t){ return t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var essential=groupSum(txD,GROUP_ESSENTIAL);
   var business=groupSum(txD,GROUP_BUSINESS);
   var lifestyle=groupSum(txD,GROUP_LIFESTYLE);
-  var financial=groupSum(txD,GROUP_FINANCIAL);
-  var savRate=credits>0?Math.round((net/credits)*100):0;
-  function mc(label,val,cls,sub){ return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+fmtUSD(val)+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
+  // Investments: net flow — negative=capital deployed, positive=net gain/return
+  var invOut=txD.filter(function(t){ return t.category==='Investments'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var invIn=txC.filter(function(t){ return t.category==='Investments'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var invNet=invIn-invOut;
+  // Savings: amount moved to savings wallets (informational, not an expense)
+  var saved=txD.filter(function(t){ return t.category==='Savings'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  // Net = real spending efficiency, excludes investments and savings
+  var net=income-essential-business-lifestyle;
+  var savRate=income>0?Math.round((net/income)*100):0;
+  function mc(label,val,cls,sub){ var d=val<0?'-'+fmtUSD(-val):fmtUSD(val); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
+  function mcs(label,val,cls,sub){ var d=val>0?'+'+fmtUSD(val):val<0?'-'+fmtUSD(-val):fmtUSD(0); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
+  var invSub=invOut>0||invIn>0?'Out: '+fmtUSD(invOut)+(invIn>0?' · In: '+fmtUSD(invIn):''):'';
   document.getElementById('sum-cards').innerHTML=
-    mc('Income',credits,'g')
+    mc('Income',income,'g')
    +mc('Essential',essential,'r','Home · Groceries · Transport · Health')
    +mc('Business',business,'a','')
    +mc('Lifestyle',lifestyle,'b','Discretionary · Support')
-   +mc('Financial',financial,'g','Investments · Savings')
-   +mc('Net',net,net>=0?'g':'r')
+   +mcs('Net',net,net>=0?'g':'r','Income minus expenses')
+   +mcs('Investments',invNet,invNet>=0?'g':'a',invSub)
+   +mc('Saved',saved,'g','Moved to savings')
    +'<div class="mc"><div class="mc-l">Savings rate</div><div class="mc-v '+(savRate>=0?'g':'r')+'">'+savRate+'%</div></div>';
   renderEquityChart(); renderMonthlyChart(); renderCatChart(month);
 }
@@ -379,8 +389,10 @@ function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=
 
 function renderMonthlyChart(){
   var months=getLast6();
-  var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&inSummary(t); }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
-  var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&inSummary(t); }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
+  // Expenses: exclude Savings (transfers). Income: only Income-category credits
+  var SPEND_CATS=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE).concat(['Investments']);
+  var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
+  var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
   if(mChart) mChart.destroy();
   mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#1D9E75',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#E24B4A',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
@@ -389,7 +401,9 @@ function renderMonthlyChart(){
 
 function renderCatChart(month){
   var map={};
-  S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
+  // Donut excludes Savings (it's a transfer, not a real expense)
+  var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'; });
+  S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&DONUT_CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
   var cats=Object.keys(map); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
   if(cChart) cChart.destroy();
   if(!cats.length){ document.getElementById('cat-leg').innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>'; return; }
