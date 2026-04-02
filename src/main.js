@@ -480,12 +480,13 @@ function renderBudget(){
   sel.onchange=renderBudget;
   var month=sel.value||months[0];
   document.getElementById('bud-total').value=S.budgetTotal;
-  var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&CATS.indexOf(t.category)>=0; });
+  var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Support'];
+  var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&BUDGET_CATS.indexOf(t.category)>=0; });
   var spent=debits.reduce(function(s,t){ return s+t.amountUSD; },0);
   var left=S.budgetTotal-spent; var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
   var html='<div class="fc"><div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:14px"><span>Spent: <strong style="color:#E24B4A">'+fmtUSD(spent)+'</strong> / <strong>'+fmtUSD(S.budgetTotal)+'</strong></span><span style="color:'+bc+';font-weight:500">'+pct+'%</span></div><div class="pb"><div class="pf" style="width:'+pct+'%;background:'+bc+'"></div></div><div style="margin-top:6px;font-size:12px;color:'+(left>=0?'#5DCAA5':'#E24B4A')+'">'+(left>=0?'Remaining: '+fmtUSD(left):'Exceeded: '+fmtUSD(Math.abs(left)))+'</div></div><div class="fc">';
-  CATS.filter(function(c){ return c!=='Income'; }).forEach(function(cat){
+  BUDGET_CATS.forEach(function(cat){
     var s=debits.filter(function(t){ return t.category===cat; }).reduce(function(a,t){ return a+t.amountUSD; },0);
     var cp=S.budgetTotal>0?Math.min(100,Math.round(s/S.budgetTotal*100)):0;
     html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span class="tag '+tagCat(cat)+'" style="min-width:95px">'+cat+'</span><div style="flex:1"><div class="pb"><div class="pf" style="width:'+cp+'%;background:'+(cp>30?'#E24B4A':cp>15?'#EF9F27':'#1D9E75')+'"></div></div></div><span style="font-weight:500;min-width:70px;text-align:right">'+fmtUSD(s)+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+cp+'%</span></div>';
