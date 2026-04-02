@@ -22,7 +22,7 @@ body{font-family:var(--font-sans,system-ui);background:var(--color-background-te
 .fc h3{font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:.875rem;text-transform:uppercase;letter-spacing:.05em}
 .field-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:8px}
 .field{display:flex;align-items:stretch;border:0.5px solid var(--color-border-secondary);border-radius:7px;overflow:hidden;background:#1e1e1e}
-.field:focus-within{border-color:#5DCAA5}
+.field:focus-within{border-color:#5DCAA5;border-width:1.5px;box-shadow:0 0 0 2px rgba(93,202,165,0.15)}
 .field-lbl{display:flex;align-items:center;padding:0 18px 0 10px;background:#161616;color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%);min-width:72px}
 .field input,.field select{flex:1;padding:9px 10px;background:#1e1e1e;color:#fff;border:none;font-size:14px;min-width:0}
 .field input:focus,.field select:focus{outline:none}
