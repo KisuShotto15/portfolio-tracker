@@ -302,7 +302,7 @@ async function fetchTier(transAmount) {
       fiat: 'VES',
       merchantCheck: false,
       page: page,
-      publisherType: null,
+      publisherType: 'merchant',
       rows: 20,
       tradeType: 'SELL',
       transAmount: transAmount
@@ -331,8 +331,9 @@ function mapAds(raw) {
       merchant: item.advertiser.nickName,
       orders:   item.advertiser.monthOrderCount,
       comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100),
-      payTypes: (item.adv.tradeMethods || []).map(function(m) { return m.identifier; }),
-      badges:   item.advertiser.badges
+      payTypes:  (item.adv.tradeMethods || []).map(function(m) { return m.identifier; }),
+      badges:    item.advertiser.badges,
+      vipLevel:  item.advertiser.vipLevel
     };
   }).filter(function(a) {
     // Solo comerciantes con insignia (Bronze/Silver/Gold/Block/Ordinary/PRO)
@@ -547,10 +548,17 @@ function renderOB(id, ads, bestCls) {
     var cls = 'ob-row' + (i === 0 ? ' ' + bestCls : '');
     var rnk = '<span class="rank ' + (i === 0 ? 'n1' : '') + '">' + (i + 1) + '</span>';
     var lims = fmtM(ad.minVES) + '–' + fmtM(ad.maxVES);
-    var badgeMap = { Block: '💎', Ordinary: '🔴' };
-    var badgeTxt = (ad.badges && ad.badges[0]) ? (badgeMap[ad.badges[0]] || ad.badges[0]) : '';
+    var lvlColor = ['','#CD7F32','#A8B8C8','#F0B90B'][ad.vipLevel] || '#F0B90B';
+    var badgeHtml = '';
+    if (ad.badges && ad.badges[0]) {
+      if (ad.badges[0] === 'Block') {
+        badgeHtml = '<span style="margin-left:5px;display:inline-block;width:13px;height:13px;background:#9B59B6;transform:rotate(45deg);border-radius:2px;flex-shrink:0" title="Block vip'+ad.vipLevel+'"></span>';
+      } else {
+        badgeHtml = '<span style="margin-left:5px;display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:'+lvlColor+';color:#000;font-size:9px;font-weight:900;flex-shrink:0;line-height:1" title="PRO vip'+ad.vipLevel+'">✓</span>';
+      }
+    }
     return '<div class="' + cls + '">' + rnk +
-      '<span class="merch" title="' + esc(ad.merchant) + '">' + badgeTxt + ' ' + esc(ad.merchant) + '</span>' +
+      '<span class="merch" style="display:flex;align-items:center;gap:0" title="' + esc(ad.merchant) + '">' + esc(ad.merchant) + badgeHtml + '</span>' +
       '<span class="price-c ' + (i === 0 ? (id === 'ob-may' ? 'g' : 'b') : '') + '">' + fmt(ad.price) + '</span>' +
       '<span class="lim-c">' + lims + '</span>' +
     '</div>';
