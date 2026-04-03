@@ -215,7 +215,7 @@ function renderWalletHoldings(){
   if(!wrap) return;
   if(upd && S.walletHoldingsUpdated) upd.textContent = 'Updated '+S.walletHoldingsUpdated;
   var data = S.walletHoldings || [];
-  if(!data.length){ wrap.innerHTML='<div class="empty">No on-chain holdings found (or not yet loaded)</div>'; return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No on-chain holdings found','Click Refresh to load live balances from your Trezor'); return; }
   var netLabel={'eth':'ETH','arbitrum':'ARB','base':'BASE','bsc':'BSC'};
   var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#378ADD','bsc':'#EF9F27'};
   var rows = data.map(function(h){
@@ -294,7 +294,7 @@ function closeTxForm(){
   editingTxId=null;
   var btn=document.querySelector('.btn-add'); if(btn) btn.textContent='Add';
   var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='none';
-  var today=new Date().toISOString().slice(0,10);
+  var today=localToday();
   document.getElementById('tx-date').value=today;
   document.getElementById('tx-desc').value='';
   document.getElementById('tx-wallet').value='';
@@ -330,6 +330,10 @@ function updateTx(){
 function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); save(); renderHoldings(); }
 function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); save(); renderWallets(); populateWalletSelects(); }
 
+function emptyState(title, sub){
+  return '<div class="es"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:.25;margin-bottom:.75rem"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg><div class="es-title">'+title+'</div><div class="es-sub">'+sub+'</div></div>';
+}
+function localToday(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB',Support:'tA',Investments:'tA',Savings:'tG',
@@ -346,16 +350,30 @@ function renderTx(){
   if(wF) data=data.filter(function(t){ return t.wallet===wF; });
   if(mF) data=data.filter(function(t){ return t.date.startsWith(mF); });
   if(sF) data=data.filter(function(t){ return (t.desc||'').toLowerCase().indexOf(sF)>=0||(t.wallet||'').toLowerCase().indexOf(sF)>=0||(t.category||'').toLowerCase().indexOf(sF)>=0||(t.date||'').indexOf(sF)>=0; });
-  if(!data.length){ wrap.innerHTML='<div class="empty">No transactions</div>'; return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No transactions yet','Use the + button to add your first transaction'); return; }
   var totalDebits=data.filter(function(t){ return t.type==='Debit'&&inSummary(t); }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var rows=data.map(function(t){
-    var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'-';
-    var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
-    var trk=isTrk?'<span class="badge-t">tracker</span>':'';
-    var wTag=t.wallet==='Binance'?'tBinance':'tX';
-    return '<tr><td style="white-space:nowrap">'+t.date+'</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+t.desc+'">'+t.desc+'</td><td><span class="tag '+wTag+'">'+(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td>'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+t.category+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td style="white-space:nowrap"><button class="btn-edit-tx" title="Edit" onclick="editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
+  // Group by date — single table with separator rows so columns stay aligned
+  var groups={}, groupOrder=[];
+  data.forEach(function(t){ if(!groups[t.date]){ groups[t.date]=[]; groupOrder.push(t.date); } groups[t.date].push(t); });
+  function fmtDateHdr(d){
+    var today=localToday();
+    var yd=new Date(); yd.setDate(yd.getDate()-1);
+    var yest=yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
+    return d===today?'Today':d===yest?'Yesterday':new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  }
+  var rows=groupOrder.map(function(date){
+    var dayTotal=groups[date].reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
+    var sep='<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
+    var txRows=groups[date].map(function(t){
+      var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'-';
+      var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
+      var trk=isTrk?'<span class="badge-t">tracker</span>':'';
+      var wTag=t.wallet==='Binance'?'tBinance':'tX';
+      return '<tr><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+t.desc+'">'+t.desc+'</td><td><span class="tag '+wTag+'">'+(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td>'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+t.category+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td style="white-space:nowrap"><button class="btn-edit-tx" title="Edit" onclick="editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
+    }).join('');
+    return sep+txRows;
   }).join('');
-  wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:7px">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div><table><thead><tr><th>Date</th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+  wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div><table><thead><tr><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
@@ -463,7 +481,7 @@ function recordSnapshot(){
   var val=parseFloat(prompt('Record portfolio snapshot\n\nAuto-sum from wallets: $'+auto.toFixed(2)+'\n\nEnter total (or leave to use auto-sum):',auto.toFixed(2)));
   if(isNaN(val)||val<0) return;
   if(!S.snapshots) S.snapshots=[];
-  var today=new Date().toISOString().slice(0,10);
+  var today=localToday();
   var existing=S.snapshots.findIndex(function(s){ return s.date===today; });
   if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
   S.snapshots.push({id:Date.now(),date:today,total:val});
@@ -551,7 +569,7 @@ function addHolding(){
 function renderHoldings(){
   var wrap=document.getElementById('po-wrap'); var data=S.portfolio.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   var total=data.reduce(function(s,e){ return s+e.totalUSD; },0);
-  if(!data.length){ wrap.innerHTML='<div class="empty">No holdings</div>'; return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No holdings recorded','Add your first asset above to track your portfolio'); return; }
   var rows=data.map(function(e){ return '<tr><td>'+e.date+'</td><td style="font-weight:500">'+e.asset+'</td><td><span class="tag tB">'+e.type+'</span></td><td>'+e.qty+'</td><td>'+fmtUSD(e.price)+'</td><td style="font-weight:500">'+fmtUSD(e.totalUSD)+'</td><td style="color:var(--color-text-secondary)">'+(e.notes||'-')+'</td><td><button class="btn btnd" onclick="deleteHolding('+e.id+')">x</button></td></tr>'; }).join('');
   wrap.innerHTML='<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px"><div class="mc-l">Total invested</div><div class="mc-v b">'+fmtUSD(total)+'</div></div><table><thead><tr><th>Date</th><th>Asset</th><th>Type</th><th>Qty</th><th>Price</th><th>Total</th><th>Notes</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
@@ -760,7 +778,7 @@ window.calcZinli = calcZinli;
 
 async function init(){
   loadLocal();
-  var today=new Date().toISOString().slice(0,10);
+  var today=localToday();
   document.getElementById('tx-date').value=today;
   document.getElementById('po-date').value=today;
   document.getElementById('tf-month').value=today.slice(0,7);
