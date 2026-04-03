@@ -337,16 +337,17 @@ async function fetchOnce() {
         avail:    parseFloat(item.adv.tradableQuantity),
         merchant: item.advertiser.nickName,
         orders:   item.advertiser.monthOrderCount,
-        comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100)
+        comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100),
+        payTypes: (item.adv.tradeMethods || []).map(function(m) { return m.identifier; })
       };
     }).sort(function(a, b) { return b.price - a.price; });
 
-    // Filtrar por monto: igual que Binance — el monto debe caer dentro del rango del anuncio
+    // Filtrar por monto (rango incluye el monto buscado) + solo Bank Transfer
     ST.mayoristas = ST.allAds.filter(function(a) {
-      return a.minVES <= CFG.mayAmount && a.maxVES >= CFG.mayAmount;
+      return a.minVES <= CFG.mayAmount && a.maxVES >= CFG.mayAmount && a.payTypes.indexOf('BANK') !== -1;
     });
     ST.smallAds = ST.allAds.filter(function(a) {
-      return a.minVES <= CFG.smallAmount && a.maxVES >= CFG.smallAmount;
+      return a.minVES <= CFG.smallAmount && a.maxVES >= CFG.smallAmount && a.payTypes.indexOf('BANK') !== -1;
     });
 
     // Historial de precio (mejor mayorista)
