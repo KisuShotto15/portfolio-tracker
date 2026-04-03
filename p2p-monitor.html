@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es" style="color-scheme:dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>P2P Monitor — VES/USDT</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;font-size:14px;line-height:1.5}
+.top{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#161616;border-bottom:1px solid #222;flex-wrap:wrap}
+.top h1{font-size:15px;font-weight:600;color:#F0B90B}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500}
+.badge-live{background:#0d2a1a;color:#1D9E75;border:1px solid #1D9E75}
+.badge-off{background:#1a1a1a;color:#555;border:1px solid #333}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot-live{background:#1D9E75;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.dot-off{background:#444}
+.spacer{flex:1}
+.btn{padding:5px 12px;border:1px solid #333;border-radius:6px;background:transparent;color:#ccc;font-size:13px;cursor:pointer}
+.btn:hover{background:#222;color:#fff}
+.btn-gold{border-color:#F0B90B;color:#F0B90B}.btn-gold:hover{background:#1a1200}
+.btn-sm{padding:3px 9px;font-size:12px}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:1fr 300px;gap:10px;padding:10px;min-height:calc(100vh - 46px)}
+@media(max-width:860px){.layout{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:10px}
+.panel{background:#161616;border:1px solid #222;border-radius:9px;padding:11px}
+.ptitle{font-size:10px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+
+/* Spread hero */
+.spread-hero{display:flex;align-items:center;gap:16px;padding:12px 14px;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:9px;margin-bottom:10px}
+.spread-num{font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.spread-pct{font-size:14px;color:#888;margin-top:2px}
+.spread-info{flex:1}
+.spread-label{font-size:12px;color:#666;margin-bottom:6px}
+.spread-prices{display:flex;gap:14px;flex-wrap:wrap}
+.sp-item{font-size:13px}
+.sp-item .lbl{color:#666;font-size:11px}
+.sp-item .val{font-weight:600}
+.opp-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;margin-top:6px}
+.opp-yes{background:#1a1200;border:1px solid #F0B90B;color:#F0B90B}
+.opp-no{background:#111;border:1px solid #333;color:#555}
+.opp-warn{background:#1a0a0a;border:1px solid #E24B4A;color:#E24B4A}
+
+/* Signal bar */
+.signals{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.sig{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;border:1px solid #333;color:#555}
+.sig.on-red{background:#270d0d;border-color:#E24B4A;color:#E24B4A}
+.sig.on-yellow{background:#1a1200;border-color:#F0B90B;color:#F0B90B}
+.sig.on-blue{background:#091e38;border-color:#378ADD;color:#378ADD}
+.sig.on-green{background:#0d2a1a;border-color:#1D9E75;color:#1D9E75}
+
+/* Stats row */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}}
+.sc{background:#0f0f0f;border:1px solid #1e1e1e;border-radius:7px;padding:8px 10px}
+.sc-l{font-size:10px;color:#555;margin-bottom:2px}
+.sc-v{font-size:17px;font-weight:600}
+.g{color:#1D9E75}.r{color:#E24B4A}.y{color:#F0B90B}.b{color:#378ADD}
+
+/* Order book split */
+.ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:640px){.ob-grid{grid-template-columns:1fr}}
+.ob-side{background:#0f0f0f;border:1px solid #1e1e1e;border-radius:8px;overflow:hidden}
+.ob-side-title{padding:7px 10px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid #1a1a1a}
+.ob-side-title.mayoristas{background:#0a1f0f;color:#1D9E75}
+.ob-side-title.smallbuyers{background:#0a0f1f;color:#378ADD}
+.ob-head{display:grid;grid-template-columns:20px 1fr 85px 70px;gap:4px;padding:4px 8px;font-size:10px;color:#444;font-weight:600;text-transform:uppercase;border-bottom:1px solid #111}
+.ob-row{display:grid;grid-template-columns:20px 1fr 85px 70px;gap:4px;padding:6px 8px;border-bottom:1px solid #111;align-items:center;transition:.1s}
+.ob-row:last-child{border-bottom:none}
+.ob-row:hover{background:#161616}
+.ob-row.best{background:#0a1a0a}
+.ob-row.best-buy{background:#0a0f1a}
+.rank{font-size:10px;color:#444;text-align:center}
+.rank.n1{color:#F0B90B;font-weight:700}
+.merch{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.price-c{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.lim-c{font-size:10px;color:#666;text-align:right}
+.empty-ob{text-align:center;padding:16px;color:#444;font-size:12px}
+
+/* Chart */
+.chart-wrap{height:100px;position:relative}
+
+/* Alerts */
+.alert-list{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto}
+.al{display:flex;gap:7px;align-items:flex-start;padding:7px 8px;border-radius:6px;border:1px solid}
+.al.spread{background:#1a1200;border-color:#F0B90B}
+.al.overbought{background:#1a0808;border-color:#E24B4A}
+.al.weakness{background:#08080a;border-color:#378ADD}
+.al.info{background:#0f0f0f;border-color:#333}
+.al-icon{font-size:14px;flex-shrink:0}
+.al-body{flex:1;min-width:0}
+.al-title{font-weight:600;font-size:12px}
+.al-desc{font-size:11px;color:#777;margin-top:1px}
+.al-time{font-size:10px;color:#444;flex-shrink:0}
+
+/* Config */
+.cfg-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1a1a1a;font-size:12px;color:#aaa}
+.cfg-row:last-child{border-bottom:none}
+input[type=number]{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:5px;color:#e0e0e0;padding:3px 7px;font-size:12px;width:90px;text-align:right}
+input[type=number]:focus{outline:none;border-color:#F0B90B}
+.tag-bank{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:#1a1200;color:#F0B90B;border:1px solid #F0B90B;margin-left:4px}
+.tag-ver{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:#0d2a1a;color:#1D9E75;border:1px solid #1D9E75;margin-left:4px}
+
+/* Price log */
+.plog{font-size:11px;color:#555;max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:#0f0f0f}
+::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px}
+
+/* Toast */
+.toast{position:fixed;bottom:14px;right:14px;background:#1c1c1c;border:1px solid #333;border-radius:7px;padding:9px 13px;font-size:12px;z-index:999;animation:ti .2s ease}
+@keyframes ti{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.empty{text-align:center;padding:1.5rem;color:#444;font-size:12px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span style="font-size:16px">🟡</span>
+  <h1>P2P Monitor — VES/USDT</h1>
+  <span class="tag-bank">Bank Transfer</span>
+  <span class="tag-ver">✓ Verificados</span>
+  <span class="badge badge-off" id="live-badge"><span class="dot dot-off" id="live-dot"></span><span id="live-label">Detenido</span></span>
+  <span style="font-size:11px;color:#444" id="last-update"></span>
+  <div class="spacer"></div>
+  <button class="btn btn-gold" id="btn-start" onclick="toggleMonitor()">▶ Iniciar</button>
+  <button class="btn btn-sm" onclick="fetchOnce()">&#8635;</button>
+  <button class="btn btn-sm" onclick="clearAlerts()">Limpiar</button>
+  <button class="btn btn-sm" onclick="testNotif()">🔔</button>
+</div>
+
+<div class="layout">
+  <!-- LEFT col -->
+  <div class="col">
+
+    <!-- Spread hero -->
+    <div class="spread-hero" id="spread-hero">
+      <div>
+        <div style="font-size:11px;color:#555;margin-bottom:4px">SPREAD ACTUAL</div>
+        <div class="spread-num" id="hero-pct">—</div>
+        <div class="spread-pct" id="hero-label">Esperando datos...</div>
+      </div>
+      <div class="spread-info">
+        <div class="spread-prices">
+          <div class="sp-item">
+            <div class="lbl">Mayorista (mejor)</div>
+            <div class="val g" id="hero-may">—</div>
+          </div>
+          <div class="sp-item" style="color:#444">→</div>
+          <div class="sp-item">
+            <div class="lbl">Ref. compra (≤50k VES)</div>
+            <div class="val b" id="hero-small">—</div>
+          </div>
+        </div>
+        <div id="hero-pill" class="opp-pill opp-no" style="margin-top:8px">Sin datos</div>
+      </div>
+    </div>
+
+    <!-- Señales -->
+    <div class="signals" id="signals">
+      <span class="sig" id="sig-stable">⚪ Estable</span>
+      <span class="sig" id="sig-overbought">🔴 Sobrecomprado</span>
+      <span class="sig" id="sig-weakness">🔵 Debilidad</span>
+      <span class="sig" id="sig-spread">🟡 Spread &gt; umbral</span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="sc"><div class="sc-l">Mejor precio venta</div><div class="sc-v g" id="st-best">—</div></div>
+      <div class="sc"><div class="sc-l">Spread (Bs)</div><div class="sc-v y" id="st-diff">—</div></div>
+      <div class="sc"><div class="sc-l">Variación 10 min</div><div class="sc-v" id="st-delta">—</div></div>
+      <div class="sc"><div class="sc-l">Mayoristas activos</div><div class="sc-v" id="st-count">—</div></div>
+    </div>
+
+    <!-- Order book dividido -->
+    <div class="panel" style="padding:11px">
+      <div class="ptitle">Libro de compradores — Sección Vender (Bank Transfer · Verificados)</div>
+      <div class="ob-grid">
+        <!-- Mayoristas -->
+        <div class="ob-side">
+          <div class="ob-side-title mayoristas">🏦 Mayoristas (1M – 2M VES)</div>
+          <div class="ob-head"><span>#</span><span>Comerciante</span><span>Precio Bs</span><span>Límites</span></div>
+          <div id="ob-may"></div>
+        </div>
+        <!-- Pequeños / referencia compra -->
+        <div class="ob-side">
+          <div class="ob-side-title smallbuyers">📉 Ref. compra (≤ 50k VES)</div>
+          <div class="ob-head"><span>#</span><span>Comerciante</span><span>Precio Bs</span><span>Límites</span></div>
+          <div id="ob-small"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="panel">
+      <div class="ptitle">Precio mayorista — historial sesión</div>
+      <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- RIGHT col -->
+  <div class="col">
+
+    <!-- Alertas -->
+    <div class="panel">
+      <div class="ptitle">🔔 Alertas <span id="al-count" style="color:#F0B90B"></span></div>
+      <div class="alert-list" id="alert-list">
+        <div class="empty">Sin alertas</div>
+      </div>
+    </div>
+
+    <!-- Configuración -->
+    <div class="panel">
+      <div class="ptitle">⚙ Configuración</div>
+      <div class="cfg-row">
+        <span>Intervalo (seg)</span>
+        <input type="number" id="cfg-int" value="30" min="15" max="300">
+      </div>
+      <div class="cfg-row">
+        <span>Alerta spread ≥</span>
+        <div style="display:flex;align-items:center;gap:4px"><input type="number" id="cfg-spr" value="0.5" min="0.1" step="0.1"><span style="color:#555">%</span></div>
+      </div>
+      <div class="cfg-row">
+        <span>Sobrecomprado ≥</span>
+        <div style="display:flex;align-items:center;gap:4px"><input type="number" id="cfg-ob" value="1.0" min="0.1" step="0.1"><span style="color:#555">%</span></div>
+      </div>
+      <div class="cfg-row">
+        <span>Debilidad ≥</span>
+        <div style="display:flex;align-items:center;gap:4px"><input type="number" id="cfg-wk" value="0.5" min="0.1" step="0.1"><span style="color:#555">%</span></div>
+      </div>
+      <div class="cfg-row">
+        <span>Mayorista — lím. mín. (VES)</span>
+        <input type="number" id="cfg-may-min" value="1000000" min="100000" step="100000">
+      </div>
+      <div class="cfg-row">
+        <span>Mayorista — lím. máx. (VES)</span>
+        <input type="number" id="cfg-may-max" value="2000000" min="100000" step="100000">
+      </div>
+      <div class="cfg-row">
+        <span>Ref. compra — lím. máx. (VES)</span>
+        <input type="number" id="cfg-small-max" value="50000" min="10000" step="10000">
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button class="btn btn-gold" style="flex:1" onclick="saveConfig()">Guardar</button>
+        <button class="btn btn-sm" onclick="reqNotif()" id="notif-btn">🔔 Notif</button>
+        <span id="notif-st" style="font-size:10px;color:#555;align-self:center"></span>
+      </div>
+    </div>
+
+    <!-- Price log -->
+    <div class="panel">
+      <div class="ptitle">📈 Historial de precios</div>
+      <div class="plog" id="plog"><div class="empty" style="padding:.5rem">Sin datos</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────
+var CFG = {
+  interval: 30,
+  spreadThr: 0.5,
+  overboughtThr: 1.0,
+  weaknessThr: 0.5,
+  mayMinVES: 1000000,
+  mayMaxVES: 2000000,
+  smallMaxVES: 50000
+};
+
+var PROXY = 'https://p2p-binance-proxy.efrenalejandro2010.workers.dev';
+
+// ── Estado ───────────────────────────────────────────
+var ST = {
+  running: false,
+  timer: null,
+  allAds: [],
+  mayoristas: [],
+  smallAds: [],
+  priceHist: [],   // {ts, price}
+  alerts: [],
+  lastFetch: null
+};
+
+var chart = null;
+var COOLDOWN = {};
+var COOLDOWN_MS = 5 * 60000;
+
+// ── API ──────────────────────────────────────────────
+async function fetchPage(page) {
+  var body = {
+    asset: 'USDT',
+    fiat: 'VES',
+    merchantCheck: false,
+    page: page,
+    publisherType: 'merchant',   // Solo verificados (bronce en adelante)
+    rows: 20,
+    tradeType: 'SELL',           // SELL = sección Vender (comerciantes que te compran USDT)
+    payTypes: ['BANK']           // Solo Bank Transfer
+  };
+  var r = await fetch(PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  var d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d.data || [];
+}
+
+async function fetchP2P() {
+  // Traer páginas 1 y 2 en paralelo (40 anuncios) para capturar
+  // tanto mayoristas (precio alto, primeras posiciones) como
+  // comerciantes de límite 50k (precio menor, posiciones más bajas)
+  var results = await Promise.all([fetchPage(1), fetchPage(2)]);
+  var combined = results[0].concat(results[1]);
+  // Eliminar duplicados por nombre de comerciante
+  var seen = {};
+  var unique = combined.filter(function(item) {
+    var key = item.advertiser.nickName;
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+  if (!unique.length) throw new Error('Sin anuncios disponibles');
+  return unique;
+}
+
+// ── Ciclo principal ───────────────────────────────────
+async function fetchOnce() {
+  document.getElementById('last-update').textContent = 'Cargando...';
+  try {
+    var raw = await fetchP2P();
+
+    ST.allAds = raw.map(function(item) {
+      return {
+        price:    parseFloat(item.adv.price),
+        minVES:   parseFloat(item.adv.minSingleTransAmount),
+        maxVES:   parseFloat(item.adv.maxSingleTransAmount),
+        avail:    parseFloat(item.adv.tradableQuantity),
+        merchant: item.advertiser.nickName,
+        orders:   item.advertiser.monthOrderCount,
+        comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100)
+      };
+    }).sort(function(a, b) { return b.price - a.price; });
+
+    // Filtrar por tramos en VES
+    ST.mayoristas = ST.allAds.filter(function(a) {
+      return a.minVES >= CFG.mayMinVES && a.minVES <= CFG.mayMaxVES;
+    });
+    ST.smallAds = ST.allAds.filter(function(a) {
+      return a.minVES <= CFG.smallMaxVES;
+    });
+
+    // Historial de precio (mejor mayorista)
+    var bestMay = ST.mayoristas[0] ? ST.mayoristas[0].price : (ST.allAds[0] ? ST.allAds[0].price : null);
+    if (bestMay) {
+      ST.priceHist.push({ ts: Date.now(), price: bestMay });
+      if (ST.priceHist.length > 200) ST.priceHist.shift();
+    }
+
+    ST.lastFetch = new Date();
+    renderAll();
+    checkAlerts();
+    document.getElementById('last-update').textContent = 'Actualizado ' + ST.lastFetch.toLocaleTimeString('es-VE');
+  } catch(e) {
+    document.getElementById('last-update').textContent = '⚠ ' + e.message;
+    addAlert('info', 'Error de conexión', e.message);
+  }
+}
+
+function toggleMonitor() {
+  if (ST.running) {
+    ST.running = false;
+    clearInterval(ST.timer); ST.timer = null;
+    document.getElementById('btn-start').textContent = '▶ Iniciar';
+    setBadge(false);
+  } else {
+    saveConfig();
+    ST.running = true;
+    fetchOnce();
+    ST.timer = setInterval(fetchOnce, CFG.interval * 1000);
+    document.getElementById('btn-start').textContent = '⏹ Detener';
+    setBadge(true);
+  }
+}
+
+function setBadge(live) {
+  document.getElementById('live-badge').className = 'badge ' + (live ? 'badge-live' : 'badge-off');
+  document.getElementById('live-dot').className   = 'dot ' + (live ? 'dot-live' : 'dot-off');
+  document.getElementById('live-label').textContent = live ? 'En vivo' : 'Detenido';
+}
+
+// ── Render ────────────────────────────────────────────
+function renderAll() {
+  renderSpreadHero();
+  renderSignals();
+  renderStats();
+  renderOB('ob-may',   ST.mayoristas, 'best');
+  renderOB('ob-small', ST.smallAds,   'best-buy');
+  updateChart();
+  renderPlog();
+}
+
+function renderSpreadHero() {
+  var bestMay   = ST.mayoristas[0]  ? ST.mayoristas[0].price  : null;
+  var bestSmall = ST.smallAds[0]    ? ST.smallAds[0].price    : null;
+
+  if (!bestMay) {
+    document.getElementById('hero-pct').textContent   = '—';
+    document.getElementById('hero-label').textContent = 'Sin mayoristas en rango';
+    document.getElementById('hero-may').textContent   = '—';
+    document.getElementById('hero-small').textContent = '—';
+    var pill = document.getElementById('hero-pill');
+    pill.className = 'opp-pill opp-no'; pill.textContent = 'Sin datos';
+    return;
+  }
+
+  document.getElementById('hero-may').textContent   = fmt(bestMay)   + ' Bs';
+  document.getElementById('hero-small').textContent = bestSmall ? fmt(bestSmall) + ' Bs' : '—';
+
+  if (!bestSmall) {
+    document.getElementById('hero-pct').textContent   = '—';
+    document.getElementById('hero-label').textContent = 'Sin compradores pequeños en rango';
+    var pill2 = document.getElementById('hero-pill');
+    pill2.className = 'opp-pill opp-no'; pill2.textContent = 'Sin referencia de compra';
+    return;
+  }
+
+  var spread = (bestMay - bestSmall) / bestMay * 100;
+  var spreadBs = bestMay - bestSmall;
+  var pct = document.getElementById('hero-pct');
+  pct.textContent = spread.toFixed(3) + '%';
+
+  var pill = document.getElementById('hero-pill');
+  if (spread >= CFG.spreadThr) {
+    pct.style.color = '#F0B90B';
+    document.getElementById('hero-label').textContent = 'Diferencia: ' + fmt(spreadBs) + ' Bs/USDT';
+    pill.className = 'opp-pill opp-yes';
+    pill.textContent = '🟡 SPREAD > ' + CFG.spreadThr + '% — OPORTUNIDAD';
+  } else if (spread <= 0) {
+    pct.style.color = '#E24B4A';
+    document.getElementById('hero-label').textContent = 'Ref. compra más cara — mercado invertido';
+    pill.className = 'opp-pill opp-warn';
+    pill.textContent = '⚠ Spread negativo';
+  } else {
+    pct.style.color = '#888';
+    document.getElementById('hero-label').textContent = 'Diferencia: ' + fmt(spreadBs) + ' Bs/USDT';
+    pill.className = 'opp-pill opp-no';
+    pill.textContent = 'Spread por debajo del umbral';
+  }
+}
+
+function renderSignals() {
+  var bestMay = ST.mayoristas[0] ? ST.mayoristas[0].price : null;
+  if (!bestMay || ST.priceHist.length < 2) return;
+
+  var now = Date.now();
+  var ref10 = null;
+  for (var i = 0; i < ST.priceHist.length; i++) {
+    if (now - ST.priceHist[i].ts >= 9 * 60000) { ref10 = ST.priceHist[i].price; break; }
+  }
+
+  var bestSmall = ST.smallAds[0] ? ST.smallAds[0].price : null;
+  var spread = bestSmall ? (bestMay - bestSmall) / bestMay * 100 : 0;
+  var ob = false, wk = false, spr = spread >= CFG.spreadThr;
+
+  if (ref10 !== null) {
+    var chg = (bestMay - ref10) / ref10 * 100;
+    if (chg >  CFG.overboughtThr) ob = true;
+    if (chg < -CFG.weaknessThr)   wk = true;
+  }
+
+  setSig('sig-overbought', ob,  'on-red');
+  setSig('sig-weakness',   wk,  'on-blue');
+  setSig('sig-spread',     spr, 'on-yellow');
+  setSig('sig-stable', !ob && !wk && !spr, 'on-green');
+}
+
+function setSig(id, active, cls) {
+  var el = document.getElementById(id);
+  el.className = 'sig' + (active ? ' ' + cls : '');
+}
+
+function renderStats() {
+  var bestMay   = ST.mayoristas[0] ? ST.mayoristas[0].price : null;
+  var bestSmall = ST.smallAds[0]   ? ST.smallAds[0].price   : null;
+
+  document.getElementById('st-best').textContent  = bestMay   ? fmt(bestMay)   + ' Bs' : '—';
+  document.getElementById('st-count').textContent = ST.mayoristas.length;
+
+  if (bestMay && bestSmall) {
+    var diff = bestMay - bestSmall;
+    document.getElementById('st-diff').textContent = fmt(diff) + ' Bs';
+  } else {
+    document.getElementById('st-diff').textContent = '—';
+  }
+
+  var el = document.getElementById('st-delta');
+  if (bestMay && ST.priceHist.length > 1) {
+    var now = Date.now();
+    var ref = null;
+    for (var i = 0; i < ST.priceHist.length; i++) {
+      if (now - ST.priceHist[i].ts >= 9 * 60000) { ref = ST.priceHist[i].price; break; }
+    }
+    if (ref !== null) {
+      var d = (bestMay - ref) / ref * 100;
+      el.textContent = (d >= 0 ? '+' : '') + d.toFixed(3) + '%';
+      el.className = 'sc-v ' + (d > 0 ? 'g' : d < 0 ? 'r' : '');
+    } else { el.textContent = '—'; }
+  } else { el.textContent = '—'; }
+}
+
+function renderOB(id, ads, bestCls) {
+  var wrap = document.getElementById(id);
+  if (!ads.length) {
+    wrap.innerHTML = '<div class="empty-ob">Sin anuncios en este rango</div>';
+    return;
+  }
+  wrap.innerHTML = ads.slice(0, 8).map(function(ad, i) {
+    var cls = 'ob-row' + (i === 0 ? ' ' + bestCls : '');
+    var rnk = '<span class="rank ' + (i === 0 ? 'n1' : '') + '">' + (i + 1) + '</span>';
+    var lims = fmtM(ad.minVES) + '–' + fmtM(ad.maxVES);
+    return '<div class="' + cls + '">' + rnk +
+      '<span class="merch" title="' + esc(ad.merchant) + '">' + esc(ad.merchant) + '</span>' +
+      '<span class="price-c ' + (i === 0 ? (id === 'ob-may' ? 'g' : 'b') : '') + '">' + fmt(ad.price) + '</span>' +
+      '<span class="lim-c">' + lims + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+// ── Alertas ───────────────────────────────────────────
+function checkAlerts() {
+  var now = Date.now();
+  var bestMay   = ST.mayoristas[0] ? ST.mayoristas[0].price : null;
+  var bestSmall = ST.smallAds[0]   ? ST.smallAds[0].price   : null;
+
+  if (!bestMay) return;
+
+  // Spread
+  if (bestSmall) {
+    var spread = (bestMay - bestSmall) / bestMay * 100;
+    if (spread >= CFG.spreadThr) {
+      if (!COOLDOWN.spread || now - COOLDOWN.spread > COOLDOWN_MS) {
+        COOLDOWN.spread = now;
+        addAlert('spread',
+          '💰 Spread ' + spread.toFixed(3) + '% — OPORTUNIDAD',
+          'Mayorista: ' + fmt(bestMay) + ' Bs (' + esc(ST.mayoristas[0].merchant) + ') → Ref. compra: ' + fmt(bestSmall) + ' Bs · Dif: ' + fmt(bestMay - bestSmall) + ' Bs/USDT'
+        );
+        push('Spread P2P ' + spread.toFixed(3) + '%', 'Vende a ' + fmt(bestMay) + ' Bs — compra ref. ' + fmt(bestSmall) + ' Bs');
+      }
+    } else { COOLDOWN.spread = 0; }
+  }
+
+  // Sobrecomprado / debilidad
+  if (ST.priceHist.length > 1) {
+    var ref10 = null;
+    for (var i = 0; i < ST.priceHist.length; i++) {
+      if (now - ST.priceHist[i].ts >= 9 * 60000) { ref10 = ST.priceHist[i].price; break; }
+    }
+    if (ref10 !== null) {
+      var chg = (bestMay - ref10) / ref10 * 100;
+      if (chg > CFG.overboughtThr) {
+        if (!COOLDOWN.ob || now - COOLDOWN.ob > COOLDOWN_MS) {
+          COOLDOWN.ob = now;
+          addAlert('overbought', '🔴 Mercado sobrecomprado', '+' + chg.toFixed(3) + '% en 10 min · Precio actual: ' + fmt(bestMay) + ' Bs');
+          push('Sobrecomprado P2P', '+' + chg.toFixed(3) + '% en 10 min');
+        }
+      } else { COOLDOWN.ob = 0; }
+
+      if (chg < -CFG.weaknessThr) {
+        if (!COOLDOWN.wk || now - COOLDOWN.wk > COOLDOWN_MS) {
+          COOLDOWN.wk = now;
+          addAlert('weakness', '🔵 Debilidad en el mercado', chg.toFixed(3) + '% en 10 min · Precio actual: ' + fmt(bestMay) + ' Bs');
+          push('Debilidad P2P', chg.toFixed(3) + '% en 10 min');
+        }
+      } else { COOLDOWN.wk = 0; }
+    }
+  }
+}
+
+function addAlert(type, title, desc) {
+  var ts = new Date().toLocaleTimeString('es-VE');
+  ST.alerts.unshift({ type: type, title: title, desc: desc, ts: ts });
+  if (ST.alerts.length > 60) ST.alerts.pop();
+  renderAlerts();
+}
+
+function renderAlerts() {
+  var list = document.getElementById('alert-list');
+  var count = document.getElementById('al-count');
+  if (!ST.alerts.length) { list.innerHTML = '<div class="empty">Sin alertas</div>'; count.textContent = ''; return; }
+  count.textContent = '(' + ST.alerts.length + ')';
+  var icons = { spread: '🟡', overbought: '🔴', weakness: '🔵', info: 'ℹ️' };
+  list.innerHTML = ST.alerts.slice(0, 25).map(function(a) {
+    return '<div class="al ' + a.type + '">' +
+      '<span class="al-icon">' + (icons[a.type] || '•') + '</span>' +
+      '<div class="al-body"><div class="al-title">' + a.title + '</div><div class="al-desc">' + a.desc + '</div></div>' +
+      '<span class="al-time">' + a.ts + '</span></div>';
+  }).join('');
+}
+
+function clearAlerts() { ST.alerts = []; COOLDOWN = {}; renderAlerts(); }
+
+// ── Chart ─────────────────────────────────────────────
+function updateChart() {
+  var ctx = document.getElementById('price-chart').getContext('2d');
+  var labels = ST.priceHist.map(function(p) {
+    return new Date(p.ts).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+  });
+  var prices = ST.priceHist.map(function(p) { return p.price; });
+
+  if (!chart) {
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: labels, datasets: [{ data: prices, borderColor: '#F0B90B', borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: 'rgba(240,185,11,0.05)', tension: 0.3 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return fmt(c.raw) + ' Bs'; } } } },
+        scales: {
+          x: { ticks: { color: '#444', font: { size: 9 }, maxTicksLimit: 8 }, grid: { color: '#1a1a1a' } },
+          y: { ticks: { color: '#666', font: { size: 9 }, callback: function(v) { return fmtM(v); } }, grid: { color: '#1a1a1a' } }
+        }
+      }
+    });
+  } else {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = prices;
+    chart.update('none');
+  }
+}
+
+// ── Price log ─────────────────────────────────────────
+function renderPlog() {
+  var el = document.getElementById('plog');
+  if (!ST.priceHist.length) { el.innerHTML = '<div class="empty" style="padding:.5rem">Sin datos</div>'; return; }
+  var recent = ST.priceHist.slice(-15).reverse();
+  el.innerHTML = recent.map(function(p, i) {
+    var next = recent[i + 1];
+    var arrow = next ? (p.price > next.price ? ' <span class="g">▲</span>' : p.price < next.price ? ' <span class="r">▼</span>' : '') : '';
+    return '<div>' + new Date(p.ts).toLocaleTimeString('es-VE') + ' &nbsp;<span style="color:#ccc">' + fmt(p.price) + ' Bs</span>' + arrow + '</div>';
+  }).join('');
+}
+
+// ── Notificaciones ────────────────────────────────────
+function reqNotif() {
+  if (!('Notification' in window)) { document.getElementById('notif-st').textContent = 'No soportado'; return; }
+  Notification.requestPermission().then(updNotifSt);
+}
+function updNotifSt() {
+  var el = document.getElementById('notif-st');
+  if (!('Notification' in window)) { el.textContent = ''; return; }
+  el.textContent = Notification.permission === 'granted' ? '✓' : Notification.permission === 'denied' ? '✗' : '?';
+}
+function push(title, body) {
+  if (Notification.permission === 'granted') new Notification('🟡 P2P — ' + title, { body: body });
+}
+function testNotif() {
+  if (Notification.permission !== 'granted') { reqNotif(); return; }
+  push('Test', 'Notificaciones funcionando'); toast('Test enviado');
+}
+
+// ── Config ────────────────────────────────────────────
+function saveConfig() {
+  CFG.interval      = Math.max(15, parseInt(document.getElementById('cfg-int').value) || 30);
+  CFG.spreadThr     = parseFloat(document.getElementById('cfg-spr').value) || 0.5;
+  CFG.overboughtThr = parseFloat(document.getElementById('cfg-ob').value)  || 1.0;
+  CFG.weaknessThr   = parseFloat(document.getElementById('cfg-wk').value)  || 0.5;
+  CFG.mayMinVES     = parseFloat(document.getElementById('cfg-may-min').value) || 1000000;
+  CFG.mayMaxVES     = parseFloat(document.getElementById('cfg-may-max').value) || 2000000;
+  CFG.smallMaxVES   = parseFloat(document.getElementById('cfg-small-max').value) || 50000;
+  localStorage.setItem('p2p_cfg2', JSON.stringify(CFG));
+  if (ST.running) { clearInterval(ST.timer); ST.timer = setInterval(fetchOnce, CFG.interval * 1000); }
+  toast('Guardado');
+}
+
+function loadConfig() {
+  try {
+    var s = localStorage.getItem('p2p_cfg2');
+    if (!s) return;
+    Object.assign(CFG, JSON.parse(s));
+    document.getElementById('cfg-int').value      = CFG.interval;
+    document.getElementById('cfg-spr').value      = CFG.spreadThr;
+    document.getElementById('cfg-ob').value       = CFG.overboughtThr;
+    document.getElementById('cfg-wk').value       = CFG.weaknessThr;
+    document.getElementById('cfg-may-min').value  = CFG.mayMinVES;
+    document.getElementById('cfg-may-max').value  = CFG.mayMaxVES;
+    document.getElementById('cfg-small-max').value= CFG.smallMaxVES;
+  } catch(e) {}
+}
+
+// ── Utils ─────────────────────────────────────────────
+function fmt(n) { return parseFloat(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtM(n) {
+  n = parseFloat(n);
+  if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(0) + 'k';
+  return n.toFixed(0);
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg) {
+  var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(function() { t.remove(); }, 2500);
+}
+
+// ── Chart.js ──────────────────────────────────────────
+function loadChartJS(cb) {
+  if (window.Chart) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+  s.onload = cb; document.head.appendChild(s);
+}
+
+loadChartJS(function() { loadConfig(); updNotifSt(); renderAlerts(); });
+</script>
+</body>
+</html>
