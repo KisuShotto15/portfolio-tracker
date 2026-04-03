@@ -143,6 +143,7 @@ input[type=number]:focus{outline:none;border-color:#F0B90B}
       <div>
         <div style="font-size:11px;color:#555;margin-bottom:4px">SPREAD ACTUAL</div>
         <div class="spread-num" id="hero-pct">—</div>
+        <div id="hero-net" style="font-size:12px;color:#666;margin-top:2px"></div>
         <div class="spread-pct" id="hero-label">Esperando datos...</div>
       </div>
       <div class="spread-info">
@@ -153,7 +154,7 @@ input[type=number]:focus{outline:none;border-color:#F0B90B}
           </div>
           <div class="sp-item" style="color:#444">→</div>
           <div class="sp-item">
-            <div class="lbl">Ref. compra (≤50k VES)</div>
+            <div class="lbl" id="hero-small-lbl">Compra</div>
             <div class="val b" id="hero-small">—</div>
           </div>
         </div>
@@ -183,13 +184,13 @@ input[type=number]:focus{outline:none;border-color:#F0B90B}
       <div class="ob-grid">
         <!-- Mayoristas -->
         <div class="ob-side">
-          <div class="ob-side-title mayoristas">🏦 Mayoristas (1M – 2M VES)</div>
+          <div id="label-may" class="ob-side-title mayoristas">🏦 Mayoristas</div>
           <div class="ob-head"><span>#</span><span>Comerciante</span><span>Precio Bs</span><span>Límites</span></div>
           <div id="ob-may"></div>
         </div>
         <!-- Pequeños / referencia compra -->
         <div class="ob-side">
-          <div class="ob-side-title smallbuyers">📉 Ref. compra (≤ 50k VES)</div>
+          <div id="label-small" class="ob-side-title smallbuyers">📉 Compra</div>
           <div class="ob-head"><span>#</span><span>Comerciante</span><span>Precio Bs</span><span>Límites</span></div>
           <div id="ob-small"></div>
         </div>
@@ -238,8 +239,12 @@ input[type=number]:focus{outline:none;border-color:#F0B90B}
         <input type="number" id="cfg-may-amount" value="2000000" min="100000" step="100000">
       </div>
       <div class="cfg-row">
-        <span>Ref. compra — monto filtro (VES)</span>
+        <span>Compra — monto filtro (VES)</span>
         <input type="number" id="cfg-small-amount" value="59999" min="10000" step="1000">
+      </div>
+      <div class="cfg-row">
+        <span>Comisión Binance por anuncio (%)</span>
+        <input type="number" id="cfg-commission" value="0" min="0" max="5" step="0.01">
       </div>
       <div style="margin-top:8px;display:flex;gap:6px">
         <button class="btn btn-gold" style="flex:1" onclick="saveConfig()">Guardar</button>
@@ -264,8 +269,9 @@ var CFG = {
   spreadThr: 0.5,
   overboughtThr: 1.0,
   weaknessThr: 0.5,
-  mayAmount:  2000000,   // Monto a filtrar en sección Mayoristas (VES)
-  smallAmount: 59999     // Monto a filtrar en sección Ref. Compra (VES)
+  mayAmount:   2000000,  // Monto a filtrar en sección Mayoristas (VES)
+  smallAmount: 59999,    // Monto a filtrar en sección Ref. Compra (VES)
+  commission:  0.0       // Comisión Binance por anuncio (%)
 };
 
 var PROXY = 'https://p2p-binance-proxy.efrenalejandro2010.workers.dev';
@@ -296,7 +302,7 @@ async function fetchTier(transAmount) {
       fiat: 'VES',
       merchantCheck: false,
       page: page,
-      publisherType: 'merchant',
+      publisherType: null,
       rows: 20,
       tradeType: 'SELL',
       transAmount: transAmount
@@ -312,15 +318,7 @@ async function fetchTier(transAmount) {
     return d.data || [];
   }
   var pages = await Promise.all([onePage(1), onePage(2)]);
-  var all = pages[0].concat(pages[1]);
-  // Deduplicar por comerciante
-  var seen = {};
-  return all.filter(function(item) {
-    var k = item.advertiser.nickName;
-    if (seen[k]) return false;
-    seen[k] = true;
-    return true;
-  });
+  return pages[0].concat(pages[1]);
 }
 
 function mapAds(raw) {
@@ -333,11 +331,13 @@ function mapAds(raw) {
       merchant: item.advertiser.nickName,
       orders:   item.advertiser.monthOrderCount,
       comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100),
-      payTypes: (item.adv.tradeMethods || []).map(function(m) { return m.identifier; })
+      payTypes:  (item.adv.tradeMethods || []).map(function(m) { return m.identifier; }),
+      userType:  item.advertiser.userType,
+      userGrade: item.advertiser.userGrade || 0
     };
   }).filter(function(a) {
-    // Filtro BANK client-side (la API ignora payTypes server-side)
-    return a.payTypes.indexOf('BANK') !== -1;
+    // Pro Merchant O usuario con insignia (grade >= 2). Solo Bank Transfer.
+    return (a.userType === 'merchant' || a.userGrade >= 2) && a.payTypes.indexOf('BANK') !== -1;
   }).sort(function(a, b) { return b.price - a.price; });
 }
 
@@ -353,6 +353,7 @@ async function fetchOnce() {
 
     ST.mayoristas = mapAds(results[0]);
     ST.smallAds   = mapAds(results[1]);
+
     ST.allAds     = ST.mayoristas; // para compatibilidad con historial
 
     if (!ST.mayoristas.length && !ST.smallAds.length) throw new Error('Sin anuncios disponibles');
@@ -397,7 +398,16 @@ function setBadge(live) {
 }
 
 // ── Render ────────────────────────────────────────────
+function fmtAmount(n) {
+  if (n >= 1000000) return (n / 1000000).toLocaleString('es-VE', {maximumFractionDigits: 1}) + 'M';
+  if (n >= 1000)    return (n / 1000).toLocaleString('es-VE', {maximumFractionDigits: 0}) + 'k';
+  return n.toString();
+}
+
 function renderAll() {
+  document.getElementById('label-may').textContent        = '🏦 Mayoristas (' + fmtAmount(CFG.mayAmount) + ' VES)';
+  document.getElementById('label-small').textContent      = '📉 Compra (' + fmtAmount(CFG.smallAmount) + ' VES)';
+  document.getElementById('hero-small-lbl').textContent   = 'Compra (' + fmtAmount(CFG.smallAmount) + ' VES)';
   renderSpreadHero();
   renderSignals();
   renderStats();
@@ -432,20 +442,31 @@ function renderSpreadHero() {
     return;
   }
 
-  var spread = (bestMay - bestSmall) / bestMay * 100;
-  var spreadBs = bestMay - bestSmall;
+  var spread    = (bestMay - bestSmall) / bestMay * 100;
+  var spreadNet = spread - CFG.commission;
+  var spreadBs  = bestMay - bestSmall;
   var pct = document.getElementById('hero-pct');
   pct.textContent = spread.toFixed(3) + '%';
 
+  // Spread neto (después de comisión)
+  var netEl = document.getElementById('hero-net');
+  if (CFG.commission > 0) {
+    netEl.textContent = 'Neto: ' + spreadNet.toFixed(3) + '% (−' + CFG.commission + '% comisión)';
+    netEl.style.color = spreadNet >= CFG.spreadThr ? '#F0B90B' : '#555';
+  } else {
+    netEl.textContent = '';
+  }
+
+  // La alerta y el color se basan en el spread NETO
   var pill = document.getElementById('hero-pill');
-  if (spread >= CFG.spreadThr) {
+  if (spreadNet >= CFG.spreadThr) {
     pct.style.color = '#F0B90B';
     document.getElementById('hero-label').textContent = 'Diferencia: ' + fmt(spreadBs) + ' Bs/USDT';
     pill.className = 'opp-pill opp-yes';
-    pill.textContent = '🟡 SPREAD > ' + CFG.spreadThr + '% — OPORTUNIDAD';
+    pill.textContent = '🟡 SPREAD NETO > ' + CFG.spreadThr + '% — OPORTUNIDAD';
   } else if (spread <= 0) {
     pct.style.color = '#E24B4A';
-    document.getElementById('hero-label').textContent = 'Ref. compra más cara — mercado invertido';
+    document.getElementById('hero-label').textContent = 'Compra más cara — mercado invertido';
     pill.className = 'opp-pill opp-warn';
     pill.textContent = '⚠ Spread negativo';
   } else {
@@ -550,7 +571,7 @@ function checkAlerts() {
         COOLDOWN.spread = now;
         addAlert('spread',
           '💰 Spread ' + spread.toFixed(3) + '% — OPORTUNIDAD',
-          'Mayorista: ' + fmt(bestMay) + ' Bs (' + esc(ST.mayoristas[0].merchant) + ') → Ref. compra: ' + fmt(bestSmall) + ' Bs · Dif: ' + fmt(bestMay - bestSmall) + ' Bs/USDT'
+          'Mayorista: ' + fmt(bestMay) + ' Bs (' + esc(ST.mayoristas[0].merchant) + ') → Compra: ' + fmt(bestSmall) + ' Bs · Dif: ' + fmt(bestMay - bestSmall) + ' Bs/USDT'
         );
         push('Spread P2P ' + spread.toFixed(3) + '%', 'Vende a ' + fmt(bestMay) + ' Bs — compra ref. ' + fmt(bestSmall) + ' Bs');
       }
@@ -673,6 +694,7 @@ function saveConfig() {
   CFG.weaknessThr   = parseFloat(document.getElementById('cfg-wk').value)  || 0.5;
   CFG.mayAmount   = parseFloat(document.getElementById('cfg-may-amount').value)   || 2000000;
   CFG.smallAmount = parseFloat(document.getElementById('cfg-small-amount').value) || 59999;
+  CFG.commission  = parseFloat(document.getElementById('cfg-commission').value)   || 0;
   localStorage.setItem('p2p_cfg2', JSON.stringify(CFG));
   if (ST.running) { clearInterval(ST.timer); ST.timer = setInterval(fetchOnce, CFG.interval * 1000); }
   toast('Guardado');
@@ -689,6 +711,7 @@ function loadConfig() {
     document.getElementById('cfg-wk').value       = CFG.weaknessThr;
     document.getElementById('cfg-may-amount').value   = CFG.mayAmount;
     document.getElementById('cfg-small-amount').value = CFG.smallAmount;
+    document.getElementById('cfg-commission').value   = CFG.commission;
   } catch(e) {}
 }
 
