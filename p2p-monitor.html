@@ -287,17 +287,16 @@ var COOLDOWN = {};
 var COOLDOWN_MS = 5 * 60000;
 
 // ── API ──────────────────────────────────────────────
-async function fetchTier(transAmount) {
+async function fetchPage(page) {
   var body = {
     asset: 'USDT',
     fiat: 'VES',
     merchantCheck: false,
-    page: 1,
-    publisherType: 'merchant',   // Solo verificados (bronce en adelante)
+    page: page,
+    publisherType: 'merchant',
     rows: 20,
-    tradeType: 'SELL',           // SELL = sección Vender (comerciantes que compran USDT)
-    payTypes: ['BANK'],          // Solo Bank Transfer
-    transAmount: transAmount     // Filtra como Binance: anuncios donde min ≤ monto ≤ max
+    tradeType: 'SELL',
+    payTypes: ['BANK']
   };
   var r = await fetch(PROXY, {
     method: 'POST',
@@ -311,12 +310,17 @@ async function fetchTier(transAmount) {
 }
 
 async function fetchP2P() {
-  // Dos llamadas en paralelo, una por tramo (igual que filtrar por monto en Binance)
-  var results = await Promise.all([
-    fetchTier(CFG.mayAmount),
-    fetchTier(CFG.smallAmount)
-  ]);
-  return { mayRaw: results[0], smallRaw: results[1] };
+  // Traer páginas 1 y 2 en paralelo para tener suficientes anuncios
+  var pages = await Promise.all([fetchPage(1), fetchPage(2)]);
+  var all = pages[0].concat(pages[1]);
+  // Deduplicar por comerciante
+  var seen = {};
+  return all.filter(function(item) {
+    var k = item.advertiser.nickName;
+    if (seen[k]) return false;
+    seen[k] = true;
+    return true;
+  });
 }
 
 // ── Ciclo principal ───────────────────────────────────
@@ -325,24 +329,25 @@ async function fetchOnce() {
   try {
     var raw = await fetchP2P();
 
-    function mapAds(list) {
-      return list.map(function(item) {
-        return {
-          price:    parseFloat(item.adv.price),
-          minVES:   parseFloat(item.adv.minSingleTransAmount),
-          maxVES:   parseFloat(item.adv.maxSingleTransAmount),
-          avail:    parseFloat(item.adv.tradableQuantity),
-          merchant: item.advertiser.nickName,
-          orders:   item.advertiser.monthOrderCount,
-          comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100)
-        };
-      }).sort(function(a, b) { return b.price - a.price; });
-    }
+    ST.allAds = raw.map(function(item) {
+      return {
+        price:    parseFloat(item.adv.price),
+        minVES:   parseFloat(item.adv.minSingleTransAmount),
+        maxVES:   parseFloat(item.adv.maxSingleTransAmount),
+        avail:    parseFloat(item.adv.tradableQuantity),
+        merchant: item.advertiser.nickName,
+        orders:   item.advertiser.monthOrderCount,
+        comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100)
+      };
+    }).sort(function(a, b) { return b.price - a.price; });
 
-    // Cada tramo viene filtrado por la API usando transAmount
-    ST.mayoristas = mapAds(raw.mayRaw);
-    ST.smallAds   = mapAds(raw.smallRaw);
-    ST.allAds     = ST.mayoristas;
+    // Filtrar por monto: igual que Binance — el monto debe caer dentro del rango del anuncio
+    ST.mayoristas = ST.allAds.filter(function(a) {
+      return a.minVES <= CFG.mayAmount && a.maxVES >= CFG.mayAmount;
+    });
+    ST.smallAds = ST.allAds.filter(function(a) {
+      return a.minVES <= CFG.smallAmount && a.maxVES >= CFG.smallAmount;
+    });
 
     // Historial de precio (mejor mayorista)
     var bestMay = ST.mayoristas[0] ? ST.mayoristas[0].price : (ST.allAds[0] ? ST.allAds[0].price : null);
