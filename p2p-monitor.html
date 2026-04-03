@@ -331,13 +331,13 @@ function mapAds(raw) {
       merchant: item.advertiser.nickName,
       orders:   item.advertiser.monthOrderCount,
       comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100),
-      payTypes:  (item.adv.tradeMethods || []).map(function(m) { return m.identifier; }),
-      userType:  item.advertiser.userType,
-      userGrade: item.advertiser.userGrade || 0
+      payTypes: (item.adv.tradeMethods || []).map(function(m) { return m.identifier; }),
+      badges:   item.advertiser.badges
     };
   }).filter(function(a) {
-    // Pro Merchant O usuario con insignia (grade >= 2). Solo Bank Transfer.
-    return (a.userType === 'merchant' || a.userGrade >= 2) && a.payTypes.indexOf('BANK') !== -1;
+    // Solo comerciantes con insignia (Bronze/Silver/Gold/Block/Ordinary/PRO)
+    // badges: null = sin insignia → excluir
+    return a.badges && a.badges.length > 0 && a.payTypes.indexOf('BANK') !== -1;
   }).sort(function(a, b) { return b.price - a.price; });
 }
 
@@ -547,8 +547,10 @@ function renderOB(id, ads, bestCls) {
     var cls = 'ob-row' + (i === 0 ? ' ' + bestCls : '');
     var rnk = '<span class="rank ' + (i === 0 ? 'n1' : '') + '">' + (i + 1) + '</span>';
     var lims = fmtM(ad.minVES) + '–' + fmtM(ad.maxVES);
+    var badgeMap = { Block: '💎', Ordinary: '🔴' };
+    var badgeTxt = (ad.badges && ad.badges[0]) ? (badgeMap[ad.badges[0]] || ad.badges[0]) : '';
     return '<div class="' + cls + '">' + rnk +
-      '<span class="merch" title="' + esc(ad.merchant) + '">' + esc(ad.merchant) + '</span>' +
+      '<span class="merch" title="' + esc(ad.merchant) + '">' + badgeTxt + ' ' + esc(ad.merchant) + '</span>' +
       '<span class="price-c ' + (i === 0 ? (id === 'ob-may' ? 'g' : 'b') : '') + '">' + fmt(ad.price) + '</span>' +
       '<span class="lim-c">' + lims + '</span>' +
     '</div>';
