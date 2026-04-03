@@ -234,16 +234,12 @@ input[type=number]:focus{outline:none;border-color:#F0B90B}
         <div style="display:flex;align-items:center;gap:4px"><input type="number" id="cfg-wk" value="0.5" min="0.1" step="0.1"><span style="color:#555">%</span></div>
       </div>
       <div class="cfg-row">
-        <span>Mayorista — lím. mín. (VES)</span>
-        <input type="number" id="cfg-may-min" value="1000000" min="100000" step="100000">
+        <span>Mayoristas — monto filtro (VES)</span>
+        <input type="number" id="cfg-may-amount" value="2000000" min="100000" step="100000">
       </div>
       <div class="cfg-row">
-        <span>Mayorista — lím. máx. (VES)</span>
-        <input type="number" id="cfg-may-max" value="2000000" min="100000" step="100000">
-      </div>
-      <div class="cfg-row">
-        <span>Ref. compra — lím. máx. (VES)</span>
-        <input type="number" id="cfg-small-max" value="50000" min="10000" step="10000">
+        <span>Ref. compra — monto filtro (VES)</span>
+        <input type="number" id="cfg-small-amount" value="59999" min="10000" step="1000">
       </div>
       <div style="margin-top:8px;display:flex;gap:6px">
         <button class="btn btn-gold" style="flex:1" onclick="saveConfig()">Guardar</button>
@@ -268,9 +264,8 @@ var CFG = {
   spreadThr: 0.5,
   overboughtThr: 1.0,
   weaknessThr: 0.5,
-  mayMinVES: 1000000,
-  mayMaxVES: 2000000,
-  smallMaxVES: 50000
+  mayAmount:  2000000,   // Monto a filtrar en sección Mayoristas (VES)
+  smallAmount: 59999     // Monto a filtrar en sección Ref. Compra (VES)
 };
 
 var PROXY = 'https://p2p-binance-proxy.efrenalejandro2010.workers.dev';
@@ -292,16 +287,17 @@ var COOLDOWN = {};
 var COOLDOWN_MS = 5 * 60000;
 
 // ── API ──────────────────────────────────────────────
-async function fetchPage(page) {
+async function fetchTier(transAmount) {
   var body = {
     asset: 'USDT',
     fiat: 'VES',
     merchantCheck: false,
-    page: page,
+    page: 1,
     publisherType: 'merchant',   // Solo verificados (bronce en adelante)
     rows: 20,
-    tradeType: 'SELL',           // SELL = sección Vender (comerciantes que te compran USDT)
-    payTypes: ['BANK']           // Solo Bank Transfer
+    tradeType: 'SELL',           // SELL = sección Vender (comerciantes que compran USDT)
+    payTypes: ['BANK'],          // Solo Bank Transfer
+    transAmount: transAmount     // Filtra como Binance: anuncios donde min ≤ monto ≤ max
   };
   var r = await fetch(PROXY, {
     method: 'POST',
@@ -315,21 +311,12 @@ async function fetchPage(page) {
 }
 
 async function fetchP2P() {
-  // Traer páginas 1 y 2 en paralelo (40 anuncios) para capturar
-  // tanto mayoristas (precio alto, primeras posiciones) como
-  // comerciantes de límite 50k (precio menor, posiciones más bajas)
-  var results = await Promise.all([fetchPage(1), fetchPage(2)]);
-  var combined = results[0].concat(results[1]);
-  // Eliminar duplicados por nombre de comerciante
-  var seen = {};
-  var unique = combined.filter(function(item) {
-    var key = item.advertiser.nickName;
-    if (seen[key]) return false;
-    seen[key] = true;
-    return true;
-  });
-  if (!unique.length) throw new Error('Sin anuncios disponibles');
-  return unique;
+  // Dos llamadas en paralelo, una por tramo (igual que filtrar por monto en Binance)
+  var results = await Promise.all([
+    fetchTier(CFG.mayAmount),
+    fetchTier(CFG.smallAmount)
+  ]);
+  return { mayRaw: results[0], smallRaw: results[1] };
 }
 
 // ── Ciclo principal ───────────────────────────────────
@@ -338,25 +325,24 @@ async function fetchOnce() {
   try {
     var raw = await fetchP2P();
 
-    ST.allAds = raw.map(function(item) {
-      return {
-        price:    parseFloat(item.adv.price),
-        minVES:   parseFloat(item.adv.minSingleTransAmount),
-        maxVES:   parseFloat(item.adv.maxSingleTransAmount),
-        avail:    parseFloat(item.adv.tradableQuantity),
-        merchant: item.advertiser.nickName,
-        orders:   item.advertiser.monthOrderCount,
-        comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100)
-      };
-    }).sort(function(a, b) { return b.price - a.price; });
+    function mapAds(list) {
+      return list.map(function(item) {
+        return {
+          price:    parseFloat(item.adv.price),
+          minVES:   parseFloat(item.adv.minSingleTransAmount),
+          maxVES:   parseFloat(item.adv.maxSingleTransAmount),
+          avail:    parseFloat(item.adv.tradableQuantity),
+          merchant: item.advertiser.nickName,
+          orders:   item.advertiser.monthOrderCount,
+          comp:     Math.round((item.advertiser.monthFinishRate || 0) * 100)
+        };
+      }).sort(function(a, b) { return b.price - a.price; });
+    }
 
-    // Filtrar por tramos en VES
-    ST.mayoristas = ST.allAds.filter(function(a) {
-      return a.minVES >= CFG.mayMinVES && a.minVES <= CFG.mayMaxVES;
-    });
-    ST.smallAds = ST.allAds.filter(function(a) {
-      return a.minVES <= CFG.smallMaxVES;
-    });
+    // Cada tramo viene filtrado por la API usando transAmount
+    ST.mayoristas = mapAds(raw.mayRaw);
+    ST.smallAds   = mapAds(raw.smallRaw);
+    ST.allAds     = ST.mayoristas;
 
     // Historial de precio (mejor mayorista)
     var bestMay = ST.mayoristas[0] ? ST.mayoristas[0].price : (ST.allAds[0] ? ST.allAds[0].price : null);
@@ -672,9 +658,8 @@ function saveConfig() {
   CFG.spreadThr     = parseFloat(document.getElementById('cfg-spr').value) || 0.5;
   CFG.overboughtThr = parseFloat(document.getElementById('cfg-ob').value)  || 1.0;
   CFG.weaknessThr   = parseFloat(document.getElementById('cfg-wk').value)  || 0.5;
-  CFG.mayMinVES     = parseFloat(document.getElementById('cfg-may-min').value) || 1000000;
-  CFG.mayMaxVES     = parseFloat(document.getElementById('cfg-may-max').value) || 2000000;
-  CFG.smallMaxVES   = parseFloat(document.getElementById('cfg-small-max').value) || 50000;
+  CFG.mayAmount   = parseFloat(document.getElementById('cfg-may-amount').value)   || 2000000;
+  CFG.smallAmount = parseFloat(document.getElementById('cfg-small-amount').value) || 59999;
   localStorage.setItem('p2p_cfg2', JSON.stringify(CFG));
   if (ST.running) { clearInterval(ST.timer); ST.timer = setInterval(fetchOnce, CFG.interval * 1000); }
   toast('Guardado');
@@ -689,9 +674,8 @@ function loadConfig() {
     document.getElementById('cfg-spr').value      = CFG.spreadThr;
     document.getElementById('cfg-ob').value       = CFG.overboughtThr;
     document.getElementById('cfg-wk').value       = CFG.weaknessThr;
-    document.getElementById('cfg-may-min').value  = CFG.mayMinVES;
-    document.getElementById('cfg-may-max').value  = CFG.mayMaxVES;
-    document.getElementById('cfg-small-max').value= CFG.smallMaxVES;
+    document.getElementById('cfg-may-amount').value   = CFG.mayAmount;
+    document.getElementById('cfg-small-amount').value = CFG.smallAmount;
   } catch(e) {}
 }
 
