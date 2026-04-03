@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>P2P Monitor — VES/USDT</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23161616' rx='6'/><rect x='5' y='9' width='6' height='13' fill='%231D9E75' rx='1'/><line x1='8' y1='6' x2='8' y2='9' stroke='%231D9E75' stroke-width='1.5'/><line x1='8' y1='22' x2='8' y2='26' stroke='%231D9E75' stroke-width='1.5'/><rect x='19' y='13' width='6' height='9' fill='%23F0B90B' rx='1'/><line x1='22' y1='10' x2='22' y2='13' stroke='%23F0B90B' stroke-width='1.5'/><line x1='22' y1='22' x2='22' y2='25' stroke='%23F0B90B' stroke-width='1.5'/><line x1='11' y1='15' x2='19' y2='15' stroke='%23888' stroke-width='1.5'/><polyline points='16,12 19,15 16,18' fill='none' stroke='%23888' stroke-width='1.5'/></svg>">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;font-size:14px;line-height:1.5}
@@ -141,10 +142,18 @@ input[type=number]:focus{outline:none;border-color:#F0B90B}
     <!-- Spread hero -->
     <div class="spread-hero" id="spread-hero">
       <div>
-        <div style="font-size:11px;color:#555;margin-bottom:4px">SPREAD ACTUAL</div>
-        <div class="spread-num" id="hero-pct">—</div>
-        <div id="hero-net" style="font-size:12px;color:#666;margin-top:2px"></div>
-        <div class="spread-pct" id="hero-label">Esperando datos...</div>
+        <div style="font-size:11px;color:#555;margin-bottom:6px">SPREAD ACTUAL</div>
+        <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:10px;color:#555;margin-bottom:2px;letter-spacing:.05em">BRUTO</div>
+            <div class="spread-num" id="hero-pct">—</div>
+          </div>
+          <div id="hero-net-wrap" style="display:none">
+            <div style="font-size:10px;color:#888;margin-bottom:2px;letter-spacing:.05em" id="hero-net-lbl">NETO</div>
+            <div style="font-size:32px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1" id="hero-net">—</div>
+          </div>
+        </div>
+        <div class="spread-pct" id="hero-label" style="margin-top:6px">Esperando datos...</div>
       </div>
       <div class="spread-info">
         <div class="spread-prices">
@@ -446,30 +455,39 @@ function renderSpreadHero() {
   var spread    = (bestMay - bestSmall) / bestMay * 100;
   var spreadNet = spread - CFG.commission;
   var spreadBs  = bestMay - bestSmall;
-  var pct = document.getElementById('hero-pct');
+
+  var pct      = document.getElementById('hero-pct');
+  var netWrap  = document.getElementById('hero-net-wrap');
+  var netEl    = document.getElementById('hero-net');
+  var netLbl   = document.getElementById('hero-net-lbl');
+
   pct.textContent = spread.toFixed(3) + '%';
 
-  // Spread neto (después de comisión)
-  var netEl = document.getElementById('hero-net');
+  // Mostrar neto solo si hay comisión configurada
   if (CFG.commission > 0) {
-    netEl.textContent = 'Neto: ' + spreadNet.toFixed(3) + '% (−' + CFG.commission + '% comisión)';
-    netEl.style.color = spreadNet >= CFG.spreadThr ? '#F0B90B' : '#555';
+    netWrap.style.display = '';
+    netEl.textContent = spreadNet.toFixed(3) + '%';
+    netLbl.textContent = 'NETO (−' + CFG.commission + '%)';
+    netEl.style.color  = spreadNet >= CFG.spreadThr ? '#F0B90B' : '#E24B4A';
   } else {
-    netEl.textContent = '';
+    netWrap.style.display = 'none';
   }
 
-  // La alerta y el color se basan en el spread NETO
-  var pill = document.getElementById('hero-pill');
-  if (spreadNet >= CFG.spreadThr) {
-    pct.style.color = '#F0B90B';
-    document.getElementById('hero-label').textContent = 'Diferencia: ' + fmt(spreadBs) + ' Bs/USDT';
-    pill.className = 'opp-pill opp-yes';
-    pill.textContent = '🟡 SPREAD NETO > ' + CFG.spreadThr + '% — OPORTUNIDAD';
-  } else if (spread <= 0) {
+  // Alerta y color del hero basados en spread NETO
+  var pill       = document.getElementById('hero-pill');
+  var threshold  = CFG.spreadThr;
+  var evalSpread = CFG.commission > 0 ? spreadNet : spread;
+
+  if (spread <= 0) {
     pct.style.color = '#E24B4A';
     document.getElementById('hero-label').textContent = 'Compra más cara — mercado invertido';
     pill.className = 'opp-pill opp-warn';
     pill.textContent = '⚠ Spread negativo';
+  } else if (evalSpread >= threshold) {
+    pct.style.color = CFG.commission > 0 ? '#888' : '#F0B90B';
+    document.getElementById('hero-label').textContent = 'Diferencia: ' + fmt(spreadBs) + ' Bs/USDT';
+    pill.className = 'opp-pill opp-yes';
+    pill.textContent = '🟡 SPREAD ' + (CFG.commission > 0 ? 'NETO' : '') + ' > ' + threshold + '% — OPORTUNIDAD';
   } else {
     pct.style.color = '#888';
     document.getElementById('hero-label').textContent = 'Diferencia: ' + fmt(spreadBs) + ' Bs/USDT';
@@ -575,12 +593,15 @@ function checkAlerts() {
 
   // Spread
   if (bestSmall) {
-    var spread = (bestMay - bestSmall) / bestMay * 100;
-    if (spread >= CFG.spreadThr) {
+    var spread    = (bestMay - bestSmall) / bestMay * 100;
+    var spreadNet = spread - CFG.commission;
+    var evalSpread = CFG.commission > 0 ? spreadNet : spread;
+    var netLabel   = CFG.commission > 0 ? ' (neto ' + spreadNet.toFixed(3) + '%)' : '';
+    if (evalSpread >= CFG.spreadThr) {
       if (!COOLDOWN.spread || now - COOLDOWN.spread > COOLDOWN_MS) {
         COOLDOWN.spread = now;
         addAlert('spread',
-          '💰 Spread ' + spread.toFixed(3) + '% — OPORTUNIDAD',
+          '💰 Spread ' + spread.toFixed(3) + '%' + netLabel + ' — OPORTUNIDAD',
           'Mayorista: ' + fmt(bestMay) + ' Bs (' + esc(ST.mayoristas[0].merchant) + ') → Compra: ' + fmt(bestSmall) + ' Bs · Dif: ' + fmt(bestMay - bestSmall) + ' Bs/USDT'
         );
         push('Spread P2P ' + spread.toFixed(3) + '%', 'Vende a ' + fmt(bestMay) + ' Bs — compra ref. ' + fmt(bestSmall) + ' Bs');
