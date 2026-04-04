@@ -12,7 +12,7 @@ var AUTOFILL_RULES = [
   { keywords:['remesa'],                                                                    type:'Credit', wallet:'Zelle' },
   { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv'],             type:'Debit',  category:'Home',      currency:'VES' },
   { keywords:['enviado'],                                                                   type:'Debit',  category:'Support' },
-  { keywords:['uber','taxi','metro','buseta','gasolina'],                                   type:'Debit',  category:'Transport', currency:'VES' },
+  { keywords:['uber','taxi','metro','buseta','gasolina','vamos','yummy','ridery'],           type:'Debit',  category:'Transport', currency:'USD' },
   { keywords:['farmacia','clinica','doctor','medicina'],                                    type:'Debit',  category:'Health',    currency:'VES' },
   { keywords:['netflix','spotify','amazon','apple','google'],                               type:'Debit',  category:'Discretionary' },
   { keywords:['bybit','circle','crcl','invertido'],                                        type:'Debit',  category:'Investments' },
@@ -298,11 +298,12 @@ function autofillFromNote(){
   if(window.editingTxId) return; // never autofill while editing an existing tx
   var note=document.getElementById('tx-desc').value.trim();
   if(!note) return;
-  // Match only on the first word (space, colon or comma terminates it)
-  var firstWord=note.split(/[\s,:]+/)[0].toLowerCase();
+  // Split note into individual words and check each against keywords
+  var words=note.toLowerCase().split(/[\s,:]+/);
   for(var i=0;i<AUTOFILL_RULES.length;i++){
     var rule=AUTOFILL_RULES[i];
-    if(rule.keywords.indexOf(firstWord)<0) continue;
+    var matched=words.some(function(w){ return rule.keywords.indexOf(w)>=0; });
+    if(!matched) continue;
     // Apply only fields defined in the rule
     if(rule.type)     document.getElementById('tx-type').value=rule.type;
     if(rule.category) document.getElementById('tx-cat').value=rule.category;
