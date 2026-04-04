@@ -8,7 +8,7 @@ var DATA_TOKEN   = '151322';
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
   { keywords:['income'],                                                                    type:'Credit', category:'Income' },
-  { keywords:['patodo','madeira','rio','mi','chinos','pan','botellon','viveres','abasto'],  type:'Debit',  category:'Groceries', currency:'VES' },
+  { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto'],  type:'Debit',  category:'Groceries', currency:'VES' },
   { keywords:['remesa'],                                                                    type:'Credit', wallet:'Zelle' },
   { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv'],             type:'Debit',  category:'Home',      currency:'VES' },
   { keywords:['enviado'],                                                                   type:'Debit',  category:'Support' },
