@@ -42,6 +42,22 @@ function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.as
 async function pushToCloud(){
   try{
     setSyncStatus('syncing','Syncing...');
+    // Merge-first: fetch cloud state and add any transactions missing locally.
+    // Prevents a stale open tab from overwriting changes made on another device.
+    try{
+      var cr=await fetch(DATA_URL+'/data',{headers:{'Authorization':'Bearer '+DATA_TOKEN}});
+      if(cr.ok){
+        var cd=await cr.json();
+        if(cd.data&&cd.data.transactions){
+          var localIds=new Set(S.transactions.map(function(t){return t.id;}));
+          var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id);});
+          if(missing.length){
+            S.transactions=S.transactions.concat(missing);
+            saveLocal(); sortTx(); renderTx(); renderSummary();
+          }
+        }
+      }
+    }catch(e){ /* continue with push even if merge-pull fails */ }
     var r=await fetch(DATA_URL+'/data',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+DATA_TOKEN},
