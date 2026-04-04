@@ -155,13 +155,31 @@
   <div id="page-tools" class="page">
 
     <div class="tool-card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+      <div class="tool-title" style="margin-bottom:.75rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">P2P Spread</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Sell USDT → buy USD at lower rate → reconvert via BDV→Bpay. Shows raw P2P spread and effective net gain after fees.</span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.875rem;max-width:90%;margin-left:auto;margin-right:auto">
+        <div class="field">
+          <span class="field-lbl">Sell</span>
+          <input type="number" id="p2p-sell" placeholder="0.00" step="0.01" oninput="calcSpread()"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl">Buy</span>
+          <input type="number" id="p2p-buy" placeholder="0.00" step="0.01" oninput="calcSpread()"/>
+        </div>
+      </div>
+      <div id="p2p-result" style="max-width:90%;margin:0 auto"></div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-title">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Bpay</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Bpay keeps 3.3% of the recharge</span></span>
       </div>
-      <div class="field-row" style="max-width:300px;margin-bottom:.875rem">
+      <div class="field-row" style="margin-bottom:.875rem">
         <div class="field">
-          <span class="field-lbl">Tarjeta BDV (bank balance $)</span>
+          <span class="field-lbl">BDV (bank balance $)</span>
           <input type="number" id="bdv-input" placeholder="0.00" step="0.01" oninput="calcBDV()"/>
         </div>
       </div>
@@ -171,13 +189,13 @@
     </div>
 
     <div class="tool-card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+      <div class="tool-title">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Wally</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Wally fee: 3.5% + 7% ITBMS on commission = 3.745% charged upfront</span></span>
       </div>
-      <div class="field-row" style="max-width:300px;margin-bottom:.875rem">
+      <div class="field-row" style="margin-bottom:.875rem">
         <div class="field">
-          <span class="field-lbl">Tarjeta BDV (bank balance $)</span>
+          <span class="field-lbl">BDV (bank balance $)</span>
           <input type="number" id="wally-input" placeholder="0.00" step="0.01" oninput="calcWally()"/>
         </div>
       </div>
@@ -187,13 +205,13 @@
     </div>
 
     <div class="tool-card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+      <div class="tool-title">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Zinli</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Zinli fee: 3.75% charged upfront</span></span>
       </div>
-      <div class="field-row" style="max-width:300px;margin-bottom:.875rem">
+      <div class="field-row" style="margin-bottom:.875rem">
         <div class="field">
-          <span class="field-lbl">Tarjeta BDV (bank balance $)</span>
+          <span class="field-lbl">BDV (bank balance $)</span>
           <input type="number" id="zinli-input" placeholder="0.00" step="0.01" oninput="calcZinli()"/>
         </div>
       </div>
