@@ -93,8 +93,6 @@
       <div class="frow-break"></div>
       <button id="btn-undo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Undo" onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button id="btn-redo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Redo" onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-      <button class="btn btns" onclick="exportCSV()">Export CSV</button>
-      <button class="btn btns" onclick="showPage('import',null)">Import CSV</button>
     </div>
     <div id="tx-wrap"></div>
   </div>
@@ -262,6 +260,8 @@
     <div class="fc">
       <h3>Data</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btns" onclick="exportCSV()">Export CSV</button>
+        <button class="btn btns btnp" onclick="showPage('import',null)">Import CSV</button>
         <button class="btn btns" onclick="exportAllJSON()">Export JSON backup</button>
         <button class="btn btns btnp" onclick="document.getElementById('json-inp').click()">Restore JSON backup</button>
         <input type="file" id="json-inp" accept=".json" style="display:none" onchange="importJSON(this.files[0])"/>
