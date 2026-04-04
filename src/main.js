@@ -4,6 +4,21 @@ var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
 var DATA_TOKEN   = '151322';
+// Autofill rules: matched against the first word of the note (case-insensitive)
+// type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
+var AUTOFILL_RULES = [
+  { keywords:['income'],                                                                    type:'Credit', category:'Income' },
+  { keywords:['patodo','madeira','rio','mi','chinos','pan','botellon','viveres','abasto'],  type:'Debit',  category:'Groceries', currency:'VES' },
+  { keywords:['remesa'],                                                                    type:'Credit', wallet:'Zelle' },
+  { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv'],             type:'Debit',  category:'Home',      currency:'VES' },
+  { keywords:['enviado'],                                                                   type:'Debit',  category:'Support' },
+  { keywords:['uber','taxi','metro','buseta','gasolina'],                                   type:'Debit',  category:'Transport', currency:'VES' },
+  { keywords:['farmacia','clinica','doctor','medicina'],                                    type:'Debit',  category:'Health',    currency:'VES' },
+  { keywords:['netflix','spotify','amazon','apple','google'],                               type:'Debit',  category:'Discretionary' },
+  { keywords:['bybit','circle','crcl','invertido'],                                        type:'Debit',  category:'Investments' },
+  { keywords:['ahorro','deployed'],                                                         type:'Debit',  category:'Savings' },
+];
+
 var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
 var CCOLORS      = {Income:'#1D9E75',Home:'#7F77DD',Groceries:'#1D9E75',Transport:'#378ADD',Health:'#5DCAA5',Business:'#EF9F27',Discretionary:'#378ADD',Support:'#EF9F27',Investments:'#F5A623',Savings:'#5DCAA5',
@@ -278,6 +293,30 @@ async function refreshWalletHoldings(){
 }
 
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
+
+function autofillFromNote(){
+  if(window.editingTxId) return; // never autofill while editing an existing tx
+  var note=document.getElementById('tx-desc').value.trim();
+  if(!note) return;
+  // Match only on the first word (space, colon or comma terminates it)
+  var firstWord=note.split(/[\s,:]+/)[0].toLowerCase();
+  for(var i=0;i<AUTOFILL_RULES.length;i++){
+    var rule=AUTOFILL_RULES[i];
+    if(rule.keywords.indexOf(firstWord)<0) continue;
+    // Apply only fields defined in the rule
+    if(rule.type)     document.getElementById('tx-type').value=rule.type;
+    if(rule.category) document.getElementById('tx-cat').value=rule.category;
+    if(rule.currency){ document.getElementById('tx-cur').value=rule.currency; toggleVesHint(); }
+    if(rule.wallet){
+      var ws=document.getElementById('tx-wallet');
+      for(var j=0;j<ws.options.length;j++){ if(ws.options[j].value===rule.wallet){ ws.value=rule.wallet; break; } }
+    }
+    // Show subtle autofill hint
+    var hint=document.getElementById('autofill-hint');
+    if(hint){ hint.style.opacity='1'; clearTimeout(window._afTimer); window._afTimer=setTimeout(function(){hint.style.opacity='0';},2000); }
+    return;
+  }
+}
 function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; document.getElementById('usd-preview').textContent=(S.rate&&a>0)?(a/S.rate).toFixed(2):'-'; }
 
 function addTx(){
@@ -820,6 +859,7 @@ function calcBDV(){
   ]);
 }
 window.calcBDV = calcBDV;
+window.autofillFromNote = autofillFromNote;
 window.recordSnapshot = recordSnapshot;
 window.deleteSnapshot = deleteSnapshot;
 

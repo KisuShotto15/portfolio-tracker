@@ -295,7 +295,7 @@
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">Date</span><input type="date" id="tx-date" tabindex="7"/></div>
-    <div class="field" style="grid-column:span 2"><span class="field-lbl">Note</span><input type="text" id="tx-desc" placeholder="Description" tabindex="1"/></div>
+    <div class="field" style="grid-column:span 2"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote()"/></div>
     <div class="field"><span class="field-lbl">Wallet</span><select id="tx-wallet" tabindex="2"></select></div>
   </div>
   <div class="field-row">
