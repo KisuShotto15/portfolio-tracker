@@ -19,7 +19,8 @@ var S = {
   okxBalance:null,     okxUpdated:null,
   trezorBalance:null,  trezorUpdated:null,
   walletHoldings:[],   walletHoldingsUpdated:null,
-  snapshots:[]
+  snapshots:[],
+  manualWalletsUpdatedAt:null, portfolioUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
@@ -48,13 +49,33 @@ async function pushToCloud(){
       var cr=await fetch(DATA_URL+'/data',{headers:{'Authorization':'Bearer '+DATA_TOKEN}});
       if(cr.ok){
         var cd=await cr.json();
-        if(cd.data&&cd.data.transactions){
-          var localIds=new Set(S.transactions.map(function(t){return t.id;}));
-          var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id);});
-          if(missing.length){
-            S.transactions=S.transactions.concat(missing);
-            saveLocal(); sortTx(); renderTx(); renderSummary();
+        if(cd.data){
+          var needRender=false;
+          // transactions: additive merge — never drop a tx added on another device
+          if(cd.data.transactions){
+            var localIds=new Set(S.transactions.map(function(t){return t.id;}));
+            var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id);});
+            if(missing.length){ S.transactions=S.transactions.concat(missing); needRender=true; }
           }
+          // snapshots: additive merge
+          if(cd.data.snapshots){
+            var localSnapIds=new Set((S.snapshots||[]).map(function(s){return s.id;}));
+            var missingSnaps=cd.data.snapshots.filter(function(s){return !localSnapIds.has(s.id);});
+            if(missingSnaps.length){ S.snapshots=(S.snapshots||[]).concat(missingSnaps); needRender=true; }
+          }
+          // manualWallets: timestamp wins — use whichever device modified last
+          if(cd.data.manualWallets&&(cd.data.manualWalletsUpdatedAt||0)>(S.manualWalletsUpdatedAt||0)){
+            S.manualWallets=cd.data.manualWallets;
+            S.manualWalletsUpdatedAt=cd.data.manualWalletsUpdatedAt;
+            needRender=true;
+          }
+          // portfolio: timestamp wins
+          if(cd.data.portfolio&&(cd.data.portfolioUpdatedAt||0)>(S.portfolioUpdatedAt||0)){
+            S.portfolio=cd.data.portfolio;
+            S.portfolioUpdatedAt=cd.data.portfolioUpdatedAt;
+            needRender=true;
+          }
+          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); renderHoldings(); populateWalletSelects(); }
         }
       }
     }catch(e){ /* continue with push even if merge-pull fails */ }
@@ -343,8 +364,8 @@ function updateTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
-function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); save(); renderHoldings(); }
-function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); save(); renderWallets(); populateWalletSelects(); }
+function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); S.portfolioUpdatedAt=Date.now(); save(); renderHoldings(); }
+function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
 
 function emptyState(title, sub){
   return '<div class="es"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:.25;margin-bottom:.75rem"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg><div class="es-title">'+title+'</div><div class="es-sub">'+sub+'</div></div>';
@@ -534,6 +555,7 @@ function saveManualWallet(){
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker'};
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
+  S.manualWalletsUpdatedAt=Date.now();
   document.getElementById('wm-name').value=''; document.getElementById('wm-bal').value='';
   save(); renderWallets(); populateWalletSelects();
 }
@@ -579,6 +601,7 @@ function addHolding(){
   var price=parseFloat(document.getElementById('po-price').value); var notes=document.getElementById('po-notes').value.trim();
   if(!date||!asset||isNaN(qty)||isNaN(price)){ alert('Fill required fields'); return; }
   S.portfolio.push({id:Date.now(),date:date,asset:asset,type:type,qty:qty,price:price,notes:notes,totalUSD:parseFloat((qty*price).toFixed(4))});
+  S.portfolioUpdatedAt=Date.now();
   ['po-asset','po-qty','po-price','po-notes'].forEach(function(id){ document.getElementById(id).value=''; });
   save(); renderHoldings();
 }
