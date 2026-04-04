@@ -728,7 +728,7 @@ window.save = save;
 function renderCalcCards(cardsId, resultId, cards){
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
     var color = c.green ? 'var(--color-accent)' : c.red ? '#E24B4A' : 'var(--color-text-primary)';
-    return '<div class="fc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:9px;padding:.75rem .625rem">'
+    return '<div class="fc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:9px;padding:.75rem .625rem;text-align:center">'
       +'<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">'+c.label+'</div>'
       +'<div class="bdv-val" style="font-size:18px;font-weight:500;color:'+color+'">'+c.value+'</div>'
       +'<div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">'+c.sub+'</div>'
@@ -736,6 +736,37 @@ function renderCalcCards(cardsId, resultId, cards){
   }).join('');
   document.getElementById(resultId).style.display = 'block';
 }
+
+function calcSpread(){
+  var sellRate = parseFloat(document.getElementById('p2p-sell').value)||0;
+  var buyRate  = parseFloat(document.getElementById('p2p-buy').value)||0;
+
+  var spreadPct   = sellRate && buyRate ? (sellRate / buyRate - 1) * 100 : 0;
+  // BDV→Bpay factor: bank fees (1%+1.5%) + Bpay 3.3% cut
+  var bpayFactor  = (1 / (1.01 * 1.015)) * 0.967;
+  var effectivePct = sellRate && buyRate ? ((sellRate / buyRate) * bpayFactor - 1) * 100 : 0;
+  var feesPct      = spreadPct - effectivePct;
+
+  var fmt = function(n,d){ return n.toFixed(d||2); };
+  var pct = function(n){ return (n>=0?'+':'')+fmt(n)+'%'; };
+  var ac  = 'var(--color-accent)';
+  var rc  = '#E24B4A';
+
+  document.getElementById('p2p-result').innerHTML =
+    '<div style="display:flex;justify-content:center;gap:8px;margin-top:.5rem">'
+    +'<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;padding:.75rem;flex:1;max-width:200px">'
+      +'<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P2P Spread</div>'
+      +'<div style="font-size:24px;font-weight:700;color:'+(spreadPct>0?ac:'var(--color-text-primary)')+'">'+pct(spreadPct)+'</div>'
+      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">'+(sellRate&&buyRate ? sellRate+' → '+buyRate+' Bs' : '—')+'</div>'
+    +'</div>'
+    +'<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;padding:.75rem;flex:1;max-width:200px">'
+      +'<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Net BDV-Bpay</div>'
+      +'<div style="font-size:24px;font-weight:700;color:'+(effectivePct>0?ac:effectivePct<0?rc:'var(--color-text-primary)')+'">'+pct(effectivePct)+'</div>'
+      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">after <span style="color:'+rc+'">'+fmt(feesPct)+'%</span> BDV+Bpay fees</div>'
+    +'</div>'
+  +'</div>';
+}
+window.calcSpread = calcSpread;
 
 function calcBDV(){
   var bank = parseFloat(document.getElementById('bdv-input').value)||0;
@@ -790,7 +821,7 @@ async function init(){
   fetchRate(false);
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
-  calcBDV(); calcWally(); calcZinli();
+  calcSpread(); calcBDV(); calcWally(); calcZinli();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
 }
 init();

@@ -1,5 +1,6 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--font-sans,system-ui);background:var(--color-background-tertiary);color:var(--color-text-primary);font-size:15px;line-height:1.5}
+@media(min-width:769px){body{zoom:1.4}}
 .app{display:flex;min-height:100vh}
 .sb{width:200px;min-width:200px;background:#1a1a1a;border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;padding:.875rem 0;position:sticky;top:0;height:100vh;overflow-y:auto}
 .sb-logo{padding:0 1rem .875rem;font-size:22px;font-weight:500;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:.5rem;text-align:center}
@@ -76,7 +77,13 @@ tr:hover td{background:rgba(128,128,128,0.08)}
 .wcard-bal{font-size:19px;font-weight:500}
 .wstatus{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
 .hint{font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;line-height:1.6}
-.tool-card{background:#161616;border:0.5px solid #333;border-radius:12px;padding:1.1rem 1rem;margin-bottom:1rem}
+.tool-card{background:#161616;border:0.5px solid #333;border-radius:12px;padding:1.1rem 1rem;margin-bottom:0}
+.tool-title{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:.5rem}
+.tool-card [id$="-cards"]{text-align:center;margin:0 auto;max-width:90%!important}
+.tool-card .field-row{max-width:90%;margin-left:auto;margin-right:auto}
+@media(min-width:769px){
+  #page-tools.active{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
+}
 .dzone{border:1px dashed var(--color-border-secondary);border-radius:9px;padding:1.75rem;text-align:center;cursor:pointer;color:var(--color-text-secondary);font-size:14px}
 .dzone:hover{background:var(--color-background-secondary)}
 .badge-t{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;background:#1a1a2e;color:#a78bfa;margin-left:4px}
