@@ -78,14 +78,15 @@ async function pushToCloud(){
             var missingSnaps=cd.data.snapshots.filter(function(s){return !localSnapIds.has(s.id);});
             if(missingSnaps.length){ S.snapshots=(S.snapshots||[]).concat(missingSnaps); needRender=true; }
           }
-          // manualWallets: timestamp wins — use whichever device modified last
-          if(cd.data.manualWallets&&(cd.data.manualWalletsUpdatedAt||0)>(S.manualWalletsUpdatedAt||0)){
+          // manualWallets: cloud wins when equal or newer (>= handles null==null case
+          // where stale local state would otherwise overwrite cloud changes)
+          if(cd.data.manualWallets&&(cd.data.manualWalletsUpdatedAt||0)>=(S.manualWalletsUpdatedAt||0)){
             S.manualWallets=cd.data.manualWallets;
             S.manualWalletsUpdatedAt=cd.data.manualWalletsUpdatedAt;
             needRender=true;
           }
-          // portfolio: timestamp wins
-          if(cd.data.portfolio&&(cd.data.portfolioUpdatedAt||0)>(S.portfolioUpdatedAt||0)){
+          // portfolio: same
+          if(cd.data.portfolio&&(cd.data.portfolioUpdatedAt||0)>=(S.portfolioUpdatedAt||0)){
             S.portfolio=cd.data.portfolio;
             S.portfolioUpdatedAt=cd.data.portfolioUpdatedAt;
             needRender=true;
@@ -903,5 +904,12 @@ async function init(){
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   calcSpread(); calcBDV(); calcWally(); calcZinli();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
+  // Pull fresh cloud state whenever user returns to this tab
+  // Prevents stale open tabs from overwriting changes made on other devices
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) pullFromCloud().then(function(pulled){
+      if(pulled){ populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderHoldings(); }
+    });
+  });
 }
 init();
