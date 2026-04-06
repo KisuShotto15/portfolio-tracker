@@ -842,11 +842,23 @@ async function botCallWorker(path, body) {
 
 async function botGetMyAd() {
   var data = await botCallWorker('/my-ads');
-  if (!data.data || !data.data.length) throw new Error('Sin anuncios BUY activos');
-  // Buscar el primer anuncio BUY de USDT/VES activo
-  var ad = data.data.find(function(a) {
-    return a.asset === 'USDT' && a.fiatUnit === 'VES' && a.tradeType === 'BUY' && a.advStatus === 'LIVE';
-  }) || data.data[0];
+  // Binance puede envolver en data.data (lista) o data (objeto con .data)
+  var ads = Array.isArray(data.data) ? data.data
+          : Array.isArray(data.data && data.data.data) ? data.data.data
+          : null;
+  if (!ads || !ads.length) {
+    // Log la respuesta cruda para diagnóstico
+    botLog('Raw API: ' + JSON.stringify(data).substring(0, 200), '#888');
+    throw new Error('Sin anuncios BUY activos (ver log)');
+  }
+  // Buscar anuncio BUY USDT/VES activo — varios nombres de campo posibles
+  var ad = ads.find(function(a) {
+    var isBuy    = a.tradeType === 'BUY';
+    var isUsdt   = a.asset === 'USDT' || a.cryptoCurrency === 'USDT';
+    var isVes    = a.fiatUnit === 'VES' || a.fiatCurrency === 'VES' || a.fiat === 'VES';
+    var isLive   = a.advStatus === 'LIVE' || a.status === 'LIVE' || a.advStatus === 'ONLINE' || a.adStatus === 1;
+    return isBuy && isUsdt && isVes && isLive;
+  }) || ads[0]; // fallback: primer anuncio disponible
   return ad;
 }
 
