@@ -264,6 +264,49 @@ input[type=number]:focus,input[type=password]:focus,input[type=text]:focus{outli
       </div>
     </div>
 
+    <!-- Auto-Repricing Bot -->
+    <div class="panel" id="bot-panel">
+      <div class="ptitle">🤖 Auto-Repricing</div>
+
+      <!-- Estado -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <button class="btn" id="bot-toggle" onclick="botToggle()" style="flex:1;font-weight:700;font-size:13px">▶ Iniciar Bot</button>
+        <span id="bot-status" style="font-size:11px;color:#555">Detenido</span>
+      </div>
+
+      <!-- Info en vivo -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px" id="bot-live" style="display:none">
+        <div style="background:#0f0f0f;border-radius:6px;padding:6px 10px">
+          <div style="font-size:9px;color:#555;text-transform:uppercase">Precio actual</div>
+          <div id="bot-cur-price" style="font-size:15px;color:#F0B90B;font-weight:700">—</div>
+        </div>
+        <div style="background:#0f0f0f;border-radius:6px;padding:6px 10px">
+          <div style="font-size:9px;color:#555;text-transform:uppercase">Techo (base+0.3%)</div>
+          <div id="bot-ceiling" style="font-size:15px;color:#E24B4A;font-weight:700">—</div>
+        </div>
+      </div>
+
+      <!-- Config bot -->
+      <div class="cfg-row"><span>Worker URL</span><input type="text" id="cfg-bot-url" value="https://p2p-bot-worker.efrenalejandro2010.workers.dev" style="width:200px;font-size:10px"></div>
+      <div class="cfg-row"><span>Bot Token</span><input type="password" id="cfg-bot-token" placeholder="mibot2024"></div>
+      <div class="cfg-row"><span>Incremento (Bs)</span><input type="number" id="cfg-bot-inc" value="0.001" min="0.001" step="0.001"></div>
+      <div class="cfg-row"><span>Gap máx. para seguir (Bs)</span><input type="number" id="cfg-bot-gap" value="1.0" min="0.1" step="0.1"></div>
+      <div class="cfg-row"><span>Umbral límites (VES)</span><input type="number" id="cfg-bot-thr" value="10000" min="1000" step="1000"></div>
+      <div class="cfg-row"><span>Techo máx. (% sobre base)</span><input type="number" id="cfg-bot-ceil" value="0.3" min="0.1" max="5" step="0.1"></div>
+      <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+        <button class="btn btn-gold" style="flex:1" onclick="saveBotConfig()">Guardar</button>
+        <span id="bot-cfg-st" style="font-size:10px;color:#555"></span>
+      </div>
+
+      <!-- Log -->
+      <div style="margin-top:10px">
+        <div style="font-size:10px;color:#555;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Log de reprecio</div>
+        <div id="bot-log" style="font-size:10px;color:#888;max-height:120px;overflow-y:auto;background:#0a0a0a;border-radius:6px;padding:6px 8px">
+          <span style="color:#444">Sin actividad</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Telegram -->
     <div class="panel">
       <div class="ptitle">✈ Telegram</div>
@@ -738,6 +781,237 @@ function testNotif() {
   push('Test', 'Notificaciones funcionando'); toast('Test enviado');
 }
 
+// ── Auto-Repricing Bot ────────────────────────────────
+var BOT = {
+  running: false,
+  timer: null,
+  adNumber: null,
+  myNick: null,
+  basePrice: null,
+  ceiling: null,
+  currentPrice: null,
+  myMinLimit: null,
+  lastReprice: 0,
+  cycles: 0
+};
+
+var BOT_CFG = {
+  url: 'https://p2p-bot-worker.efrenalejandro2010.workers.dev',
+  token: '',
+  increment: 0.001,
+  maxGap: 1.0,
+  limitThreshold: 10000,
+  ceilPct: 0.3
+};
+
+function saveBotConfig() {
+  BOT_CFG.url            = document.getElementById('cfg-bot-url').value.trim();
+  BOT_CFG.token          = document.getElementById('cfg-bot-token').value.trim();
+  BOT_CFG.increment      = parseFloat(document.getElementById('cfg-bot-inc').value)  || 0.001;
+  BOT_CFG.maxGap         = parseFloat(document.getElementById('cfg-bot-gap').value)  || 1.0;
+  BOT_CFG.limitThreshold = parseFloat(document.getElementById('cfg-bot-thr').value)  || 10000;
+  BOT_CFG.ceilPct        = parseFloat(document.getElementById('cfg-bot-ceil').value) || 0.3;
+  localStorage.setItem('p2p_bot_cfg', JSON.stringify(BOT_CFG));
+  var st = document.getElementById('bot-cfg-st');
+  st.textContent = '✓ Guardado'; st.style.color = '#1D9E75';
+}
+
+function loadBotConfig() {
+  try {
+    var s = localStorage.getItem('p2p_bot_cfg');
+    if (!s) return;
+    Object.assign(BOT_CFG, JSON.parse(s));
+    document.getElementById('cfg-bot-url').value   = BOT_CFG.url;
+    document.getElementById('cfg-bot-token').value = BOT_CFG.token;
+    document.getElementById('cfg-bot-inc').value   = BOT_CFG.increment;
+    document.getElementById('cfg-bot-gap').value   = BOT_CFG.maxGap;
+    document.getElementById('cfg-bot-thr').value   = BOT_CFG.limitThreshold;
+    document.getElementById('cfg-bot-ceil').value  = BOT_CFG.ceilPct;
+  } catch(e) {}
+}
+
+async function botCallWorker(path, body) {
+  var r = await fetch(BOT_CFG.url + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bot-Token': BOT_CFG.token },
+    body: JSON.stringify(body || {})
+  });
+  if (!r.ok) throw new Error('Worker ' + r.status);
+  return r.json();
+}
+
+async function botGetMyAd() {
+  var data = await botCallWorker('/my-ads');
+  if (!data.data || !data.data.length) throw new Error('Sin anuncios BUY activos');
+  // Buscar el primer anuncio BUY de USDT/VES activo
+  var ad = data.data.find(function(a) {
+    return a.asset === 'USDT' && a.fiatUnit === 'VES' && a.tradeType === 'BUY' && a.advStatus === 'LIVE';
+  }) || data.data[0];
+  return ad;
+}
+
+async function botUpdatePrice(adNumber, price) {
+  var data = await botCallWorker('/update-ad', { adNumber: adNumber, price: price.toFixed(3) });
+  if (data.code && data.code !== '000000') throw new Error(data.message || 'Error Binance');
+  return true;
+}
+
+function botLog(msg, color) {
+  var el = document.getElementById('bot-log');
+  var ts = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  var line = document.createElement('div');
+  line.style.color = color || '#aaa';
+  line.style.borderBottom = '1px solid #111';
+  line.style.paddingBottom = '2px';
+  line.style.marginBottom = '2px';
+  line.textContent = ts + '  ' + msg;
+  if (el.firstChild && el.firstChild.textContent === 'Sin actividad') el.innerHTML = '';
+  el.insertBefore(line, el.firstChild);
+  // Máximo 30 líneas
+  while (el.children.length > 30) el.removeChild(el.lastChild);
+}
+
+function botSetStatus(msg, color) {
+  var el = document.getElementById('bot-status');
+  el.textContent = msg; el.style.color = color || '#888';
+}
+
+async function botCycle() {
+  if (!BOT.running) return;
+  BOT.cycles++;
+
+  try {
+    botSetStatus('Consultando anuncio...', '#F0B90B');
+
+    // 1. Mi anuncio actual
+    var ad = await botGetMyAd();
+    BOT.adNumber     = ad.adNumber || ad.advNo;
+    BOT.myNick       = ad.nickName || '';
+    BOT.currentPrice = parseFloat(ad.price);
+    BOT.myMinLimit   = parseFloat(ad.minSingleTransAmount);
+
+    // Fijar base y techo al primer ciclo
+    if (!BOT.basePrice) {
+      BOT.basePrice = BOT.currentPrice;
+      BOT.ceiling   = BOT.basePrice * (1 + BOT_CFG.ceilPct / 100);
+      document.getElementById('bot-ceiling').textContent = BOT.ceiling.toFixed(3) + ' Bs';
+    }
+    document.getElementById('bot-cur-price').textContent = BOT.currentPrice.toFixed(3) + ' Bs';
+
+    // 2. Mercado público (mismos filtros del monitor)
+    botSetStatus('Analizando mercado...', '#F0B90B');
+    var market = await fetchTier(BOT.myMinLimit);
+
+    // 3. Competidores: BANK, distinto nick, límite mínimo ≤ mío + umbral
+    var competitors = market.filter(function(a) {
+      return a.merchant !== BOT.myNick &&
+             a.payTypes.indexOf('BANK') !== -1 &&
+             a.minVES <= (BOT.myMinLimit + BOT_CFG.limitThreshold);
+    });
+
+    var above = competitors.filter(function(a) { return a.price > BOT.currentPrice; });
+    var below = competitors.filter(function(a) { return a.price < BOT.currentPrice; });
+
+    var targetPrice = null;
+    var reason = '';
+
+    if (above.length > 0) {
+      // Competidores dentro del gap máximo
+      var inGap = above.filter(function(a) {
+        return (a.price - BOT.currentPrice) <= BOT_CFG.maxGap;
+      });
+      if (inGap.length > 0) {
+        inGap.sort(function(a, b) { return b.price - a.price; });
+        targetPrice = inGap[0].price + BOT_CFG.increment;
+        reason = '↑ ' + inGap[0].merchant + ' @ ' + inGap[0].price.toFixed(3);
+      } else {
+        botSetStatus('En espera (gap > ' + BOT_CFG.maxGap + ' Bs)', '#555');
+        return;
+      }
+    } else if (below.length > 0) {
+      // Soy #1 — bajar al mínimo necesario
+      below.sort(function(a, b) { return b.price - a.price; });
+      var best = below[0];
+      var proposed = best.price + BOT_CFG.increment;
+      if (proposed < BOT.currentPrice - BOT_CFG.increment) {
+        targetPrice = proposed;
+        reason = '↓ ahorro vs ' + best.merchant + ' @ ' + best.price.toFixed(3);
+      }
+    }
+
+    if (targetPrice === null) {
+      botSetStatus('✓ Posición óptima', '#1D9E75');
+      return;
+    }
+
+    // Aplicar techo
+    if (targetPrice > BOT.ceiling) {
+      targetPrice = BOT.ceiling;
+      reason += ' [techo]';
+    }
+
+    // Cooldown (60 s entre reprecio)
+    var now = Date.now();
+    if (now - BOT.lastReprice < 60000) {
+      botSetStatus('Cooldown...', '#555');
+      return;
+    }
+
+    // Solo actuar si hay cambio real
+    if (Math.abs(targetPrice - BOT.currentPrice) < 0.001) {
+      botSetStatus('✓ Posición óptima', '#1D9E75');
+      return;
+    }
+
+    // 4. Actualizar precio
+    botSetStatus('Actualizando precio...', '#F0B90B');
+    await botUpdatePrice(BOT.adNumber, targetPrice);
+    BOT.lastReprice = now;
+
+    var arrow = targetPrice > BOT.currentPrice ? '↑' : '↓';
+    var msg = arrow + ' ' + BOT.currentPrice.toFixed(3) + ' → ' + targetPrice.toFixed(3) + ' Bs  |  ' + reason;
+    botLog(msg, targetPrice > BOT.currentPrice ? '#1D9E75' : '#5dade2');
+    botSetStatus('✓ Repriciado', '#1D9E75');
+
+    // Telegram
+    sendTelegram('🤖 <b>Auto-Repricing</b>\n' + msg);
+
+  } catch(e) {
+    botSetStatus('Error: ' + e.message, '#E24B4A');
+    botLog('✗ ' + e.message, '#E24B4A');
+  }
+}
+
+function botToggle() {
+  if (BOT.running) {
+    BOT.running = false;
+    clearInterval(BOT.timer);
+    BOT.timer = null;
+    BOT.basePrice = null;
+    BOT.ceiling = null;
+    document.getElementById('bot-toggle').textContent = '▶ Iniciar Bot';
+    document.getElementById('bot-toggle').style.background = '';
+    document.getElementById('bot-live').style.display = 'none';
+    document.getElementById('bot-cur-price').textContent = '—';
+    document.getElementById('bot-ceiling').textContent = '—';
+    botSetStatus('Detenido', '#555');
+    botLog('— Bot detenido —', '#555');
+  } else {
+    saveBotConfig();
+    if (!BOT_CFG.token) { toast('Ingresa el Bot Token primero'); return; }
+    BOT.running = true;
+    BOT.lastReprice = 0;
+    BOT.basePrice = null;
+    document.getElementById('bot-toggle').textContent = '⏹ Detener Bot';
+    document.getElementById('bot-toggle').style.background = '#E24B4A';
+    document.getElementById('bot-live').style.display = 'grid';
+    botSetStatus('Iniciando...', '#F0B90B');
+    botLog('— Bot iniciado —', '#F0B90B');
+    botCycle();
+    BOT.timer = setInterval(botCycle, 60000);
+  }
+}
+
 // ── Telegram ──────────────────────────────────────────
 var TG = { token: '', chatId: '' };
 
@@ -837,7 +1111,7 @@ function loadChartJS(cb) {
   s.onload = cb; document.head.appendChild(s);
 }
 
-loadChartJS(function() { loadConfig(); loadTgConfig(); updNotifSt(); renderAlerts(); });
+loadChartJS(function() { loadConfig(); loadTgConfig(); loadBotConfig(); updNotifSt(); renderAlerts(); });
 </script>
 </body>
 </html>
