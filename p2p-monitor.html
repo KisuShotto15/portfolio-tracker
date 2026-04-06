@@ -878,6 +878,9 @@ async function botGetMyAd() {
     });
     if (!byId) throw new Error('Ad ' + BOT_CFG.adNo + ' no encontrado en la lista');
     var isLiveById = byId.advStatus === 'LIVE' || byId.status === 'LIVE' || byId.advStatus === 'ONLINE' || byId.adStatus === 1;
+    if (!isLiveById) {
+      botLog('Status raw: advStatus=' + byId.advStatus + ' status=' + byId.status + ' adStatus=' + byId.adStatus, '#888');
+    }
     return isLiveById ? byId : null; // null = pausado
   }
   // Auto-detección: primer anuncio BUY USDT/VES activo
