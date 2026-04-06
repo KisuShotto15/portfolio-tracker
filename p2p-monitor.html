@@ -410,7 +410,7 @@ function mapAds(raw) {
   }).filter(function(a) {
     // Solo comerciantes con insignia (Bronze/Silver/Gold/Block/Ordinary/PRO)
     // badges: null = sin insignia → excluir
-    return a.badges && a.badges.length > 0 && a.payTypes.indexOf('BANK') !== -1;
+    return a.badges && a.badges.length > 0 && (a.payTypes || []).indexOf('BANK') !== -1;
   }).sort(function(a, b) { return b.price - a.price; });
 }
 
@@ -917,7 +917,7 @@ async function botCycle() {
     // 3. Competidores: BANK, distinto nick, límite mínimo ≤ mío + umbral
     var competitors = market.filter(function(a) {
       return a.merchant !== BOT.myNick &&
-             a.payTypes.indexOf('BANK') !== -1 &&
+             (a.payTypes || []).indexOf('BANK') !== -1 &&
              a.minVES <= (BOT.myMinLimit + BOT_CFG.limitThreshold);
     });
 
