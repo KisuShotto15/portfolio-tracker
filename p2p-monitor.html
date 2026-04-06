@@ -980,12 +980,7 @@ async function botCycle() {
       reason += ' [techo]';
     }
 
-    // Cooldown (60 s entre reprecio)
     var now = Date.now();
-    if (now - BOT.lastReprice < 60000) {
-      botSetStatus('Cooldown...', '#555');
-      return;
-    }
 
     // Solo actuar si hay cambio real
     if (Math.abs(targetPrice - BOT.currentPrice) < 0.001) {
@@ -1038,7 +1033,7 @@ function botToggle() {
     botSetStatus('Iniciando...', '#F0B90B');
     botLog('— Bot iniciado —', '#F0B90B');
     botCycle();
-    BOT.timer = setInterval(botCycle, 60000);
+    BOT.timer = setInterval(botCycle, 30000);
   }
 }
 
