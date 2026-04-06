@@ -863,7 +863,7 @@ async function botGetMyAd() {
 }
 
 async function botUpdatePrice(adNumber, price) {
-  var data = await botCallWorker('/update-ad', { adNumber: adNumber, price: price.toFixed(3) });
+  var data = await botCallWorker('/update-ad', { advNo: adNumber, price: parseFloat(price.toFixed(3)) });
   if (data.code && data.code !== '000000') throw new Error(data.message || 'Error Binance');
   return true;
 }
