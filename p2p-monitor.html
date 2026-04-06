@@ -880,9 +880,13 @@ async function botGetMyAd() {
     var isLiveById = byId.advStatus === 'LIVE' || byId.advStatus === 'ONLINE' || byId.advStatus === 1
                   || byId.status === 'LIVE' || byId.adStatus === 1;
     if (!isLiveById) return null; // pausado manualmente
-    // Detectar sin fondos: surplusAmount o tradableQuantity = 0
-    var balance = parseFloat(byId.surplusAmount || byId.tradableQuantity || byId.remainQuantity || 1);
-    if (balance <= 0) { byId.__noFunds = true; }
+    // Detectar anuncio oculto: saldo_USDT × precio < límite_mínimo_VES
+    var surplusUsdt  = parseFloat(byId.surplusAmount || byId.tradableQuantity || byId.remainQuantity || 0);
+    var minTransVes  = parseFloat(byId.minSingleTransAmount || 0);
+    var adPrice      = parseFloat(byId.price || 0);
+    if (surplusUsdt > 0 && adPrice > 0 && minTransVes > 0) {
+      if (surplusUsdt * adPrice < minTransVes) byId.__noFunds = true;
+    }
     return byId;
   }
   // Auto-detección: primer anuncio BUY USDT/VES activo
