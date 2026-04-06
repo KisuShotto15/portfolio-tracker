@@ -876,8 +876,8 @@ async function botGetMyAd() {
     var isVes    = a.fiatUnit === 'VES' || a.fiatCurrency === 'VES' || a.fiat === 'VES';
     var isLive   = a.advStatus === 'LIVE' || a.status === 'LIVE' || a.advStatus === 'ONLINE' || a.adStatus === 1;
     return isBuy && isUsdt && isVes && isLive;
-  }) || ads[0]; // fallback: primer anuncio disponible
-  return ad;
+  }) || null;
+  return ad; // null si está pausado
 }
 
 async function botUpdatePrice(adNumber, price) {
@@ -915,6 +915,10 @@ async function botCycle() {
 
     // 1. Mi anuncio actual
     var ad = await botGetMyAd();
+    if (!ad) {
+      botSetStatus('⏸ Anuncio pausado — esperando...', '#555');
+      return; // ciclo sin acción, bot sigue corriendo
+    }
     BOT.adNumber     = ad.adNumber || ad.advNo;
     BOT.myNick       = ad.nickName || '';
     BOT.currentPrice = parseFloat(ad.price);
