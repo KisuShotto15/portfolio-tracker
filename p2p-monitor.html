@@ -877,10 +877,8 @@ async function botGetMyAd() {
       return String(a.adNumber || a.advNo) === BOT_CFG.adNo;
     });
     if (!byId) throw new Error('Ad ' + BOT_CFG.adNo + ' no encontrado en la lista');
-    var isLiveById = byId.advStatus === 'LIVE' || byId.status === 'LIVE' || byId.advStatus === 'ONLINE' || byId.adStatus === 1;
-    if (!isLiveById) {
-      botLog('Status raw: advStatus=' + byId.advStatus + ' status=' + byId.status + ' adStatus=' + byId.adStatus, '#888');
-    }
+    var isLiveById = byId.advStatus === 'LIVE' || byId.advStatus === 'ONLINE' || byId.advStatus === 1
+                  || byId.status === 'LIVE' || byId.adStatus === 1;
     return isLiveById ? byId : null; // null = pausado
   }
   // Auto-detección: primer anuncio BUY USDT/VES activo
@@ -888,7 +886,8 @@ async function botGetMyAd() {
     var isBuy  = a.tradeType === 'BUY';
     var isUsdt = a.asset === 'USDT' || a.cryptoCurrency === 'USDT';
     var isVes  = a.fiatUnit === 'VES' || a.fiatCurrency === 'VES' || a.fiat === 'VES';
-    var isLive = a.advStatus === 'LIVE' || a.status === 'LIVE' || a.advStatus === 'ONLINE' || a.adStatus === 1;
+    var isLive = a.advStatus === 'LIVE' || a.advStatus === 'ONLINE' || a.advStatus === 1
+              || a.status === 'LIVE' || a.adStatus === 1;
     return isBuy && isUsdt && isVes && isLive;
   }) || null;
 }
