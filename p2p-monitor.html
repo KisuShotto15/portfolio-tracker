@@ -879,7 +879,11 @@ async function botGetMyAd() {
     if (!byId) throw new Error('Ad ' + BOT_CFG.adNo + ' no encontrado en la lista');
     var isLiveById = byId.advStatus === 'LIVE' || byId.advStatus === 'ONLINE' || byId.advStatus === 1
                   || byId.status === 'LIVE' || byId.adStatus === 1;
-    return isLiveById ? byId : null; // null = pausado
+    if (!isLiveById) return null; // pausado manualmente
+    // Detectar sin fondos: surplusAmount o tradableQuantity = 0
+    var balance = parseFloat(byId.surplusAmount || byId.tradableQuantity || byId.remainQuantity || 1);
+    if (balance <= 0) { byId.__noFunds = true; }
+    return byId;
   }
   // Auto-detección: primer anuncio BUY USDT/VES activo
   return ads.find(function(a) {
@@ -894,7 +898,10 @@ async function botGetMyAd() {
 
 async function botUpdatePrice(adNumber, price) {
   var data = await botCallWorker('/update-ad', { advNo: adNumber, price: parseFloat(price.toFixed(3)) });
-  if (data.code && data.code !== '000000') throw new Error(data.message || 'Error Binance');
+  if (data.code && data.code !== '000000') {
+    botLog('Binance [' + data.code + ']: ' + (data.message || '?'), '#E24B4A');
+    throw new Error(data.message || 'Error Binance código ' + data.code);
+  }
   return true;
 }
 
@@ -929,7 +936,11 @@ async function botCycle() {
     var ad = await botGetMyAd();
     if (!ad) {
       botSetStatus('⏸ Anuncio pausado — esperando...', '#555');
-      return; // ciclo sin acción, bot sigue corriendo
+      return;
+    }
+    if (ad.__noFunds) {
+      botSetStatus('💸 Sin fondos — anuncio oculto', '#E24B4A');
+      return; // no intentar reprice
     }
     BOT.adNumber     = ad.adNumber || ad.advNo;
     BOT.myNick       = ad.nickName || '';
