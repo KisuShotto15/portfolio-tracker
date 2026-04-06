@@ -281,7 +281,7 @@ input[type=number]:focus,input[type=password]:focus,input[type=text]:focus{outli
           <div id="bot-cur-price" style="font-size:15px;color:#F0B90B;font-weight:700">—</div>
         </div>
         <div style="background:#0f0f0f;border-radius:6px;padding:6px 10px">
-          <div style="font-size:9px;color:#555;text-transform:uppercase">Techo (base+0.3%)</div>
+          <div style="font-size:9px;color:#555;text-transform:uppercase">Techo (venta−spread)</div>
           <div id="bot-ceiling" style="font-size:15px;color:#E24B4A;font-weight:700">—</div>
         </div>
       </div>
@@ -292,7 +292,9 @@ input[type=number]:focus,input[type=password]:focus,input[type=text]:focus{outli
       <div class="cfg-row"><span>Incremento (Bs)</span><input type="number" id="cfg-bot-inc" value="0.001" min="0.001" step="0.001"></div>
       <div class="cfg-row"><span>Gap máx. para seguir (Bs)</span><input type="number" id="cfg-bot-gap" value="1.0" min="0.1" step="0.1"></div>
       <div class="cfg-row"><span>Umbral límites (VES)</span><input type="number" id="cfg-bot-thr" value="10000" min="1000" step="1000"></div>
-      <div class="cfg-row"><span>Techo máx. (% sobre base)</span><input type="number" id="cfg-bot-ceil" value="0.3" min="0.1" max="5" step="0.1"></div>
+      <div class="cfg-row"><span>Precio de venta (Bs)</span><input type="number" id="cfg-bot-sell" placeholder="ej. 640" min="1" step="0.001" oninput="botUpdateCeiling()"></div>
+      <div class="cfg-row"><span>Spread mínimo (%)</span><input type="number" id="cfg-bot-spread" value="0.5" min="0.1" max="10" step="0.1" oninput="botUpdateCeiling()"></div>
+      <div class="cfg-row"><span style="color:#777;font-size:10px">Techo calculado</span><span id="cfg-bot-ceil-display" style="color:#E24B4A;font-weight:700;font-size:12px">—</span></div>
       <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
         <button class="btn btn-gold" style="flex:1" onclick="saveBotConfig()">Guardar</button>
         <span id="bot-cfg-st" style="font-size:10px;color:#555"></span>
@@ -800,7 +802,8 @@ var BOT_CFG = {
   increment: 0.001,
   maxGap: 1.0,
   limitThreshold: 10000,
-  ceilPct: 0.3
+  sellPrice: 0,
+  minSpread: 0.5
 };
 
 function saveBotConfig() {
@@ -808,9 +811,11 @@ function saveBotConfig() {
   BOT_CFG.token          = document.getElementById('cfg-bot-token').value.trim();
   BOT_CFG.increment      = parseFloat(document.getElementById('cfg-bot-inc').value)  || 0.001;
   BOT_CFG.maxGap         = parseFloat(document.getElementById('cfg-bot-gap').value)  || 1.0;
-  BOT_CFG.limitThreshold = parseFloat(document.getElementById('cfg-bot-thr').value)  || 10000;
-  BOT_CFG.ceilPct        = parseFloat(document.getElementById('cfg-bot-ceil').value) || 0.3;
+  BOT_CFG.limitThreshold = parseFloat(document.getElementById('cfg-bot-thr').value)    || 10000;
+  BOT_CFG.sellPrice      = parseFloat(document.getElementById('cfg-bot-sell').value)   || 0;
+  BOT_CFG.minSpread      = parseFloat(document.getElementById('cfg-bot-spread').value) || 0.5;
   localStorage.setItem('p2p_bot_cfg', JSON.stringify(BOT_CFG));
+  botUpdateCeiling();
   var st = document.getElementById('bot-cfg-st');
   st.textContent = '✓ Guardado'; st.style.color = '#1D9E75';
 }
@@ -824,9 +829,23 @@ function loadBotConfig() {
     document.getElementById('cfg-bot-token').value = BOT_CFG.token;
     document.getElementById('cfg-bot-inc').value   = BOT_CFG.increment;
     document.getElementById('cfg-bot-gap').value   = BOT_CFG.maxGap;
-    document.getElementById('cfg-bot-thr').value   = BOT_CFG.limitThreshold;
-    document.getElementById('cfg-bot-ceil').value  = BOT_CFG.ceilPct;
+    document.getElementById('cfg-bot-thr').value    = BOT_CFG.limitThreshold;
+    document.getElementById('cfg-bot-sell').value   = BOT_CFG.sellPrice || '';
+    document.getElementById('cfg-bot-spread').value = BOT_CFG.minSpread;
+    botUpdateCeiling();
   } catch(e) {}
+}
+
+function botUpdateCeiling() {
+  var sell   = parseFloat(document.getElementById('cfg-bot-sell').value)   || 0;
+  var spread = parseFloat(document.getElementById('cfg-bot-spread').value) || 0.5;
+  var disp   = document.getElementById('cfg-bot-ceil-display');
+  if (sell > 0) {
+    var ceiling = sell * (1 - spread / 100);
+    disp.textContent = ceiling.toFixed(3) + ' Bs';
+  } else {
+    disp.textContent = '— (ingresa precio de venta)';
+  }
 }
 
 async function botCallWorker(path, body) {
@@ -901,12 +920,12 @@ async function botCycle() {
     BOT.currentPrice = parseFloat(ad.price);
     BOT.myMinLimit   = parseFloat(ad.minSingleTransAmount);
 
-    // Fijar base y techo al primer ciclo
-    if (!BOT.basePrice) {
-      BOT.basePrice = BOT.currentPrice;
-      BOT.ceiling   = BOT.basePrice * (1 + BOT_CFG.ceilPct / 100);
-      document.getElementById('bot-ceiling').textContent = BOT.ceiling.toFixed(3) + ' Bs';
+    // Calcular techo desde precio de venta configurado
+    if (!BOT_CFG.sellPrice) {
+      throw new Error('Configura el Precio de venta antes de iniciar');
     }
+    BOT.ceiling = BOT_CFG.sellPrice * (1 - BOT_CFG.minSpread / 100);
+    document.getElementById('bot-ceiling').textContent = BOT.ceiling.toFixed(3) + ' Bs';
     document.getElementById('bot-cur-price').textContent = BOT.currentPrice.toFixed(3) + ' Bs';
 
     // 2. Mercado público (mismos filtros del monitor)
@@ -1010,9 +1029,9 @@ function botToggle() {
   } else {
     saveBotConfig();
     if (!BOT_CFG.token) { toast('Ingresa el Bot Token primero'); return; }
+    if (!BOT_CFG.sellPrice) { toast('Ingresa el Precio de venta primero'); return; }
     BOT.running = true;
     BOT.lastReprice = 0;
-    BOT.basePrice = null;
     document.getElementById('bot-toggle').textContent = '⏹ Detener Bot';
     document.getElementById('bot-toggle').style.background = '#E24B4A';
     document.getElementById('bot-live').style.display = 'grid';
