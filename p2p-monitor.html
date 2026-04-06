@@ -289,6 +289,7 @@ input[type=number]:focus,input[type=password]:focus,input[type=text]:focus{outli
       <!-- Config bot -->
       <div class="cfg-row"><span>Worker URL</span><input type="text" id="cfg-bot-url" value="https://p2p-bot-worker.efrenalejandro2010.workers.dev" style="width:200px;font-size:10px"></div>
       <div class="cfg-row"><span>Bot Token</span><input type="password" id="cfg-bot-token" placeholder="mibot2024"></div>
+      <div class="cfg-row"><span>Ad Number</span><input type="text" id="cfg-bot-adno" placeholder="12855611733778165760" style="font-size:10px"></div>
       <div class="cfg-row"><span>Incremento (Bs)</span><input type="number" id="cfg-bot-inc" value="0.001" min="0.001" step="0.001"></div>
       <div class="cfg-row"><span>Gap máx. para seguir (Bs)</span><input type="number" id="cfg-bot-gap" value="1.0" min="0.1" step="0.1"></div>
       <div class="cfg-row"><span>Umbral límites (VES)</span><input type="number" id="cfg-bot-thr" value="10000" min="1000" step="1000"></div>
@@ -799,6 +800,7 @@ var BOT = {
 var BOT_CFG = {
   url: 'https://p2p-bot-worker.efrenalejandro2010.workers.dev',
   token: '',
+  adNo: '',
   increment: 0.001,
   maxGap: 1.0,
   limitThreshold: 10000,
@@ -809,6 +811,7 @@ var BOT_CFG = {
 function saveBotConfig() {
   BOT_CFG.url            = document.getElementById('cfg-bot-url').value.trim();
   BOT_CFG.token          = document.getElementById('cfg-bot-token').value.trim();
+  BOT_CFG.adNo           = document.getElementById('cfg-bot-adno').value.trim();
   BOT_CFG.increment      = parseFloat(document.getElementById('cfg-bot-inc').value)  || 0.001;
   BOT_CFG.maxGap         = parseFloat(document.getElementById('cfg-bot-gap').value)  || 1.0;
   BOT_CFG.limitThreshold = parseFloat(document.getElementById('cfg-bot-thr').value)    || 10000;
@@ -827,6 +830,7 @@ function loadBotConfig() {
     Object.assign(BOT_CFG, JSON.parse(s));
     document.getElementById('cfg-bot-url').value   = BOT_CFG.url;
     document.getElementById('cfg-bot-token').value = BOT_CFG.token;
+    document.getElementById('cfg-bot-adno').value  = BOT_CFG.adNo || '';
     document.getElementById('cfg-bot-inc').value   = BOT_CFG.increment;
     document.getElementById('cfg-bot-gap').value   = BOT_CFG.maxGap;
     document.getElementById('cfg-bot-thr').value    = BOT_CFG.limitThreshold;
@@ -860,24 +864,30 @@ async function botCallWorker(path, body) {
 
 async function botGetMyAd() {
   var data = await botCallWorker('/my-ads');
-  // Binance puede envolver en data.data (lista) o data (objeto con .data)
   var ads = Array.isArray(data.data) ? data.data
           : Array.isArray(data.data && data.data.data) ? data.data.data
           : null;
   if (!ads || !ads.length) {
-    // Log la respuesta cruda para diagnóstico
     botLog('Raw API: ' + JSON.stringify(data).substring(0, 200), '#888');
-    throw new Error('Sin anuncios BUY activos (ver log)');
+    throw new Error('Sin anuncios (ver log)');
   }
-  // Buscar anuncio BUY USDT/VES activo — varios nombres de campo posibles
-  var ad = ads.find(function(a) {
-    var isBuy    = a.tradeType === 'BUY';
-    var isUsdt   = a.asset === 'USDT' || a.cryptoCurrency === 'USDT';
-    var isVes    = a.fiatUnit === 'VES' || a.fiatCurrency === 'VES' || a.fiat === 'VES';
-    var isLive   = a.advStatus === 'LIVE' || a.status === 'LIVE' || a.advStatus === 'ONLINE' || a.adStatus === 1;
+  // Si hay Ad Number configurado, buscar ese exacto
+  if (BOT_CFG.adNo) {
+    var byId = ads.find(function(a) {
+      return String(a.adNumber || a.advNo) === BOT_CFG.adNo;
+    });
+    if (!byId) throw new Error('Ad ' + BOT_CFG.adNo + ' no encontrado en la lista');
+    var isLiveById = byId.advStatus === 'LIVE' || byId.status === 'LIVE' || byId.advStatus === 'ONLINE' || byId.adStatus === 1;
+    return isLiveById ? byId : null; // null = pausado
+  }
+  // Auto-detección: primer anuncio BUY USDT/VES activo
+  return ads.find(function(a) {
+    var isBuy  = a.tradeType === 'BUY';
+    var isUsdt = a.asset === 'USDT' || a.cryptoCurrency === 'USDT';
+    var isVes  = a.fiatUnit === 'VES' || a.fiatCurrency === 'VES' || a.fiat === 'VES';
+    var isLive = a.advStatus === 'LIVE' || a.status === 'LIVE' || a.advStatus === 'ONLINE' || a.adStatus === 1;
     return isBuy && isUsdt && isVes && isLive;
   }) || null;
-  return ad; // null si está pausado
 }
 
 async function botUpdatePrice(adNumber, price) {
