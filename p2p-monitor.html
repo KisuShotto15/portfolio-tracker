@@ -374,7 +374,6 @@ async function fetchTier(transAmount) {
       fiat: 'VES',
       merchantCheck: false,
       page: page,
-      publisherType: 'merchant',
       rows: 20,
       tradeType: 'SELL',
       transAmount: transAmount
@@ -912,7 +911,7 @@ async function botCycle() {
 
     // 2. Mercado público (mismos filtros del monitor)
     botSetStatus('Analizando mercado...', '#F0B90B');
-    var market = await fetchTier(BOT.myMinLimit);
+    var market = mapAds(await fetchTier(BOT.myMinLimit));
 
     // 3. Competidores: BANK, distinto nick, límite mínimo ≤ mío + umbral
     var competitors = market.filter(function(a) {
