@@ -51,27 +51,51 @@
 <main class="main">
 
   <div id="page-summary" class="page active">
-    <div class="frow" style="margin-bottom:1rem">
-      <select id="sum-month" onchange="renderSummary()"></select>
+    <!-- Header row: title + month filter -->
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.07em">Dashboard</span>
+      <select id="sum-month" onchange="renderSummary()" style="padding:5px 14px;border:0.5px solid rgba(255,255,255,0.1);border-radius:20px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px;cursor:pointer"></select>
     </div>
+    <!-- KPI Strip -->
+    <div id="kpi-strip"></div>
+    <!-- Monthly breakdown cards -->
     <div id="sum-cards"></div>
-    <div class="cw">
-      <div class="cleg" style="display:flex;align-items:center;justify-content:space-between">
-        <span>Equity curve</span>
-        <button class="btn btns" style="padding:3px 10px;font-size:12px" onclick="recordSnapshot()">+ Record snapshot</button>
+    <!-- Snapshot P&L + Goal -->
+    <div class="dash-row-2" style="margin-bottom:0">
+      <div class="cw" id="snap-pnl-wrap"></div>
+      <div class="cw" id="goal-wrap"></div>
+    </div>
+    <!-- Projection + Equity side by side -->
+    <div class="dash-chart-row">
+      <div class="cw">
+        <div id="proj-header"></div>
+        <div style="position:relative;height:180px"><canvas id="chart-projection"></canvas></div>
+        <div id="proj-footer"></div>
       </div>
-      <div id="equity-wrap"></div>
-      <div style="position:relative;height:200px"><canvas id="chart-equity"></canvas></div>
+      <div class="cw">
+        <div class="cleg" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Equity curve</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="btn btns" style="padding:3px 10px;font-size:12px" onclick="recordSnapshot()">+ Record snapshot</button>
+            <div id="equity-hist"></div>
+          </div>
+        </div>
+        <div id="equity-wrap"></div>
+        <div style="position:relative;height:180px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
+      </div>
     </div>
-    <div class="cw">
-      <div class="cleg" id="mc-leg"></div>
-      <div style="position:relative;height:210px"><canvas id="chart-monthly"></canvas></div>
-    </div>
-    <div class="cw">
-      <div class="cleg">Spending by category</div>
-      <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap">
-        <div style="position:relative;height:190px;width:190px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
-        <div id="cat-leg" style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:5px"></div>
+    <!-- Monthly bar + Category donut side by side -->
+    <div class="dash-chart-row">
+      <div class="cw">
+        <div class="cleg" id="mc-leg"></div>
+        <div style="position:relative;height:200px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="cw">
+        <div class="cleg">Spending by category</div>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+          <div style="position:relative;height:180px;width:180px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
+          <div id="cat-leg" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px"></div>
+        </div>
       </div>
     </div>
   </div>
