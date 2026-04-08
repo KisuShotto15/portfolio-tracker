@@ -368,7 +368,8 @@ var COOLDOWN = {};
 var COOLDOWN_MS = 5 * 60000;
 
 // ── API ──────────────────────────────────────────────
-async function fetchTier(transAmount) {
+async function fetchTier(transAmount, maxPages) {
+  maxPages = maxPages || 2;
   async function onePage(page) {
     var body = {
       asset: 'USDT',
@@ -389,7 +390,9 @@ async function fetchTier(transAmount) {
     if (d.error) throw new Error(d.error);
     return d.data || [];
   }
-  var results = await Promise.allSettled([onePage(1), onePage(2)]);
+  var pages = [];
+  for (var i = 1; i <= maxPages; i++) pages.push(i);
+  var results = await Promise.allSettled(pages.map(onePage));
   return results
     .filter(function(r) { return r.status === 'fulfilled'; })
     .flatMap(function(r) { return r.value; });
@@ -421,8 +424,8 @@ async function fetchOnce() {
   document.getElementById('last-update').textContent = 'Cargando...';
   try {
     var results = await Promise.all([
-      fetchTier(CFG.mayAmount),
-      fetchTier(CFG.smallAmount)
+      fetchTier(CFG.mayAmount, 2),
+      fetchTier(CFG.smallAmount, 5)
     ]);
 
     ST.mayoristas = mapAds(results[0]);
