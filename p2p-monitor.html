@@ -368,7 +368,7 @@ var COOLDOWN = {};
 var COOLDOWN_MS = 5 * 60000;
 
 // ── API ──────────────────────────────────────────────
-async function fetchTier(transAmount, clientSideFilter) {
+async function fetchTier(transAmount) {
   async function onePage(page) {
     var body = {
       asset: 'USDT',
@@ -376,10 +376,9 @@ async function fetchTier(transAmount, clientSideFilter) {
       merchantCheck: false,
       page: page,
       rows: 20,
-      tradeType: 'SELL'
+      tradeType: 'SELL',
+      transAmount: transAmount
     };
-    // Solo pasar transAmount server-side si NO filtramos client-side
-    if (!clientSideFilter) body.transAmount = transAmount;
     var r = await fetch(PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -391,16 +390,9 @@ async function fetchTier(transAmount, clientSideFilter) {
     return d.data || [];
   }
   var results = await Promise.allSettled([onePage(1), onePage(2)]);
-  var raw = results
+  return results
     .filter(function(r) { return r.status === 'fulfilled'; })
     .flatMap(function(r) { return r.value; });
-  // Filtro client-side: minVES <= amount configurado
-  if (clientSideFilter) {
-    raw = raw.filter(function(item) {
-      return parseFloat(item.adv.minSingleTransAmount) <= transAmount;
-    });
-  }
-  return raw;
 }
 
 function mapAds(raw) {
@@ -428,10 +420,9 @@ function mapAds(raw) {
 async function fetchOnce() {
   document.getElementById('last-update').textContent = 'Cargando...';
   try {
-    // Mayoristas: filtro server-side. Compra: filtro client-side (API ignora transAmount pequeño)
     var results = await Promise.all([
-      fetchTier(CFG.mayAmount, false),
-      fetchTier(CFG.smallAmount, true)
+      fetchTier(CFG.mayAmount),
+      fetchTier(CFG.smallAmount)
     ]);
 
     ST.mayoristas = mapAds(results[0]);
