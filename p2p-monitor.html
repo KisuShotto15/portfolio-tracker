@@ -368,9 +368,7 @@ var COOLDOWN = {};
 var COOLDOWN_MS = 5 * 60000;
 
 // ── API ──────────────────────────────────────────────
-async function fetchTier(transAmount) {
-  // Llamada exactamente igual al filtro de Binance: transAmount filtra server-side
-  // los anuncios cuyo rango incluye ese monto. Traemos 2 páginas para más cobertura.
+async function fetchTier(transAmount, clientSideFilter) {
   async function onePage(page) {
     var body = {
       asset: 'USDT',
@@ -378,9 +376,10 @@ async function fetchTier(transAmount) {
       merchantCheck: false,
       page: page,
       rows: 20,
-      tradeType: 'SELL',
-      transAmount: transAmount
+      tradeType: 'SELL'
     };
+    // Solo pasar transAmount server-side si NO filtramos client-side
+    if (!clientSideFilter) body.transAmount = transAmount;
     var r = await fetch(PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -392,9 +391,16 @@ async function fetchTier(transAmount) {
     return d.data || [];
   }
   var results = await Promise.allSettled([onePage(1), onePage(2)]);
-  return results
+  var raw = results
     .filter(function(r) { return r.status === 'fulfilled'; })
     .flatMap(function(r) { return r.value; });
+  // Filtro client-side: minVES <= amount configurado
+  if (clientSideFilter) {
+    raw = raw.filter(function(item) {
+      return parseFloat(item.adv.minSingleTransAmount) <= transAmount;
+    });
+  }
+  return raw;
 }
 
 function mapAds(raw) {
@@ -422,10 +428,10 @@ function mapAds(raw) {
 async function fetchOnce() {
   document.getElementById('last-update').textContent = 'Cargando...';
   try {
-    // Dos llamadas en paralelo, una por tramo, con transAmount correcto cada una
+    // Mayoristas: filtro server-side. Compra: filtro client-side (API ignora transAmount pequeño)
     var results = await Promise.all([
-      fetchTier(CFG.mayAmount),
-      fetchTier(CFG.smallAmount)
+      fetchTier(CFG.mayAmount, false),
+      fetchTier(CFG.smallAmount, true)
     ]);
 
     ST.mayoristas = mapAds(results[0]);
