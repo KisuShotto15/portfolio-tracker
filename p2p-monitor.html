@@ -567,7 +567,7 @@ function renderSignals() {
 
   var now = Date.now();
   var ref10 = null;
-  for (var i = 0; i < ST.priceHist.length; i++) {
+  for (var i = ST.priceHist.length - 1; i >= 0; i--) {
     if (now - ST.priceHist[i].ts >= 9 * 60000) { ref10 = ST.priceHist[i].price; break; }
   }
 
@@ -610,7 +610,7 @@ function renderStats() {
   if (bestMay && ST.priceHist.length > 1) {
     var now = Date.now();
     var ref = null;
-    for (var i = 0; i < ST.priceHist.length; i++) {
+    for (var i = ST.priceHist.length - 1; i >= 0; i--) {
       if (now - ST.priceHist[i].ts >= 9 * 60000) { ref = ST.priceHist[i].price; break; }
     }
     if (ref !== null) {
@@ -677,7 +677,7 @@ function checkAlerts() {
   // Sobrecomprado / debilidad
   if (ST.priceHist.length > 1) {
     var ref10 = null;
-    for (var i = 0; i < ST.priceHist.length; i++) {
+    for (var i = ST.priceHist.length - 1; i >= 0; i--) {
       if (now - ST.priceHist[i].ts >= 9 * 60000) { ref10 = ST.priceHist[i].price; break; }
     }
     if (ref10 !== null) {
