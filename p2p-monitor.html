@@ -880,13 +880,9 @@ async function botGetMyAd() {
     var isLiveById = byId.advStatus === 'LIVE' || byId.advStatus === 'ONLINE' || byId.advStatus === 1
                   || byId.status === 'LIVE' || byId.adStatus === 1;
     if (!isLiveById) return null; // pausado manualmente
-    // Detectar anuncio oculto: saldo_USDT × precio < límite_mínimo_VES
-    var surplusUsdt  = parseFloat(byId.surplusAmount || byId.tradableQuantity || byId.remainQuantity || 0);
-    var minTransVes  = parseFloat(byId.minSingleTransAmount || 0);
-    var adPrice      = parseFloat(byId.price || 0);
-    if (surplusUsdt > 0 && adPrice > 0 && minTransVes > 0) {
-      if (surplusUsdt * adPrice < minTransVes) byId.__noFunds = true;
-    }
+    // Detectar fondos insuficientes: menos de 100 USDT no permite editar precio
+    var surplusUsdt = parseFloat(byId.surplusAmount || byId.tradableQuantity || byId.remainQuantity || 0);
+    if (surplusUsdt > 0 && surplusUsdt < 100) byId.__noFunds = true;
     return byId;
   }
   // Auto-detección: primer anuncio BUY USDT/VES activo
@@ -943,7 +939,7 @@ async function botCycle() {
       return;
     }
     if (ad.__noFunds) {
-      botSetStatus('💸 Sin fondos — anuncio oculto', '#E24B4A');
+      botSetStatus('💸 Fondos insuficientes (<100 USDT)', '#E24B4A');
       return; // no intentar reprice
     }
     BOT.adNumber     = ad.adNumber || ad.advNo;
