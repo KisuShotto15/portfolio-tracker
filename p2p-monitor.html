@@ -391,8 +391,10 @@ async function fetchTier(transAmount) {
     if (d.error) throw new Error(d.error);
     return d.data || [];
   }
-  var pages = await Promise.all([onePage(1), onePage(2)]);
-  return pages[0].concat(pages[1]);
+  var results = await Promise.allSettled([onePage(1), onePage(2)]);
+  return results
+    .filter(function(r) { return r.status === 'fulfilled'; })
+    .flatMap(function(r) { return r.value; });
 }
 
 function mapAds(raw) {
