@@ -21,21 +21,23 @@ var AUTOFILL_RULES = [
 
 var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
-var CCOLORS      = {Income:'#1D9E75',Home:'#7F77DD',Groceries:'#1D9E75',Transport:'#378ADD',Health:'#5DCAA5',Business:'#EF9F27',Discretionary:'#378ADD',Support:'#EF9F27',Investments:'#F5A623',Savings:'#5DCAA5',
+var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
-  Services:'#7F77DD','Help others':'#EF9F27',Emergency:'#E24B4A',Zelle:'#a78bfa',Other:'#D85A30'};
+  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Zelle:'#a78bfa',Other:'#FB923C'};
 
 var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
   budgetTotal:600,
-  binanceBalance:null, binanceUpdated:null,
+  binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bybitBalance:null,   bybitUpdated:null,
   okxBalance:null,     okxUpdated:null,
   trezorBalance:null,  trezorUpdated:null,
   walletHoldings:[],   walletHoldingsUpdated:null,
   snapshots:[],
-  manualWalletsUpdatedAt:null, portfolioUpdatedAt:null
+  manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
+  deletedTxIds:[],
+  dashGoal:0, projectionReturn:10
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
@@ -66,17 +68,20 @@ async function pushToCloud(){
         var cd=await cr.json();
         if(cd.data){
           var needRender=false;
-          // transactions: additive merge — never drop a tx added on another device
+          // transactions: additive merge, but respect local deletions (tombstones)
           if(cd.data.transactions){
+            var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cd.data.deletedTxIds||[]));
+            S.deletedTxIds=Array.from(mergedDeleted);
+            S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
             var localIds=new Set(S.transactions.map(function(t){return t.id;}));
-            var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id);});
+            var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id)&&!mergedDeleted.has(t.id);});
             if(missing.length){ S.transactions=S.transactions.concat(missing); needRender=true; }
           }
-          // snapshots: additive merge
-          if(cd.data.snapshots){
-            var localSnapIds=new Set((S.snapshots||[]).map(function(s){return s.id;}));
-            var missingSnaps=cd.data.snapshots.filter(function(s){return !localSnapIds.has(s.id);});
-            if(missingSnaps.length){ S.snapshots=(S.snapshots||[]).concat(missingSnaps); needRender=true; }
+          // snapshots: timestamp-based (local wins if newer, cloud wins if newer)
+          if(cd.data.snapshots&&(cd.data.snapshotsUpdatedAt||0)>(S.snapshotsUpdatedAt||0)){
+            S.snapshots=cd.data.snapshots;
+            S.snapshotsUpdatedAt=cd.data.snapshotsUpdatedAt;
+            needRender=true;
           }
           // manualWallets: cloud wins when equal or newer (>= handles null==null case
           // where stale local state would otherwise overwrite cloud changes)
@@ -188,14 +193,21 @@ async function fetchBinanceBalance(){
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){ return b.asset==='USDT'; }):null;
   S.binanceBalance=parseFloat(((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0):0)).toFixed(2));
-  S.binanceUpdated=new Date().toLocaleTimeString('en-US'); save(); return S.binanceBalance;
+  S.binanceUpdated=new Date().toLocaleTimeString('en-US'); S.binanceFetchedAt=Date.now(); save(); return S.binanceBalance;
 }
 async function testBinance(){
   var st=document.getElementById('bn-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
   try{ await fetchBinanceBalance(); st.textContent='Connected - Funding USDT: $'+S.binanceBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
   catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
 }
-function clearBinance(){ S.binanceBalance=null; S.binanceUpdated=null; save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets(); }
+function clearBinance(){ S.binanceBalance=null; S.binanceUpdated=null; S.binanceFetchedAt=null; save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets(); }
+var BINANCE_AUTO_MS=5*60*60*1000; // 5 hours
+async function autoFetchBinance(){
+  if(S.binanceBalance===null) return; // not connected, skip
+  var age=S.binanceFetchedAt?Date.now()-S.binanceFetchedAt:Infinity;
+  if(age<BINANCE_AUTO_MS) return;
+  try{ await fetchBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
+}
 
 async function fetchBybitBalance(){
   var r=await fetch(PROXY+'/bybit'); if(!r.ok) throw new Error('Bybit '+r.status);
@@ -339,7 +351,7 @@ function addTx(){
   closeTxForm();
 }
 
-function deleteTx(id){ snapshot(); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); save(); renderTx(); renderSummary(); }
+function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); save(); renderTx(); renderSummary(); }
 
 var editingTxId = null;
 function editTx(id){
@@ -459,6 +471,169 @@ function populateSumMonth(){ var sel=document.getElementById('sum-month'); var c
 
 function groupSum(txDebit, cats){ return cats.reduce(function(s,c){ return s+txDebit.filter(function(t){ return t.category===c; }).reduce(function(a,t){ return a+t.amountUSD; },0); },0); }
 
+// ── Dashboard helpers ──────────────────────────────────────────────────────
+var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
+
+function getAvgMonthlyExpenses(){
+  var now=new Date(); var months=[];
+  for(var i=0;i<3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  var totals=months.map(function(m){ return S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0); });
+  var nz=totals.filter(function(v){ return v>0; });
+  return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
+}
+
+function getAvgMonthlyContribution(){
+  var now=new Date(); var months=[];
+  for(var i=0;i<3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  var nets=months.map(function(m){
+    var inc=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    var exp=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    return inc-exp;
+  });
+  var nz=nets.filter(function(v){ return v>0; });
+  return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
+}
+
+function getSnapshotPnL(){
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(snaps.length<2) return [];
+  var results=[];
+  for(var i=1;i<snaps.length;i++){
+    var s1=snaps[i-1],s2=snaps[i];
+    var txBetween=S.transactions.filter(function(t){ return t.date>=s1.date&&t.date<=s2.date&&t.category==='Investments'; });
+    var invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:invOut,invIn:invIn,profit:(s2.total-s1.total)+invOut-invIn });
+  }
+  return results;
+}
+
+// ── Dashboard render sections ──────────────────────────────────────────────
+function renderKPIStrip(month){
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var netWorth=snaps.length>0?snaps[0].total:getTotalBalance();
+  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
+  var income=txM.filter(function(t){ return t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var expenses=txM.filter(function(t){ return t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var cashFlow=income-expenses;
+  var savRate=income>0?Math.round((cashFlow/income)*100):0;
+  var avgExp=getAvgMonthlyExpenses();
+  var emgMo=avgExp>0?(netWorth/avgExp):null;
+  var goalPct=(S.dashGoal>0)?Math.min(100,(netWorth/S.dashGoal)*100):null;
+  function kpi(label,val,sub,color){
+    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+'</div></div>';
+  }
+  var emgColor=emgMo===null?'#888':emgMo>=6?'#1D9E75':emgMo>=3?'#EF9F27':'#E24B4A';
+  var emgVal=emgMo!==null?emgMo.toFixed(1)+' mo':'—';
+  var emgSub=avgExp>0?'÷ '+fmtUSD(avgExp)+'/mo':'no expense data';
+  document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
+    +kpi('Net Worth',fmtUSD(netWorth),snaps.length>0?'as of '+snaps[0].date:'live estimate','#fff')
+    +kpi('Cash Flow',(cashFlow>=0?'+':'')+fmtUSD(cashFlow),month,cashFlow>=0?'#1D9E75':'#E24B4A')
+    +kpi('Savings Rate',savRate+'%','of income',savRate>=20?'#1D9E75':savRate>=10?'#EF9F27':'#E24B4A')
+    +kpi('Emergency Fund',emgVal,emgSub,emgColor)
+    +kpi('Goal Progress',goalPct!==null?goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0')
+    +'</div>';
+}
+
+function renderSnapshotPnL(){
+  var el=document.getElementById('snap-pnl-wrap'); if(!el) return;
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var pnls=getSnapshotPnL();
+  var HIST_ICON='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><polyline points="12 7 12 12 15 14"/></svg>';
+  var simpleHdr='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span></div>';
+  if(!snaps.length){ el.innerHTML=simpleHdr+emptyState('No snapshots yet','Record your first snapshot to begin tracking'); return; }
+  if(snaps.length<2){ el.innerHTML=simpleHdr+'<div style="color:var(--color-text-secondary);font-size:13px">Record a second snapshot to see P&L between periods.</div>'; return; }
+  function makePnlRow(p){
+    var c=p.profit>0?'#1D9E75':p.profit<0?'#E24B4A':'#888';
+    var sign=p.profit>0?'+':'';
+    var adj=p.invOut>0||p.invIn>0?'<div style="font-size:11px;color:#EF9F27">'+(p.invOut>0?'Invested: '+fmtUSD(p.invOut):'')+(p.invIn>0?' · Returned: '+fmtUSD(p.invIn):'')+'</div>':'';
+    return '<div class="pnl-row"><div><div class="pnl-period">'+p.from+' → '+p.to+'</div>'
+      +'<div style="font-size:12px;color:var(--color-text-secondary)">'+fmtUSD(p.snap1)+' → '+fmtUSD(p.snap2)+'</div>'+adj+'</div>'
+      +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div></div>';
+  }
+  var latest=makePnlRow(pnls[pnls.length-1]);
+  var older=pnls.slice(0,-1).reverse().map(makePnlRow).join('');
+  var total=pnls.reduce(function(s,p){ return s+p.profit; },0);
+  var tc=total>0?'#1D9E75':total<0?'#E24B4A':'#888';
+  var histIcon=older?'<div class="hist-wrap"><button class="hist-btn" onclick="toggleHistPopup(this)" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">History</div><div class="pnl-list">'+older+'</div></div></div>':'';
+  var hdr='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+histIcon+'</div>';
+  el.innerHTML=hdr+'<div class="pnl-list">'+latest+'</div>'
+    +'<div style="display:flex;justify-content:space-between;padding:.75rem 0 0;border-top:0.5px solid var(--color-border-tertiary);margin-top:.5rem;font-size:13px">'
+    +'<span style="color:var(--color-text-secondary)">Total P&L</span>'
+    +'<span style="font-weight:600;color:'+tc+'">'+(total>=0?'+':'')+fmtUSD(total)+'</span></div>';
+}
+
+function renderGoal(){
+  var el=document.getElementById('goal-wrap'); if(!el) return;
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var current=snaps.length>0?snaps[0].total:getTotalBalance();
+  var goal=S.dashGoal||0;
+  var pct=goal>0?Math.min(100,(current/goal)*100):0;
+  var contrib=getAvgMonthlyContribution();
+  var remaining=goal>0?Math.max(0,goal-current):0;
+  var months=contrib>0?Math.ceil(remaining/contrib):null;
+  var progBar=goal>0
+    ?'<div style="margin-top:.75rem">'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);margin-bottom:5px"><span>'+fmtUSD(current)+'</span><span>'+fmtUSD(goal)+'</span></div>'
+      +'<div style="background:var(--color-background-secondary);border-radius:999px;height:7px;overflow:hidden">'
+      +'<div style="background:#9B70F0;height:100%;width:'+pct.toFixed(1)+'%;border-radius:999px"></div></div>'
+      +'<div style="display:flex;justify-content:space-between;margin-top:7px;font-size:13px">'
+      +'<span style="color:#9B70F0;font-weight:600">'+pct.toFixed(1)+'%</span>'
+      +(months?'<span style="color:var(--color-text-secondary)">~'+months+' mo · '+fmtUSD(contrib)+'/mo</span>':'')
+      +'</div></div>'
+    :'<div style="color:var(--color-text-secondary);font-size:13px;margin-top:.5rem">Set a target to track progress.</div>';
+  el.innerHTML='<div class="cleg" style="margin-bottom:.75rem">Financial Goal</div>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<input type="number" id="goal-input" value="'+(goal||'')+'" placeholder="Target e.g. 100000" style="flex:1;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:6px 10px;color:#fff;font-size:14px"/>'
+    +'<button class="btn btns" onclick="saveGoal()" style="padding:6px 14px">Set</button>'
+    +'</div>'+progBar;
+}
+
+function renderProjection(){
+  var phdr=document.getElementById('proj-header');
+  var pftr=document.getElementById('proj-footer');
+  var pcanvas=document.getElementById('chart-projection');
+  if(!phdr||!pcanvas) return;
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var current=snaps.length>0?snaps[snaps.length-1].total:getTotalBalance();
+  var contrib=getAvgMonthlyContribution();
+  var annRet=S.projectionReturn||10;
+  var moRet=annRet/100/12;
+  var projected=[current];
+  for(var i=0;i<24;i++) projected.push(parseFloat((projected[projected.length-1]*(1+moRet)+contrib).toFixed(2)));
+  var now=new Date(); var labels=['Now'];
+  for(var j=1;j<=24;j++){ var dd=new Date(now.getFullYear(),now.getMonth()+j,1); labels.push(dd.toLocaleString('en',{month:'short',year:'2-digit'})); }
+  phdr.innerHTML='<div class="cleg" style="margin-bottom:.5rem">Projection (24 months)</div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;font-size:13px">'
+    +'<span style="color:var(--color-text-secondary)">Monthly contrib: <strong style="color:#fff">'+fmtUSD(contrib)+'</strong></span>'
+    +'<span style="color:var(--color-text-secondary)">Annual return: <input type="number" id="proj-return" value="'+annRet+'" min="0" max="500" style="width:48px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:2px 6px;color:#fff;font-size:13px;margin:0 3px" onchange="updateProjectionChart()"/>%</span>'
+    +'</div>';
+  var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
+  pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':'';
+  if(window.projChart) window.projChart.destroy();
+  window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:[{data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true,borderDash:[5,4]}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'nearest',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
+}
+
+function updateProjectionChart(){
+  var inp=document.getElementById('proj-return'); if(!inp) return;
+  var annRet=parseFloat(inp.value)||10;
+  S.projectionReturn=annRet; save();
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var current=snaps.length>0?snaps[snaps.length-1].total:getTotalBalance();
+  var contrib=getAvgMonthlyContribution();
+  var moRet=annRet/100/12;
+  var projected=[current];
+  for(var i=0;i<24;i++) projected.push(parseFloat((projected[projected.length-1]*(1+moRet)+contrib).toFixed(2)));
+  if(window.projChart){ window.projChart.data.datasets[0].data=projected; window.projChart.update(); }
+  var pftr=document.getElementById('proj-footer'); if(pftr){
+    var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
+    pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':'';
+  }
+}
+window.updateProjectionChart=updateProjectionChart;
+
+function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; save(); renderSummary(); } }
+
 function renderSummary(){
   populateSumMonth();
   var month=document.getElementById('sum-month').value;
@@ -482,21 +657,11 @@ function renderSummary(){
   function mc(label,val,cls,sub){ var d=val<0?'-'+fmtUSD(-val):fmtUSD(val); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
   function mcs(label,val,cls,sub){ var d=val>0?'+'+fmtUSD(val):val<0?'-'+fmtUSD(-val):fmtUSD(0); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
   var invSub=invOut>0||invIn>0?'Out: '+fmtUSD(invOut)+(invIn>0?' · In: '+fmtUSD(invIn):''):'';
-  document.getElementById('sum-cards').innerHTML=
-    '<div class="sum-top">'
-    +mc('Income',income,'g')
-    +mcs('Net',net,net>=0?'g':'r','Income minus expenses')
-    +'</div>'
-    +'<div class="sum-mid">'
-    +mc('Essential',essential,'r','Home · Groceries · Transport · Health')
-    +mc('Business',business,'a','')
-    +mc('Lifestyle',lifestyle,'b','Discretionary · Support')
-    +mcs('Investments',invNet,invNet>=0?'g':'a',invSub)
-    +'</div>'
-    +'<div class="sum-foot">'
-    +mc('Saved',saved,'g','Moved to savings')
-    +'<div class="mc"><div class="mc-l">Savings rate</div><div class="mc-v '+(savRate>=0?'g':'r')+'">'+savRate+'%</div></div>'
-    +'</div>';
+  document.getElementById('sum-cards').innerHTML='';
+  renderKPIStrip(month);
+  renderSnapshotPnL();
+  renderGoal();
+  renderProjection();
   renderEquityChart(); renderMonthlyChart(); renderCatChart(month);
 }
 
@@ -510,8 +675,8 @@ function renderMonthlyChart(){
   var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
   if(mChart) mChart.destroy();
-  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#1D9E75',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#E24B4A',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
-  document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1D9E75;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A;display:inline-block"></span>Expenses</span>';
+  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
+  document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#34D399;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#F87171;display:inline-block"></span>Expenses</span>';
 }
 
 function renderCatChart(month){
@@ -523,7 +688,7 @@ function renderCatChart(month){
   if(cChart) cChart.destroy();
   if(!cats.length){ document.getElementById('cat-leg').innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>'; return; }
   var colors=cats.map(function(c){ return CCOLORS[c]||'#888'; });
-  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'65%'}});
+  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'65%'}});
   document.getElementById('cat-leg').innerHTML=cats.map(function(c,i){ return '<div style="display:flex;align-items:center;gap:6px;font-size:13px"><span style="width:9px;height:9px;border-radius:2px;background:'+colors[i]+';flex-shrink:0"></span><span style="color:var(--color-text-secondary);flex:1">'+c+'</span><span style="font-weight:500">$'+vals[i].toLocaleString('en-US',{minimumFractionDigits:2})+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+(total>0?Math.round(vals[i]/total*100):0)+'%</span></div>'; }).join('');
 }
 
@@ -537,15 +702,28 @@ function renderEquityChart(){
   }
   var labels=snaps.map(function(s){ return s.date; });
   var vals=snaps.map(function(s){ return s.total; });
-  var first=vals[0], last=vals[vals.length-1], pnl=last-first, pnlPct=first>0?((pnl/first)*100).toFixed(1):0;
-  if(wrap) wrap.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:.75rem;font-size:13px">'
-    +'<span>First: <strong>'+fmtUSD(first)+'</strong></span>'
-    +'<span>Latest: <strong>'+fmtUSD(last)+'</strong></span>'
-    +'<span>P&amp;L: <strong style="color:'+(pnl>=0?'#1D9E75':'#E24B4A')+'">'+(pnl>=0?'+':'')+fmtUSD(pnl)+' ('+pnlPct+'%)</strong></span>'
-    +'</div>';
+  var adjVals=snaps.map(function(s){
+    var cumOut=S.transactions.filter(function(t){ return t.date<=s.date&&t.category==='Investments'&&t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+    var cumIn=S.transactions.filter(function(t){ return t.date<=s.date&&t.category==='Investments'&&t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+    return parseFloat((s.total+cumOut-cumIn).toFixed(2));
+  });
+  var snapsSorted=snaps.slice().reverse();
+  function makeSnapRow(s){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:var(--color-text-secondary)">'+s.date+'</span><span style="font-weight:500">'+fmtUSD(s.total)+'</span><div style="display:flex;gap:4px"><button class="btn btns" onclick="editSnapshot('+s.id+')" style="font-size:11px;padding:2px 7px;opacity:1">edit</button><button class="btn btnd" onclick="deleteSnapshot('+s.id+')" style="font-size:11px;padding:2px 7px;opacity:1">×</button></div></div>'; }
+  var latestSnap=makeSnapRow(snapsSorted[0]);
+  var olderSnaps=snapsSorted.slice(1).map(makeSnapRow).join('');
+  var HIST_ICON2='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><polyline points="12 7 12 12 15 14"/></svg>';
+  var eHist=document.getElementById('equity-hist');
+  if(eHist) eHist.innerHTML=olderSnaps?'<div class="hist-wrap"><button class="hist-btn" onclick="toggleHistPopup(this)" title="Snapshot history">'+HIST_ICON2+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">History</div><div style="font-size:13px">'+olderSnaps+'</div></div></div>':'';
+  if(wrap) wrap.innerHTML='<div style="display:flex;gap:12px;font-size:12px;color:var(--color-text-secondary);margin-bottom:.5rem">'
+    +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#5DCAA5;display:inline-block"></span>Tracked</span>'
+    +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Incl. deployed capital</span>'
+    +'</div>'
+    +'<div style="font-size:13px">'+latestSnap+'</div>';
   if(eChart) eChart.destroy();
-  eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[{data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.08)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
-}
+  eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
+    {label:'Tracked',data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.06)',borderWidth:2,pointRadius:4,pointHitRadius:20,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true},
+    {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[4,3]}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'nearest',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
 
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
@@ -563,10 +741,15 @@ function recordSnapshot(){
   var existing=S.snapshots.findIndex(function(s){ return s.date===today; });
   if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
   S.snapshots.push({id:Date.now(),date:today,total:val});
+  S.snapshotsUpdatedAt=Date.now();
   save(); renderEquityChart();
 }
 
-function deleteSnapshot(id){ S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; }); save(); renderEquityChart(); }
+function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
+window.toggleHistPopup=toggleHistPopup;
+function deleteSnapshot(id){ if(!confirm('Delete this snapshot?')) return; S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; }); S.snapshotsUpdatedAt=Date.now(); save(); renderEquityChart(); renderSnapshotPnL(); }
+function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var val=parseFloat(prompt('Edit snapshot value for '+snap.date+':',snap.total)); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); renderEquityChart(); renderSnapshotPnL(); }
+window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
 function renderBudget(){
@@ -576,12 +759,19 @@ function renderBudget(){
   sel.onchange=renderBudget;
   var month=sel.value||months[0];
   document.getElementById('bud-total').value=S.budgetTotal;
+  var income=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Support'];
   var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&BUDGET_CATS.indexOf(t.category)>=0; });
   var spent=debits.reduce(function(s,t){ return s+t.amountUSD; },0);
+  var net=income-spent; var savRate=income>0?Math.round((net/income)*100):0;
   var left=S.budgetTotal-spent; var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
-  var html='<div class="fc"><div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:14px"><span>Spent: <strong style="color:#E24B4A">'+fmtUSD(spent)+'</strong> / <strong>'+fmtUSD(S.budgetTotal)+'</strong></span><span style="color:'+bc+';font-weight:500">'+pct+'%</span></div><div class="pb"><div class="pf" style="width:'+pct+'%;background:'+bc+'"></div></div><div style="margin-top:6px;font-size:12px;color:'+(left>=0?'#5DCAA5':'#E24B4A')+'">'+(left>=0?'Remaining: '+fmtUSD(left):'Exceeded: '+fmtUSD(Math.abs(left)))+'</div></div><div class="fc">';
+  var html='<div class="fc" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:.5rem">'
+    +'<div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">Income</div><div style="font-size:20px;font-weight:600;color:#1D9E75">'+fmtUSD(income)+'</div></div>'
+    +'<div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">Net</div><div style="font-size:20px;font-weight:600;color:'+(net>=0?'#1D9E75':'#E24B4A')+'">'+(net>=0?'+':'')+fmtUSD(net)+'</div></div>'
+    +'<div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">Savings rate</div><div style="font-size:20px;font-weight:600;color:'+(savRate>=0?'#9B70F0':'#E24B4A')+'">'+savRate+'%</div></div>'
+    +'</div>'
+    +'<div class="fc"><div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:14px"><span>Spent: <strong style="color:#E24B4A">'+fmtUSD(spent)+'</strong> / <strong>'+fmtUSD(S.budgetTotal)+'</strong></span><span style="color:'+bc+';font-weight:500">'+pct+'%</span></div><div class="pb"><div class="pf" style="width:'+pct+'%;background:'+bc+'"></div></div><div style="margin-top:6px;font-size:12px;color:'+(left>=0?'#5DCAA5':'#E24B4A')+'">'+(left>=0?'Remaining: '+fmtUSD(left):'Exceeded: '+fmtUSD(Math.abs(left)))+'</div></div><div class="fc">';
   BUDGET_CATS.forEach(function(cat){
     var s=debits.filter(function(t){ return t.category===cat; }).reduce(function(a,t){ return a+t.amountUSD; },0);
     var cp=S.budgetTotal>0?Math.min(100,Math.round(s/S.budgetTotal*100)):0;
@@ -863,6 +1053,7 @@ function calcBDV(){
 window.calcBDV = calcBDV;
 window.autofillFromNote = autofillFromNote;
 window.recordSnapshot = recordSnapshot;
+window.saveGoal = saveGoal;
 window.deleteSnapshot = deleteSnapshot;
 
 function calcWalletUpfront(bank, walletFeeRate, resultId, cardsId){
@@ -903,13 +1094,15 @@ async function init(){
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   calcSpread(); calcBDV(); calcWally(); calcZinli();
+  autoFetchBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
+  setInterval(function(){ autoFetchBinance(); }, BINANCE_AUTO_MS);
   // Pull fresh cloud state whenever user returns to this tab
   // Prevents stale open tabs from overwriting changes made on other devices
   document.addEventListener('visibilitychange', function(){
     if(!document.hidden) pullFromCloud().then(function(pulled){
       if(pulled){ populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderHoldings(); }
-    });
+    }).then(function(){ autoFetchBinance(); });
   });
 }
 init();
