@@ -1,20 +1,5 @@
 import './style.css';
 
-// Chart.js computes hit positions via clientX/Y + getBoundingClientRect().
-// Under body{zoom:1.4}, getBoundingClientRect returns unzoomed CSS coords
-// while clientX/Y are in visual viewport coords — causing a ~1.4x rightward
-// shift. offsetX/Y are always in the canvas element's own coordinate space
-// and are unaffected by ancestor zoom, so we use them directly instead.
-Chart.register({
-  id:'cssZoomFix',
-  beforeEvent:function(chart,args){
-    if(window.innerWidth<769) return;
-    var e=args.event; var n=e.native;
-    if(!n||n.offsetX==null) return;
-    e.x=n.offsetX; e.y=n.offsetY;
-  }
-});
-
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';

@@ -1,6 +1,6 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--font-sans,system-ui);background:radial-gradient(ellipse 80% 60% at 15% 5%,rgba(155,112,240,0.13) 0%,transparent 55%),radial-gradient(ellipse 55% 45% at 88% 90%,rgba(29,158,117,0.08) 0%,transparent 55%),#0c0c14;background-attachment:fixed;color:var(--color-text-primary);font-size:15px;line-height:1.5}
-@media(min-width:769px){body{zoom:1.4}}
+@media(min-width:769px){body{font-size:17px}}
 .app{display:flex;min-height:100vh}
 .sb{width:200px;min-width:200px;background:rgba(12,12,20,0.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-right:0.5px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;padding:.875rem 0;position:sticky;top:0;height:100vh;overflow-y:auto}
 .sb-logo{padding:0 1rem .875rem;font-size:22px;font-weight:500;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:.5rem;text-align:center}
