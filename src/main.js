@@ -1,5 +1,23 @@
 import './style.css';
 
+// Fix Chart.js cursor detection under body { zoom: 1.4 } on desktop.
+// getBoundingClientRect() returns unzoomed CSS positions while clientX/Y
+// are in zoomed viewport coordinates — correct by dividing clientX/Y by zoom.
+Chart.register({
+  id:'cssZoomFix',
+  beforeEvent:function(chart,args){
+    var zoom=window.innerWidth>=769?1.4:1;
+    if(zoom===1) return;
+    var e=args.event; var n=e.native;
+    if(!n||n.clientX===undefined) return;
+    var rect=chart.canvas.getBoundingClientRect();
+    var ow=chart.canvas.offsetWidth; var oh=chart.canvas.offsetHeight;
+    if(!ow||!oh) return;
+    e.x=(n.clientX/zoom-rect.left)/rect.width*ow;
+    e.y=(n.clientY/zoom-rect.top)/rect.height*oh;
+  }
+});
+
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
@@ -612,8 +630,13 @@ function renderProjection(){
     +'</div>';
   var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
   pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':'';
-  if(window.projChart) window.projChart.destroy();
-  window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:[{data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true,borderDash:[5,4]}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'nearest',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
+  if(window.projChart){
+    window.projChart.data.labels=labels;
+    window.projChart.data.datasets[0].data=projected;
+    window.projChart.update('none');
+    return;
+  }
+  window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:[{data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true,borderDash:[5,4]}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
 }
 
 function updateProjectionChart(){
@@ -683,12 +706,12 @@ function renderMonthlyChart(){
     mChart.update('none');
     return;
   }
-  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
+  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
 }
 
 function renderCatChart(month){
   var map={};
-  var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'; });
+  var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'&&c!=='Investments'; });
   S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&DONUT_CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
   var cats=Object.keys(map); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
   var colors=cats.map(function(c){ return CCOLORS[c]||'#888'; });
@@ -699,14 +722,8 @@ function renderCatChart(month){
     return;
   }
   if(leg) leg.innerHTML=cats.map(function(c,i){ return '<div style="display:flex;align-items:center;gap:6px;font-size:13px"><span style="width:9px;height:9px;border-radius:2px;background:'+colors[i]+';flex-shrink:0"></span><span style="color:var(--color-text-secondary);flex:1">'+c+'</span><span style="font-weight:500">$'+vals[i].toLocaleString('en-US',{minimumFractionDigits:2})+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+(total>0?Math.round(vals[i]/total*100):0)+'%</span></div>'; }).join('');
-  if(cChart){
-    cChart.data.labels=cats;
-    cChart.data.datasets[0].data=vals;
-    cChart.data.datasets[0].backgroundColor=colors;
-    cChart.update('none');
-    return;
-  }
-  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'65%'}});
+  if(cChart){ cChart.destroy(); cChart=null; }
+  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'65%'}});
 }
 
 function renderEquityChart(){
@@ -752,7 +769,7 @@ function renderEquityChart(){
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
     {label:'Tracked',data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.06)',borderWidth:2,pointRadius:4,pointHitRadius:20,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true},
     {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[4,3]}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
 
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
