@@ -671,27 +671,42 @@ function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=
 
 function renderMonthlyChart(){
   var months=getLast6();
-  // Expenses: exclude Savings (transfers). Income: only Income-category credits
   var SPEND_CATS=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE).concat(['Investments']);
   var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
-  if(mChart) mChart.destroy();
-  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
   document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#34D399;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#F87171;display:inline-block"></span>Expenses</span>';
+  if(mChart){
+    mChart.data.labels=labels;
+    mChart.data.datasets[0].data=crD;
+    mChart.data.datasets[1].data=cD;
+    mChart.update('none');
+    return;
+  }
+  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
 }
 
 function renderCatChart(month){
   var map={};
-  // Donut excludes Savings (it's a transfer, not a real expense)
   var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'; });
   S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&DONUT_CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
   var cats=Object.keys(map); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
-  if(cChart) cChart.destroy();
-  if(!cats.length){ document.getElementById('cat-leg').innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>'; return; }
   var colors=cats.map(function(c){ return CCOLORS[c]||'#888'; });
+  var leg=document.getElementById('cat-leg');
+  if(!cats.length){
+    if(cChart){ cChart.destroy(); cChart=null; }
+    if(leg) leg.innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>';
+    return;
+  }
+  if(leg) leg.innerHTML=cats.map(function(c,i){ return '<div style="display:flex;align-items:center;gap:6px;font-size:13px"><span style="width:9px;height:9px;border-radius:2px;background:'+colors[i]+';flex-shrink:0"></span><span style="color:var(--color-text-secondary);flex:1">'+c+'</span><span style="font-weight:500">$'+vals[i].toLocaleString('en-US',{minimumFractionDigits:2})+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+(total>0?Math.round(vals[i]/total*100):0)+'%</span></div>'; }).join('');
+  if(cChart){
+    cChart.data.labels=cats;
+    cChart.data.datasets[0].data=vals;
+    cChart.data.datasets[0].backgroundColor=colors;
+    cChart.update('none');
+    return;
+  }
   cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'65%'}});
-  document.getElementById('cat-leg').innerHTML=cats.map(function(c,i){ return '<div style="display:flex;align-items:center;gap:6px;font-size:13px"><span style="width:9px;height:9px;border-radius:2px;background:'+colors[i]+';flex-shrink:0"></span><span style="color:var(--color-text-secondary);flex:1">'+c+'</span><span style="font-weight:500">$'+vals[i].toLocaleString('en-US',{minimumFractionDigits:2})+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+(total>0?Math.round(vals[i]/total*100):0)+'%</span></div>'; }).join('');
 }
 
 function renderEquityChart(){
@@ -699,14 +714,20 @@ function renderEquityChart(){
   var el=document.getElementById('chart-equity'); if(!el) return;
   var wrap=document.getElementById('equity-wrap');
   if(!snaps.length){
+    if(eChart){ eChart.destroy(); eChart=null; }
     if(wrap) wrap.innerHTML='<div style="color:var(--color-text-secondary);font-size:13px;padding:1rem 0">No snapshots yet. Record your first one to start the equity curve.</div>';
     return;
   }
   var labels=snaps.map(function(s){ return s.date; });
   var vals=snaps.map(function(s){ return s.total; });
+  // O(n) two-pointer — both arrays sorted by date
+  var invTx=S.transactions.filter(function(t){ return t.category==='Investments'; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var cumOut=0,cumIn=0,ti=0;
   var adjVals=snaps.map(function(s){
-    var cumOut=S.transactions.filter(function(t){ return t.date<=s.date&&t.category==='Investments'&&t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
-    var cumIn=S.transactions.filter(function(t){ return t.date<=s.date&&t.category==='Investments'&&t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+    while(ti<invTx.length&&invTx[ti].date<=s.date){
+      if(invTx[ti].type==='Debit') cumOut+=invTx[ti].amountUSD; else cumIn+=invTx[ti].amountUSD;
+      ti++;
+    }
     return parseFloat((s.total+cumOut-cumIn).toFixed(2));
   });
   var snapsSorted=snaps.slice().reverse();
@@ -721,11 +742,17 @@ function renderEquityChart(){
     +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Incl. deployed capital</span>'
     +'</div>'
     +'<div style="font-size:13px">'+latestSnap+'</div>';
-  if(eChart) eChart.destroy();
+  if(eChart){
+    eChart.data.labels=labels;
+    eChart.data.datasets[0].data=vals;
+    eChart.data.datasets[1].data=adjVals;
+    eChart.update('none');
+    return;
+  }
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
     {label:'Tracked',data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.06)',borderWidth:2,pointRadius:4,pointHitRadius:20,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true},
     {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[4,3]}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'nearest',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
 
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
