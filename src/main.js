@@ -1,5 +1,20 @@
 import './style.css';
 
+// Chart.js computes hit positions via clientX/Y + getBoundingClientRect().
+// Under body{zoom:1.4}, getBoundingClientRect returns unzoomed CSS coords
+// while clientX/Y are in visual viewport coords — causing a ~1.4x rightward
+// shift. offsetX/Y are always in the canvas element's own coordinate space
+// and are unaffected by ancestor zoom, so we use them directly instead.
+Chart.register({
+  id:'cssZoomFix',
+  beforeEvent:function(chart,args){
+    if(window.innerWidth<769) return;
+    var e=args.event; var n=e.native;
+    if(!n||n.offsetX==null) return;
+    e.x=n.offsetX; e.y=n.offsetY;
+  }
+});
+
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
@@ -612,12 +627,7 @@ function renderProjection(){
     +'</div>';
   var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
   pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':'';
-  if(window.projChart){
-    window.projChart.data.labels=labels;
-    window.projChart.data.datasets[0].data=projected;
-    window.projChart.update('none');
-    return;
-  }
+  if(window.projChart){ window.projChart.destroy(); window.projChart=null; }
   window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:[{data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true,borderDash:[5,4]}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
 }
 
@@ -681,13 +691,7 @@ function renderMonthlyChart(){
   var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
   document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#34D399;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#F87171;display:inline-block"></span>Expenses</span>';
-  if(mChart){
-    mChart.data.labels=labels;
-    mChart.data.datasets[0].data=crD;
-    mChart.data.datasets[1].data=cD;
-    mChart.update('none');
-    return;
-  }
+  if(mChart){ mChart.destroy(); mChart=null; }
   mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
 }
 
@@ -741,13 +745,7 @@ function renderEquityChart(){
     +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Incl. deployed capital</span>'
     +'</div>'
     +'<div style="font-size:13px">'+latestSnap+'</div>';
-  if(eChart){
-    eChart.data.labels=labels;
-    eChart.data.datasets[0].data=vals;
-    eChart.data.datasets[1].data=adjVals;
-    eChart.update('none');
-    return;
-  }
+  if(eChart){ eChart.destroy(); eChart=null; }
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
     {label:'Tracked',data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.06)',borderWidth:2,pointRadius:4,pointHitRadius:20,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true},
     {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[4,3]}
