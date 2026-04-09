@@ -50,7 +50,7 @@ function setSyncStatus(state, msg){
   var dot=document.getElementById('sync-dot');
   var lbl=document.getElementById('sync-label');
   var colors={synced:'#5DCAA5', syncing:'#EF9F27', offline:'#888', error:'#E24B4A'};
-  if(dot) dot.style.background=colors[state]||'#888';
+  if(dot){ dot.style.background=colors[state]||'#888'; dot.classList.toggle('is-syncing',state==='syncing'); }
   if(lbl) lbl.textContent=msg||state;
 }
 

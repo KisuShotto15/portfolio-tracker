@@ -160,3 +160,51 @@ tr.date-sep:first-child td{padding-top:0}
   .dash-row-2{grid-template-columns:1fr}
   .dash-chart-row{grid-template-columns:1fr}
 }
+
+/* ── Animations ──────────────────────────────────────────────────────── */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.25}}
+@keyframes fillBar{from{width:0}}
+
+/* Page transitions */
+.page.active{animation:fadeIn .18s ease both}
+#page-summary.active{animation:fadeIn .18s ease both}
+
+/* Card hover lift — only small stat cards */
+.kpi-card,.mc,.wcard{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.kpi-card:hover,.mc:hover,.wcard:hover{transform:translateY(-1px);border-color:rgba(255,255,255,0.15);box-shadow:0 6px 24px rgba(0,0,0,0.28)}
+
+/* Larger content cards — border glow only, no lift (charts inside) */
+.cw,.fc,.tool-card{transition:border-color .2s ease}
+.cw:hover,.fc:hover,.tool-card:hover{border-color:rgba(255,255,255,0.13)}
+
+/* Sync dot pulse while syncing */
+.sync-dot.is-syncing{animation:pulseDot 1s ease-in-out infinite}
+
+/* Progress bar fill on render */
+.pf{animation:fillBar .5s cubic-bezier(.4,0,.2,1) both}
+
+/* Staggered KPI card entrance */
+.kpi-strip .kpi-card{animation:fadeUp .3s ease both}
+.kpi-strip .kpi-card:nth-child(1){animation-delay:.03s}
+.kpi-strip .kpi-card:nth-child(2){animation-delay:.07s}
+.kpi-strip .kpi-card:nth-child(3){animation-delay:.11s}
+.kpi-strip .kpi-card:nth-child(4){animation-delay:.15s}
+.kpi-strip .kpi-card:nth-child(5){animation-delay:.19s}
+
+/* Button press micro-feedback */
+.btn{transition:background .15s,opacity .15s,transform .1s}
+.btn:active{transform:scale(0.96)}
+.btn-add{transition:background .15s,color .15s,box-shadow .2s,transform .1s}
+.btn-add:hover{box-shadow:0 0 0 3px rgba(155,112,240,0.2)}
+
+/* FAB — add box-shadow to existing transition */
+.fab-add{transition:transform .2s,box-shadow .2s}
+.fab-add:hover{box-shadow:0 6px 28px rgba(155,112,240,0.65)}
+
+/* Nav item smooth transition */
+.nb{transition:background .15s,color .15s}
+
+/* Hist popup entrance */
+.hist-popup{animation:fadeUp .14s ease both}
