@@ -1,23 +1,5 @@
 import './style.css';
 
-// Fix Chart.js cursor detection under body { zoom: 1.4 } on desktop.
-// getBoundingClientRect() returns unzoomed CSS positions while clientX/Y
-// are in zoomed viewport coordinates — correct by dividing clientX/Y by zoom.
-Chart.register({
-  id:'cssZoomFix',
-  beforeEvent:function(chart,args){
-    var zoom=window.innerWidth>=769?1.4:1;
-    if(zoom===1) return;
-    var e=args.event; var n=e.native;
-    if(!n||n.clientX===undefined) return;
-    var rect=chart.canvas.getBoundingClientRect();
-    var ow=chart.canvas.offsetWidth; var oh=chart.canvas.offsetHeight;
-    if(!ow||!oh) return;
-    e.x=(n.clientX/zoom-rect.left)/rect.width*ow;
-    e.y=(n.clientY/zoom-rect.top)/rect.height*oh;
-  }
-});
-
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
