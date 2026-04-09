@@ -1235,9 +1235,9 @@ async function botCycle() {
     document.getElementById('bot-ceiling').textContent = BOT.ceiling.toFixed(3) + ' Bs';
     document.getElementById('bot-cur-price').textContent = BOT.currentPrice.toFixed(3) + ' Bs';
 
-    // 2. Mercado público (mismos filtros del monitor)
+    // 2. Mercado público — 3 páginas para no perder competidores profundos
     botSetStatus('Analizando mercado...', '#F0B90B');
-    var market = mapAds(await fetchTier(BOT.myMinLimit));
+    var market = mapAds(await fetchTier(BOT.myMinLimit, 3));
 
     // 3. Competidores: BANK, distinto nick, límite mínimo ≤ mío + umbral
     var competitors = market.filter(function(a) {
@@ -1252,7 +1252,11 @@ async function botCycle() {
     var targetPrice = null;
     var reason = '';
 
-    if (above.length > 0) {
+    // Bug fix #2: si el precio actual ya supera el techo, corregir de inmediato
+    if (BOT.currentPrice > BOT.ceiling) {
+      targetPrice = BOT.ceiling;
+      reason = '↓ precio sobre techo → ' + BOT.ceiling.toFixed(3);
+    } else if (above.length > 0) {
       // Competidores dentro del gap máximo
       var inGap = above.filter(function(a) {
         return (a.price - BOT.currentPrice) <= BOT_CFG.maxGap;
@@ -1262,21 +1266,26 @@ async function botCycle() {
         targetPrice = inGap[0].price + BOT_CFG.increment;
         reason = '↑ ' + inGap[0].merchant + ' @ ' + inGap[0].price.toFixed(3);
       } else {
+        above.sort(function(a, b) { return a.price - b.price; });
+        var nearest = above[0];
+        botLog('En espera — más cercano: ' + nearest.merchant + ' @ ' + nearest.price.toFixed(3) + ' (+' + (nearest.price - BOT.currentPrice).toFixed(3) + ' Bs)', '#555');
         botSetStatus('En espera (gap > ' + BOT_CFG.maxGap + ' Bs)', '#555');
         return;
       }
     } else if (below.length > 0) {
-      // Soy #1 — bajar al mínimo necesario
+      // Soy #1 — bajar al mínimo necesario para mantener posición
       below.sort(function(a, b) { return b.price - a.price; });
       var best = below[0];
       var proposed = best.price + BOT_CFG.increment;
-      if (proposed < BOT.currentPrice - BOT_CFG.increment) {
+      // Bug fix #1: condición corregida — mover si hay cualquier ahorro posible
+      if (proposed < BOT.currentPrice) {
         targetPrice = proposed;
         reason = '↓ ahorro vs ' + best.merchant + ' @ ' + best.price.toFixed(3);
       }
     }
 
     if (targetPrice === null) {
+      botLog('Óptimo — yo: ' + BOT.currentPrice.toFixed(3) + ' | arriba: ' + above.length + ' | abajo: ' + below.length + ' | total competidores: ' + competitors.length, '#484f58');
       botSetStatus('✓ Posición óptima', '#1D9E75');
       return;
     }
