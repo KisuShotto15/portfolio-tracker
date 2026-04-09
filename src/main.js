@@ -37,9 +37,11 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
-  dashGoal:0, projectionReturn:10
+  dashGoal:0, projectionReturn:10,
+  categoryBudgets:{}
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
+var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Support'];
@@ -752,32 +754,122 @@ function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
+function saveCategoryBudget(cat,val){
+  if(!S.categoryBudgets) S.categoryBudgets={};
+  var v=parseFloat(val);
+  if(v>0) S.categoryBudgets[cat]=v; else delete S.categoryBudgets[cat];
+  save(); renderBudget();
+}
+window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
+window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
 function renderBudget(){
-  var sel=document.getElementById('bud-month'); var months=getMonths(); var prev=sel.value;
-  sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
-  if(prev&&months.indexOf(prev)>=0) sel.value=prev;
-  sel.onchange=renderBudget;
-  var month=sel.value||months[0];
-  document.getElementById('bud-total').value=S.budgetTotal;
-  var income=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Support'];
+  var months=getMonths();
+  if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
+  var month=_budMonth;
+  var income=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&BUDGET_CATS.indexOf(t.category)>=0; });
   var spent=debits.reduce(function(s,t){ return s+t.amountUSD; },0);
-  var net=income-spent; var savRate=income>0?Math.round((net/income)*100):0;
-  var left=S.budgetTotal-spent; var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
+  var net=income-spent;
+  var savRate=income>0?Math.round((net/income)*100):0;
+  var remaining=S.budgetTotal-spent;
+  var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
-  var html='<div class="fc" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:.5rem">'
-    +'<div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">Income</div><div style="font-size:20px;font-weight:600;color:#1D9E75">'+fmtUSD(income)+'</div></div>'
-    +'<div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">Net</div><div style="font-size:20px;font-weight:600;color:'+(net>=0?'#1D9E75':'#E24B4A')+'">'+(net>=0?'+':'')+fmtUSD(net)+'</div></div>'
-    +'<div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">Savings rate</div><div style="font-size:20px;font-weight:600;color:'+(savRate>=0?'#9B70F0':'#E24B4A')+'">'+savRate+'%</div></div>'
+
+  function kpi(label,val,sub,color){
+    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+'</div></div>';
+  }
+
+  var html='';
+
+  // Header row
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+    +'<div style="font-size:18px;font-weight:600;letter-spacing:-0.3px">Budget</div>'
+    +'<select onchange="window._budMonthSel(this.value)" style="padding:5px 12px;border:0.5px solid rgba(255,255,255,0.1);border-radius:20px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px">'
+    +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+m+'</option>'; }).join('')
+    +'</select>'
+    +'</div>';
+
+  // KPI strip
+  html+='<div class="kpi-strip" style="margin-bottom:12px">'
+    +kpi('Income',fmtUSD(income),month,'#5DCAA5')
+    +kpi('Spent',fmtUSD(spent),pct+'% of budget',pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
+    +kpi('Net',(net>=0?'+':'')+fmtUSD(net),'income − expenses',net>=0?'#5DCAA5':'#E24B4A')
+    +kpi('Savings Rate',savRate+'%',savRate>=20?'on track':savRate>=10?'could be higher':'low',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')
+    +kpi('Remaining',fmtUSD(Math.abs(remaining)),remaining>=0?'left in budget':'over budget',remaining>=0?'#5DCAA5':'#E24B4A')
+    +'</div>';
+
+  // Total budget bar
+  html+='<div class="fc" style="margin-bottom:12px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">'
+    +'<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em">Monthly Budget</span>'
+    +'<span style="font-size:13px;font-weight:500"><span style="color:'+bc+'">'+pct+'%</span>'
+    +'<span style="color:rgba(255,255,255,0.3)">&nbsp;·&nbsp;</span>'
+    +'<span style="color:rgba(255,255,255,0.55)">'+fmtUSD(spent)+' of '+fmtUSD(S.budgetTotal)+'</span></span>'
     +'</div>'
-    +'<div class="fc"><div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:14px"><span>Spent: <strong style="color:#E24B4A">'+fmtUSD(spent)+'</strong> / <strong>'+fmtUSD(S.budgetTotal)+'</strong></span><span style="color:'+bc+';font-weight:500">'+pct+'%</span></div><div class="pb"><div class="pf" style="width:'+pct+'%;background:'+bc+'"></div></div><div style="margin-top:6px;font-size:12px;color:'+(left>=0?'#5DCAA5':'#E24B4A')+'">'+(left>=0?'Remaining: '+fmtUSD(left):'Exceeded: '+fmtUSD(Math.abs(left)))+'</div></div><div class="fc">';
+    +'<div class="pb" style="height:12px;border-radius:6px">'
+    +'<div class="pf" style="width:'+pct+'%;background:'+bc+';height:100%;border-radius:6px"></div>'
+    +'</div>'
+    +'<div style="margin-top:8px;font-size:12px;color:'+(remaining>=0?'#5DCAA5':'#E24B4A')+'">'
+    +(remaining>=0?fmtUSD(remaining)+' remaining':fmtUSD(Math.abs(remaining))+' over budget')
+    +'</div>'
+    +'</div>';
+
+  // Category card grid
+  html+='<div class="budget-cat-grid" style="margin-bottom:12px">';
   BUDGET_CATS.forEach(function(cat){
     var s=debits.filter(function(t){ return t.category===cat; }).reduce(function(a,t){ return a+t.amountUSD; },0);
-    var cp=S.budgetTotal>0?Math.min(100,Math.round(s/S.budgetTotal*100)):0;
-    html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span class="tag '+tagCat(cat)+'" style="min-width:95px">'+cat+'</span><div style="flex:1"><div class="pb"><div class="pf" style="width:'+cp+'%;background:'+(cp>30?'#E24B4A':cp>15?'#EF9F27':'#1D9E75')+'"></div></div></div><span style="font-weight:500;min-width:70px;text-align:right">'+fmtUSD(s)+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+cp+'%</span></div>';
+    var catLim=(S.categoryBudgets||{})[cat]||0;
+    var limBase=catLim>0?catLim:S.budgetTotal;
+    var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
+    var cc=CCOLORS[cat]||'#9B70F0';
+    var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
+    html+='<div class="budget-cat-card">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span class="tag '+tagCat(cat)+'">'+cat+'</span>'
+      +'<span style="font-size:11px;color:rgba(255,255,255,0.35)">'+cp+'%</span>'
+      +'</div>'
+      +'<div style="font-size:22px;font-weight:700;margin-bottom:10px;letter-spacing:-0.5px;color:'+cc+'">'+fmtUSD(s)+'</div>'
+      +'<div class="pb" style="height:8px;border-radius:4px">'
+      +'<div class="pf" style="width:'+cp+'%;background:'+barC+';height:100%;border-radius:4px"></div>'
+      +'</div>'
+      +'<div style="margin-top:7px;font-size:11px;color:rgba(255,255,255,0.28)">'
+      +(catLim>0?'of '+fmtUSD(catLim)+' limit':'no limit set')
+      +'</div>'
+      +'</div>';
   });
-  document.getElementById('bud-wrap').innerHTML=html+'</div>';
+  html+='</div>';
+
+  // Configure limits toggle
+  html+='<div class="fc">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none" onclick="window._budLimitsToggle()">'
+    +'<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em">Configure Limits</span>'
+    +'<span style="font-size:12px;color:rgba(255,255,255,0.35)">'+(_budLimitsOpen?'▲':'▼')+'</span>'
+    +'</div>';
+  if(_budLimitsOpen){
+    html+='<div style="margin-top:1rem">'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Monthly Total</div>'
+      +'<div class="fr" style="max-width:280px;margin-bottom:1.25rem">'
+      +'<input type="number" id="bud-total" value="'+S.budgetTotal+'" placeholder="Total USD" step="1"/>'
+      +'<button class="btn btnp" onclick="saveBudget()">Save</button>'
+      +'</div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Category Limits</div>'
+      +'<div class="budget-limits-grid">'
+      +BUDGET_CATS.map(function(cat){
+        var v=(S.categoryBudgets||{})[cat]||'';
+        return '<div>'
+          +'<div style="margin-bottom:5px"><span class="tag '+tagCat(cat)+'" style="font-size:10px">'+cat+'</span></div>'
+          +'<input type="number" placeholder="No limit" step="1" value="'+v+'" '
+          +'style="width:100%;padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px" '
+          +'onchange="saveCategoryBudget(\''+cat+'\',this.value)"/>'
+          +'</div>';
+      }).join('')
+      +'</div>'
+      +'</div>';
+  }
+  html+='</div>';
+
+  document.getElementById('bud-wrap').innerHTML=html;
 }
 
 function saveManualWallet(){
@@ -970,6 +1062,7 @@ window.toggleVesHint = toggleVesHint;
 window.updateVesPreview = updateVesPreview;
 window.renderSummary = renderSummary;
 window.renderBudget = renderBudget;
+window.saveCategoryBudget = saveCategoryBudget;
 window.saveBudget = saveBudget;
 window.saveManualWallet = saveManualWallet;
 window.deleteManualWallet = deleteManualWallet;

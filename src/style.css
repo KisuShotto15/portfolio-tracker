@@ -161,6 +161,13 @@ tr.date-sep:first-child td{padding-top:0}
   .dash-chart-row{grid-template-columns:1fr}
 }
 
+/* ── Budget tab ──────────────────────────────────────────────────────── */
+.budget-cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:0}
+.budget-cat-card{background:rgba(255,255,255,0.055);border:0.5px solid rgba(255,255,255,0.08);border-radius:14px;padding:.875rem;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.budget-cat-card:hover{transform:translateY(-1px);border-color:rgba(255,255,255,0.15);box-shadow:0 6px 24px rgba(0,0,0,0.28)}
+.budget-limits-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+@media(max-width:768px){.budget-cat-grid{grid-template-columns:repeat(2,1fr)}}
+
 /* ── Animations ──────────────────────────────────────────────────────── */
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
