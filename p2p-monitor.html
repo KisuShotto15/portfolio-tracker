@@ -1366,22 +1366,14 @@ async function botToggle() {
 
     // Activar el anuncio en Binance antes de empezar el ciclo
     try {
-      // Obtener el adNumber si no lo tenemos aún
-      if (!BOT.adNumber) {
-        var adRaw = await botCallWorker('/my-ads');
-        var adsList = Array.isArray(adRaw.data) ? adRaw.data
-                    : Array.isArray(adRaw.data && adRaw.data.data) ? adRaw.data.data : [];
-        var found = BOT_CFG.adNo
-          ? adsList.find(function(a) { return String(a.adNumber || a.advNo) === BOT_CFG.adNo; })
-          : adsList.find(function(a) { return (a.tradeType === 'BUY') && (a.asset === 'USDT' || a.cryptoCurrency === 'USDT'); });
-        if (found) BOT.adNumber = found.adNumber || found.advNo;
-      }
+      // Usar adNo configurado directamente — sin llamada extra a /my-ads
+      if (!BOT.adNumber && BOT_CFG.adNo) BOT.adNumber = BOT_CFG.adNo;
       if (BOT.adNumber) {
         var res2 = await botCallWorker('/toggle-ad', { advNo: BOT.adNumber, advStatus: 1 });
         if (res2.code && res2.code !== '000000') throw new Error(res2.message || 'código ' + res2.code);
         botLog('▶ Anuncio activado en Binance', '#1D9E75');
       } else {
-        botLog('⚠ adNumber no encontrado — anuncio no activado automáticamente', '#F0B90B');
+        botLog('⚠ Configura el Ad Number para activar/pausar el anuncio automáticamente', '#F0B90B');
       }
     } catch(e) {
       botLog('⚠ No se pudo activar el anuncio: ' + e.message, '#F6465D');
