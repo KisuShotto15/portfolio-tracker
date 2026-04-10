@@ -21,6 +21,7 @@ export default {
     try {
       if (path === '/my-ads')    return await myAds(env);
       if (path === '/update-ad') return await updateAd(await request.json(), env);
+      if (path === '/toggle-ad') return await toggleAd(await request.json(), env);
     } catch (e) {
       return json({ error: e.message }, 500);
     }
@@ -85,6 +86,22 @@ async function updateAd(params, env) {
     env.BINANCE_SECRET
   );
   const r = await fetch(`${BINANCE}/sapi/v1/c2c/ads/update?${qs}`, {
+    method: 'POST',
+    headers: SAPI_HEADERS(env.BINANCE_KEY),
+    body: bodyStr,
+  });
+  return json(await r.json());
+}
+
+// Endpoint: enable/disable ad
+// POST /sapi/v1/c2c/ads/updateStatus  advStatus: 1=online 0=offline
+async function toggleAd(params, env) {
+  if (!params.advNo || params.advStatus == null) return json({ error: 'advNo y advStatus requeridos' }, 400);
+  const { qs, bodyStr } = await signedJsonRequest(
+    { advNo: String(params.advNo), advStatus: Number(params.advStatus) },
+    env.BINANCE_SECRET
+  );
+  const r = await fetch(`${BINANCE}/sapi/v1/c2c/ads/updateStatus?${qs}`, {
     method: 'POST',
     headers: SAPI_HEADERS(env.BINANCE_KEY),
     body: bodyStr,

@@ -1323,31 +1323,73 @@ async function botCycle() {
   }
 }
 
-function botToggle() {
+async function botToggle() {
   if (BOT.running) {
+    // ── STOP ────────────────────────────────────────────
     BOT.running = false;
     clearInterval(BOT.timer);
     BOT.timer = null;
     BOT.basePrice = null;
     BOT.ceiling = null;
+
     document.getElementById('bot-toggle').textContent = '▶ Iniciar Bot';
     document.getElementById('bot-toggle').style.background = '';
     document.getElementById('bot-live').style.display = 'none';
     document.getElementById('bot-cur-price').textContent = '—';
     document.getElementById('bot-ceiling').textContent = '—';
-    botSetStatus('Detenido', '#555');
+    botSetStatus('Deteniendo...', '#888');
     botLog('— Bot detenido —', '#555');
+
+    // Pausar el anuncio en Binance
+    if (BOT.adNumber) {
+      try {
+        var res = await botCallWorker('/toggle-ad', { advNo: BOT.adNumber, advStatus: 0 });
+        if (res.code && res.code !== '000000') throw new Error(res.message || 'código ' + res.code);
+        botLog('⏸ Anuncio pausado en Binance', '#8b949e');
+      } catch(e) {
+        botLog('⚠ No se pudo pausar el anuncio: ' + e.message, '#F6465D');
+      }
+    }
+    botSetStatus('Detenido', '#555');
+
   } else {
+    // ── START ────────────────────────────────────────────
     saveBotConfig();
-    if (!BOT_CFG.token) { toast('Ingresa el Bot Token primero'); return; }
+    if (!BOT_CFG.token)     { toast('Ingresa el Bot Token primero'); return; }
     if (!BOT_CFG.sellPrice) { toast('Ingresa el Precio de venta primero'); return; }
-    BOT.running = true;
-    BOT.lastReprice = 0;
+
     document.getElementById('bot-toggle').textContent = '⏹ Detener Bot';
     document.getElementById('bot-toggle').style.background = '#E24B4A';
     document.getElementById('bot-live').style.display = 'grid';
-    botSetStatus('Iniciando...', '#F0B90B');
+    botSetStatus('Activando anuncio...', '#F0B90B');
     botLog('— Bot iniciado —', '#F0B90B');
+
+    // Activar el anuncio en Binance antes de empezar el ciclo
+    try {
+      // Obtener el adNumber si no lo tenemos aún
+      if (!BOT.adNumber) {
+        var adRaw = await botCallWorker('/my-ads');
+        var adsList = Array.isArray(adRaw.data) ? adRaw.data
+                    : Array.isArray(adRaw.data && adRaw.data.data) ? adRaw.data.data : [];
+        var found = BOT_CFG.adNo
+          ? adsList.find(function(a) { return String(a.adNumber || a.advNo) === BOT_CFG.adNo; })
+          : adsList.find(function(a) { return (a.tradeType === 'BUY') && (a.asset === 'USDT' || a.cryptoCurrency === 'USDT'); });
+        if (found) BOT.adNumber = found.adNumber || found.advNo;
+      }
+      if (BOT.adNumber) {
+        var res2 = await botCallWorker('/toggle-ad', { advNo: BOT.adNumber, advStatus: 1 });
+        if (res2.code && res2.code !== '000000') throw new Error(res2.message || 'código ' + res2.code);
+        botLog('▶ Anuncio activado en Binance', '#1D9E75');
+      } else {
+        botLog('⚠ adNumber no encontrado — anuncio no activado automáticamente', '#F0B90B');
+      }
+    } catch(e) {
+      botLog('⚠ No se pudo activar el anuncio: ' + e.message, '#F6465D');
+    }
+
+    BOT.running = true;
+    BOT.lastReprice = 0;
+    botSetStatus('Iniciando...', '#F0B90B');
     botCycle();
     BOT.timer = setInterval(botCycle, 30000);
   }
