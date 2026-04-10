@@ -251,7 +251,7 @@ body {
 .ob-side-title.smallbuyers { background: linear-gradient(90deg,rgba(88,166,255,.1),transparent); color: var(--blue);  }
 .ob-head {
   display: grid;
-  grid-template-columns: 22px 1fr 90px 72px;
+  grid-template-columns: 22px 1fr 54px 90px 72px;
   gap: 4px;
   padding: 5px 10px;
   font-size: 10px;
@@ -263,7 +263,7 @@ body {
 }
 .ob-row {
   display: grid;
-  grid-template-columns: 22px 1fr 90px 72px;
+  grid-template-columns: 22px 1fr 54px 90px 72px;
   gap: 4px;
   padding: 8px 10px;
   border-bottom: 1px solid rgba(33,38,45,.7);
@@ -474,13 +474,13 @@ input:focus {
         <!-- Mayoristas -->
         <div class="ob-side">
           <div id="label-may" class="ob-side-title mayoristas">🏦 Mayoristas</div>
-          <div class="ob-head"><span>#</span><span>Comerciante</span><span>Precio Bs</span><span>Límites</span></div>
+          <div class="ob-head"><span>#</span><span>Comerciante</span><span style="text-align:right">USDT</span><span>Precio Bs</span><span>Límites</span></div>
           <div id="ob-may"></div>
         </div>
         <!-- Pequeños / referencia compra -->
         <div class="ob-side">
           <div id="label-small" class="ob-side-title smallbuyers">📉 Compra</div>
-          <div class="ob-head"><span>#</span><span>Comerciante</span><span>Precio Bs</span><span>Límites</span></div>
+          <div class="ob-head"><span>#</span><span>Comerciante</span><span style="text-align:right">USDT</span><span>Precio Bs</span><span>Límites</span></div>
           <div id="ob-small"></div>
         </div>
       </div>
@@ -920,8 +920,12 @@ function renderOB(id, ads, bestCls) {
         badgeHtml = '<span style="margin-left:5px;display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:'+lvlColor+';color:#000;font-size:9px;font-weight:900;flex-shrink:0;line-height:1" title="PRO vip'+ad.vipLevel+'">✓</span>';
       }
     }
+    var availStr = ad.avail >= 1000
+      ? (ad.avail / 1000).toLocaleString('es-VE', {maximumFractionDigits: 1}) + 'k'
+      : Math.round(ad.avail).toLocaleString('es-VE');
     return '<div class="' + cls + '">' + rnk +
       '<span class="merch" style="display:flex;align-items:center;gap:0" title="' + esc(ad.merchant) + '">' + esc(ad.merchant) + badgeHtml + '</span>' +
+      '<span class="lim-c" style="text-align:right;font-variant-numeric:tabular-nums" title="' + Math.round(ad.avail) + ' USDT disponibles">' + availStr + '</span>' +
       '<span class="price-c ' + (i === 0 ? (id === 'ob-may' ? 'g' : 'b') : '') + '">' + fmt(ad.price) + '</span>' +
       '<span class="lim-c">' + lims + '</span>' +
     '</div>';
