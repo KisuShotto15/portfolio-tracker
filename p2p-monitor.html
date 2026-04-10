@@ -1343,7 +1343,7 @@ async function botToggle() {
     // Pausar el anuncio en Binance
     if (BOT.adNumber) {
       try {
-        var res = await botCallWorker('/toggle-ad', { advNo: BOT.adNumber, advStatus: 0 });
+        var res = await botCallWorker('/toggle-ad', { advNo: BOT.adNumber, advStatus: 2 });
         if (res.code && res.code !== '000000') throw new Error(res.message || 'código ' + res.code);
         botLog('⏸ Anuncio pausado en Binance', '#8b949e');
       } catch(e) {
