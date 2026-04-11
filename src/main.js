@@ -801,7 +801,7 @@ function renderBudget(){
     +'</div>';
 
   // KPI strip
-  html+='<div class="kpi-strip" style="margin-bottom:12px">'
+  html+='<div class="kpi-strip" style="margin-bottom:1.1rem">'
     +kpi('Income',fmtUSD(income),month,'#5DCAA5')
     +kpi('Spent',fmtUSD(spent),pct+'% of budget',pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
     +kpi('Savings Rate',savRate+'%',savRate>=20?'on track':savRate>=10?'could be higher':'low',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')
@@ -809,7 +809,7 @@ function renderBudget(){
     +'</div>';
 
   // Total budget bar
-  html+='<div class="fc" style="margin-bottom:12px">'
+  html+='<div class="fc" style="margin-bottom:1.1rem">'
     +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em">Monthly Budget</span>'
     +'<span style="font-size:13px;font-weight:500"><span style="color:'+bc+'">'+pct+'%</span>'
@@ -825,7 +825,7 @@ function renderBudget(){
     +'</div>';
 
   // Category card grid
-  html+='<div class="budget-cat-grid" style="margin-bottom:12px">';
+  html+='<div class="budget-cat-grid" style="margin-bottom:1.1rem">';
   BUDGET_CATS.forEach(function(cat){
     var s=debits.filter(function(t){ return t.category===cat; }).reduce(function(a,t){ return a+t.amountUSD; },0);
     var catLim=(S.categoryBudgets||{})[cat]||0;
@@ -833,7 +833,7 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    html+='<div class="budget-cat-card">'
+    html+='<div class="budget-cat-card" style="border-left-color:'+cc+'">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
       +'<span class="tag '+tagCat(cat)+'">'+cat+'</span>'
       +'<span style="font-size:11px;color:rgba(255,255,255,0.35)">'+cp+'%</span>'
