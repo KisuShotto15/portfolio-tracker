@@ -38,7 +38,7 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
-  dashGoal:0, projectionReturn:10,
+  dashGoal:0, projectionReturn:10, projectionContrib:null,
   categoryBudgets:{}
 };
 var mChart=null, cChart=null, eChart=null, perfChart=null, undoStack=[], redoStack=[];
@@ -599,41 +599,57 @@ function renderProjection(){
   if(!phdr||!pcanvas) return;
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   var current=snaps.length>0?snaps[snaps.length-1].total:getTotalBalance();
-  var contrib=getAvgMonthlyContribution();
+  var baseContrib=getAvgMonthlyContribution();
+  var contrib=S.projectionContrib!==null&&S.projectionContrib!==undefined?S.projectionContrib:baseContrib;
   var annRet=S.projectionReturn||10;
   var moRet=annRet/100/12;
+  var isOverride=S.projectionContrib!==null&&S.projectionContrib!==undefined;
+
+  // Dataset 1: projected with return
   var projected=[current];
   for(var i=0;i<24;i++) projected.push(parseFloat((projected[projected.length-1]*(1+moRet)+contrib).toFixed(2)));
+  // Dataset 2: zero-return baseline (pure savings)
+  var baseline=[current];
+  for(var i=0;i<24;i++) baseline.push(parseFloat((baseline[baseline.length-1]+contrib).toFixed(2)));
+
   var now=new Date(); var labels=['Now'];
   for(var j=1;j<=24;j++){ var dd=new Date(now.getFullYear(),now.getMonth()+j,1); labels.push(dd.toLocaleString('en',{month:'short',year:'2-digit'})); }
-  phdr.innerHTML='<div class="cleg" style="margin-bottom:.5rem">Projection (24 months)</div>'
-    +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;font-size:13px">'
-    +'<span style="color:var(--color-text-secondary)">Monthly contrib: <strong style="color:#fff">'+fmtUSD(contrib)+'</strong></span>'
-    +'<span style="color:var(--color-text-secondary)">Annual return: <input type="number" id="proj-return" value="'+annRet+'" min="0" max="500" style="width:48px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:2px 6px;color:#fff;font-size:13px;margin:0 3px" onchange="updateProjectionChart()"/>%</span>'
-    +'</div>';
+
+  var datasets=[
+    {label:'Projected',data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true},
+    {label:'Savings only',data:baseline,borderColor:'#60A5FA',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],pointRadius:0,pointHitRadius:15,tension:0.4}
+  ];
+  // Dataset 3: goal line
+  if(S.dashGoal>0) datasets.push({label:'Goal',data:Array(25).fill(S.dashGoal),borderColor:'#EF9F27',backgroundColor:'transparent',borderWidth:1,borderDash:[6,3],pointRadius:0,pointHitRadius:0,tension:0});
+
   var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
-  pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':'';
+
+  phdr.innerHTML='<div class="cleg" style="margin-bottom:.5rem">Projection (24 months)</div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:.6rem;font-size:13px">'
+    +'<span style="color:var(--color-text-secondary)">Monthly contrib: <input type="number" id="proj-contrib" value="'+parseFloat(contrib.toFixed(2))+'" min="0" step="1" style="width:72px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:2px 6px;color:#fff;font-size:13px;margin:0 3px" onchange="window.updateProjContrib(this.value)"/>'+(isOverride?'<span style="cursor:pointer;color:rgba(255,255,255,0.32);font-size:11px;margin-left:2px" onclick="window.resetProjContrib()" title="Reset to auto">↺ auto ('+fmtUSD(baseContrib)+')</span>':'')+'</span>'
+    +'<span style="color:var(--color-text-secondary)">Annual return: <input type="number" id="proj-return" value="'+annRet+'" min="0" max="500" style="width:48px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:2px 6px;color:#fff;font-size:13px;margin:0 3px" onchange="updateProjectionChart()"/>%</span>'
+    +'</div>'
+    +'<div style="display:flex;gap:12px;font-size:11px;margin-bottom:.5rem;color:var(--color-text-secondary)">'
+    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Projected</span>'
+    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#60A5FA;display:inline-block;opacity:.7"></span>Savings only</span>'
+    +(S.dashGoal>0?'<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#EF9F27;display:inline-block"></span>Goal '+fmtUSD(S.dashGoal)+'</span>':'')
+    +'</div>';
+  pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':atTarget===-1&&S.dashGoal>0?'<div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:6px">Goal '+fmtUSD(S.dashGoal)+' not reached in 24 months at this rate</div>':'';
+
   if(window.projChart){ window.projChart.destroy(); window.projChart=null; }
-  window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:[{data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true,borderDash:[5,4]}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
+  window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+    if(ctx.dataset.label==='Goal') return null;
+    return ctx.dataset.label+': '+fmtUSD(ctx.raw);
+  }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
 }
 
 function updateProjectionChart(){
   var inp=document.getElementById('proj-return'); if(!inp) return;
-  var annRet=parseFloat(inp.value)||10;
-  S.projectionReturn=annRet; save();
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  var current=snaps.length>0?snaps[snaps.length-1].total:getTotalBalance();
-  var contrib=getAvgMonthlyContribution();
-  var moRet=annRet/100/12;
-  var projected=[current];
-  for(var i=0;i<24;i++) projected.push(parseFloat((projected[projected.length-1]*(1+moRet)+contrib).toFixed(2)));
-  if(window.projChart){ window.projChart.data.datasets[0].data=projected; window.projChart.update(); }
-  var pftr=document.getElementById('proj-footer'); if(pftr){
-    var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
-    pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':'';
-  }
+  S.projectionReturn=parseFloat(inp.value)||10; save(); renderProjection();
 }
 window.updateProjectionChart=updateProjectionChart;
+window.updateProjContrib=function(val){ var v=parseFloat(val); S.projectionContrib=(isNaN(v)||v<0)?null:v; save(); renderProjection(); };
+window.resetProjContrib=function(){ S.projectionContrib=null; save(); renderProjection(); };
 
 function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; save(); renderSummary(); } }
 
