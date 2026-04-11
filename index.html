@@ -97,13 +97,6 @@
         <div class="cleg" id="mc-leg"></div>
         <div style="position:relative;height:200px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
       </div>
-      <div class="cw">
-        <div class="cleg">Spending by category</div>
-        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-          <div style="position:relative;height:180px;width:180px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
-          <div id="cat-leg" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px"></div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -130,6 +123,13 @@
 
   <div id="page-budget" class="page">
     <div id="bud-wrap"></div>
+    <div class="fc" style="margin-top:12px">
+      <div class="cleg">Spending by category</div>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:.875rem">
+        <div style="position:relative;height:180px;width:180px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
+        <div id="cat-leg" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px"></div>
+      </div>
+    </div>
   </div>
 
   <div id="page-wallets" class="page">

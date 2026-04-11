@@ -665,7 +665,7 @@ function renderSummary(){
   renderSnapshotPnL();
   renderGoal();
   renderProjection();
-  renderEquityChart(); renderMonthlyChart(); renderCatChart(month);
+  renderEquityChart(); renderMonthlyChart();
 }
 
 function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
@@ -804,7 +804,6 @@ function renderBudget(){
   html+='<div class="kpi-strip" style="margin-bottom:12px">'
     +kpi('Income',fmtUSD(income),month,'#5DCAA5')
     +kpi('Spent',fmtUSD(spent),pct+'% of budget',pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
-    +kpi('Net',(net>=0?'+':'')+fmtUSD(net),'income − expenses',net>=0?'#5DCAA5':'#E24B4A')
     +kpi('Savings Rate',savRate+'%',savRate>=20?'on track':savRate>=10?'could be higher':'low',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')
     +kpi('Remaining',fmtUSD(Math.abs(remaining)),remaining>=0?'left in budget':'over budget',remaining>=0?'#5DCAA5':'#E24B4A')
     +'</div>';
@@ -880,6 +879,7 @@ function renderBudget(){
   html+='</div>';
 
   document.getElementById('bud-wrap').innerHTML=html;
+  renderCatChart(month);
 }
 
 function saveManualWallet(){
