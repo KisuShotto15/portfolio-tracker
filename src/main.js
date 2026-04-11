@@ -801,7 +801,7 @@ function renderBudget(){
     +'</div>';
 
   // KPI strip
-  html+='<div class="kpi-strip" style="margin-bottom:1.1rem">'
+  html+='<div class="kpi-strip kpi-strip-4" style="margin-bottom:1.1rem">'
     +kpi('Income',fmtUSD(income),month,'#5DCAA5')
     +kpi('Spent',fmtUSD(spent),pct+'% of budget',pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
     +kpi('Savings Rate',savRate+'%',savRate>=20?'on track':savRate>=10?'could be higher':'low',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')

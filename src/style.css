@@ -135,6 +135,7 @@ tr.date-sep:first-child td{padding-top:0}
 
 /* ── Dashboard KPI strip ─────────────────────────────────────────────── */
 .kpi-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:0}
+.kpi-strip-4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .kpi-card{background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.09);border-radius:18px;padding:1.25rem 1.4rem}
 .kpi-lbl{font-size:11px;color:rgba(255,255,255,0.38);font-weight:400;margin-bottom:8px}
 .kpi-val{font-size:22px;font-weight:700;margin-bottom:3px;line-height:1.1;letter-spacing:-0.3px}
@@ -155,7 +156,7 @@ tr.date-sep:first-child td{padding-top:0}
 .pnl-profit{font-weight:700;font-size:17px;min-width:80px;text-align:right;flex-shrink:0}
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media(max-width:768px){
-  .kpi-strip{grid-template-columns:repeat(2,1fr)}
+  .kpi-strip,.kpi-strip-4{grid-template-columns:repeat(2,1fr)}
   .dash-row-2{grid-template-columns:1fr}
   .dash-chart-row{grid-template-columns:1fr}
 }
