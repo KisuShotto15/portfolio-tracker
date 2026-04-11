@@ -7,23 +7,24 @@ var DATA_TOKEN   = '151322';
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
-  { keywords:['income'],                                                                    type:'Credit', category:'Income' },
-  { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto'],  type:'Debit',  category:'Groceries', currency:'VES' },
-  { keywords:['remesa'],                                                                    type:'Credit', wallet:'Zelle' },
-  { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv'],             type:'Debit',  category:'Home',      currency:'VES' },
-  { keywords:['enviado'],                                                                   type:'Debit',  category:'Support' },
-  { keywords:['uber','taxi','metro','buseta','gasolina','vamos','yummy','ridery'],           type:'Debit',  category:'Transport', currency:'USD' },
-  { keywords:['farmacia','clinica','doctor','medicina'],                                    type:'Debit',  category:'Health',    currency:'VES' },
-  { keywords:['netflix','spotify','amazon','apple','google'],                               type:'Debit',  category:'Discretionary' },
-  { keywords:['bybit','circle','crcl','invertido'],                                        type:'Debit',  category:'Investments' },
-  { keywords:['ahorro','deployed'],                                                         type:'Debit',  category:'Savings' },
+  { keywords:['income','salario','cobro','pago','freelance','consulting','dividendo','ganancia','utilidad'],                                                                                                       type:'Credit', category:'Income' },
+  { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto','bodega','mercado','automercado','central','polleria','panaderia','carneceria','charcuteria','verduras','frutas','lacteos','huevos','harina','arroz','pasta','embutidos','licoreria'], type:'Debit', category:'Groceries', currency:'VES' },
+  { keywords:['remesa'],                                                                                                                                                                                           type:'Credit', wallet:'Zelle' },
+  { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv','netuno','simpletv','directv','condominio','alquiler','agua','gas','plomero','electricista','pintura','mantenimiento','ferreteria','homemax','reparacion'], type:'Debit', category:'Home', currency:'VES' },
+  { keywords:['enviado','transferencia','familia','apoyo','ayuda','envio','giro'],                                                                                                                                 type:'Debit',  category:'Support' },
+  { keywords:['uber','taxi','metro','buseta','gasolina','vamos','busvero','mototaxi','encomienda','mudanza','estacionamiento','peaje'],                                                                             type:'Debit',  category:'Transport', currency:'USD' },
+  { keywords:['farmacia','clinica','doctor','medicina','farmatodo','locatel','farmahorro','laboratorio','examen','consulta','dentista','optometro','lentes','analisis','ecografia','rayos','seguro','bioxcell'],    type:'Debit',  category:'Health',    currency:'VES' },
+  { keywords:['netflix','spotify','amazon','apple','google','hbo','disney','paramount','youtube','steam','playstation','xbox','ropa','calzado','salon','peluqueria','barbero','regalo','bar','cine','gym','gimnasio'], type:'Debit', category:'Discretionary' },
+  { keywords:['yummy','ridery','almuerzo','cena','desayuno','cafe','restaurante','arepera','pizzeria','hamburgesa','sushi','helado','postre'],                                                                      type:'Debit',  category:'Eating Out' },
+  { keywords:['bybit','binance','okx','btc','eth','usdt','crypto','bitcoin','trezor','fondos','acciones','circle','crcl','invertido'],                                                                             type:'Debit',  category:'Investments' },
+  { keywords:['ahorro','deployed','reserva','guardado','emergencia'],                                                                                                                                             type:'Debit',  category:'Savings' },
 ];
 
-var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
-var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Support','Investments','Savings'];
-var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
+var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
+var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
+var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8','Eating Out':'#FB923C',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
-  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Zelle:'#a78bfa',Other:'#FB923C'};
+  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Zelle:'#a78bfa',Other:'#6B7280'};
 
 var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
@@ -44,7 +45,7 @@ var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
-var GROUP_LIFESTYLE=['Discretionary','Support'];
+var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
 var syncTimer=null, syncPending=false;
 
@@ -428,7 +429,7 @@ function emptyState(title, sub){
 function localToday(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB',Support:'tA',Investments:'tA',Savings:'tG',
+function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB','Eating Out':'tA',Support:'tA',Investments:'tA',Savings:'tG',
   Services:'tP','Help others':'tA',Emergency:'tR',Zelle:'tZ',Other:'tX'}; return m[cat]||'tX'; }
 function fmtCat(cat){ return cat||'—'; }
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
@@ -772,7 +773,7 @@ function saveCategoryBudget(cat,val){
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
 window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
 function renderBudget(){
-  var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Support'];
+  var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
   var months=getMonths();
   if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
   var month=_budMonth;
