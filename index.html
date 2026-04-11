@@ -118,7 +118,7 @@
       <input type="search" id="tf-search" placeholder="Search transactions..." oninput="renderTx()" style="min-width:180px"/>
       <select id="tf-type" onchange="renderTx()"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div class="frow-break"></div>
-      <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Support</option><option>Investments</option><option>Savings</option></select>
+      <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
       <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
       <input type="month" id="tf-month" onchange="renderTx()"/>
       <div class="frow-break"></div>
@@ -323,7 +323,7 @@
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Support</option><option>Investments</option><option>Savings</option></select></div>
+    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES to USD</option></select></div>
     <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" tabindex="6" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
   </div>
