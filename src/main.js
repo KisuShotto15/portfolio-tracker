@@ -867,8 +867,8 @@ function renderBudget(){
   var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
 
-  function kpi(label,val,sub,color){
-    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+'</div></div>';
+  function kpi(label,val,color){
+    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div></div>';
   }
 
   var html='';
@@ -876,17 +876,17 @@ function renderBudget(){
   // Header row
   html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
     +'<div style="font-size:18px;font-weight:600;letter-spacing:-0.3px">Budget</div>'
-    +'<select onchange="window._budMonthSel(this.value)" style="padding:5px 12px;border:0.5px solid rgba(255,255,255,0.1);border-radius:20px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px">'
+    +'<select onchange="window._budMonthSel(this.value)" style="padding:5px 14px;border:0.5px solid rgba(255,255,255,0.1);border-radius:20px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px;cursor:pointer;color-scheme:dark">'
     +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+m+'</option>'; }).join('')
     +'</select>'
     +'</div>';
 
   // KPI strip
   html+='<div class="kpi-strip kpi-strip-4" style="margin-bottom:1.1rem">'
-    +kpi('Income',fmtUSD(income),month,'#5DCAA5')
-    +kpi('Spent',fmtUSD(spent),pct+'% of budget',pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
-    +kpi('Savings Rate',savRate+'%',savRate>=20?'on track':savRate>=10?'could be higher':'low',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')
-    +kpi('Remaining',fmtUSD(Math.abs(remaining)),remaining>=0?'left in budget':'over budget',remaining>=0?'#5DCAA5':'#E24B4A')
+    +kpi('Income',fmtUSD(income),'#5DCAA5')
+    +kpi('Spent',fmtUSD(spent),pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
+    +kpi('Savings Rate',savRate+'%',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')
+    +kpi('Remaining',fmtUSD(Math.abs(remaining)),remaining>=0?'#5DCAA5':'#E24B4A')
     +'</div>';
 
   // Total budget bar
