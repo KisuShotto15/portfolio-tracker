@@ -41,7 +41,7 @@ var S = {
   dashGoal:0, projectionReturn:10,
   categoryBudgets:{}
 };
-var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
+var mChart=null, cChart=null, eChart=null, perfChart=null, undoStack=[], redoStack=[];
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
@@ -665,7 +665,7 @@ function renderSummary(){
   renderSnapshotPnL();
   renderGoal();
   renderProjection();
-  renderEquityChart(); renderMonthlyChart();
+  renderEquityChart(); renderMonthlyChart(); renderPerformanceChart();
 }
 
 function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
@@ -679,6 +679,71 @@ function renderMonthlyChart(){
   document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#34D399;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#F87171;display:inline-block"></span>Expenses</span>';
   if(mChart){ mChart.destroy(); mChart=null; }
   mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Expenses',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
+}
+
+// ── Monthly Performance Chart ──────────────────────────────────────────────
+function computeMonthlyPerformance(){
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(snaps.length<2) return [];
+  // Last snapshot per month
+  var byMonth={};
+  snaps.forEach(function(s){ byMonth[s.date.slice(0,7)]=s.total; });
+  var months=Object.keys(byMonth).sort();
+  if(months.length<2) return [];
+  var result=[];
+  for(var i=1;i<months.length;i++){
+    var sc=byMonth[months[i-1]], ec=byMonth[months[i]];
+    var profit=parseFloat((ec-sc).toFixed(2));
+    var monthlyReturn=sc>0?parseFloat((profit/sc*100).toFixed(2)):0;
+    var avg=(sc+ec)/2;
+    var efficiency=avg>0?parseFloat((profit/avg*100).toFixed(2)):0;
+    result.push({month:months[i],startingCapital:sc,endingCapital:ec,profit:profit,monthlyReturn:monthlyReturn,capitalEfficiency:efficiency});
+  }
+  return result;
+}
+function rollingAvg3(arr){
+  return arr.map(function(_,i){
+    var sl=arr.slice(Math.max(0,i-2),i+1);
+    return parseFloat((sl.reduce(function(s,v){ return s+v; },0)/sl.length).toFixed(2));
+  });
+}
+function renderPerformanceChart(){
+  var el=document.getElementById('chart-performance');
+  var wrap=document.getElementById('perf-wrap');
+  if(!el||!wrap) return;
+  var data=computeMonthlyPerformance();
+  if(data.length<1){
+    if(perfChart){ perfChart.destroy(); perfChart=null; }
+    el.style.display='none';
+    wrap.innerHTML='<div style="color:var(--color-text-secondary);font-size:13px;padding:2.5rem 0;text-align:center">Not enough data yet — need at least 2 months of snapshots</div>';
+    return;
+  }
+  el.style.display='';
+  wrap.innerHTML='';
+  var labels=data.map(function(d){ var p=d.month.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
+  var returns=data.map(function(d){ return d.monthlyReturn; });
+  var efficiencies=data.map(function(d){ return d.capitalEfficiency; });
+  var rolling=rollingAvg3(efficiencies);
+  var barBg=returns.map(function(v){ return v>=0?'rgba(93,202,165,0.7)':'rgba(232,75,74,0.7)'; });
+  var barBorder=returns.map(function(v){ return v>=0?'#5DCAA5':'#E24B4A'; });
+  if(perfChart){ perfChart.destroy(); perfChart=null; }
+  perfChart=new Chart(el,{type:'bar',data:{labels:labels,datasets:[
+    {type:'bar',label:'Monthly Return',data:returns,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,borderRadius:4,yAxisID:'yL',order:2},
+    {type:'line',label:'Capital Efficiency',data:efficiencies,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,yAxisID:'yR',order:1},
+    {type:'line',label:'3-Month Avg',data:rolling,borderColor:'#60A5FA',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],pointRadius:2,pointHitRadius:15,pointBackgroundColor:'#60A5FA',tension:0.3,yAxisID:'yR',order:0}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{
+    title:function(items){ return data[items[0].dataIndex].month; },
+    label:function(ctx){
+      var d=data[ctx.dataIndex];
+      if(ctx.dataset.label==='Monthly Return') return ['Profit: '+fmtUSD(d.profit),'Return: '+d.monthlyReturn+'%','Efficiency: '+d.capitalEfficiency+'%','Avg Capital: '+fmtUSD((d.startingCapital+d.endingCapital)/2)];
+      if(ctx.dataset.label==='3-Month Avg') return '3-mo Avg: '+ctx.parsed.y+'%';
+      return null;
+    }
+  }}},scales:{
+    x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},
+    yL:{type:'linear',position:'left',grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return v+'%'; }},title:{display:true,text:'Monthly Return (%)',color:'rgba(255,255,255,0.25)',font:{size:10}}},
+    yR:{type:'linear',position:'right',grid:{drawOnChartArea:false},ticks:{color:'#555',font:{size:11},callback:function(v){ return v+'%'; }},title:{display:true,text:'Capital Efficiency (%)',color:'rgba(255,255,255,0.25)',font:{size:10}}}
+  }}});
 }
 
 function renderCatChart(month){

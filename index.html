@@ -91,11 +91,24 @@
         <div style="position:relative;height:180px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
       </div>
     </div>
-    <!-- Monthly bar + Category donut side by side -->
+    <!-- Monthly bar + Performance chart -->
     <div class="dash-chart-row">
       <div class="cw">
         <div class="cleg" id="mc-leg"></div>
         <div style="position:relative;height:200px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="cw">
+        <div class="cleg" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span>Monthly Performance</span>
+          <div style="display:flex;align-items:center;gap:10px;font-size:11px;color:var(--color-text-secondary)">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#5DCAA5;display:inline-block"></span>+ Return</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A;display:inline-block"></span>− Return</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Efficiency</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#60A5FA;display:inline-block;opacity:0.7"></span>3-mo avg</span>
+          </div>
+        </div>
+        <div id="perf-wrap"></div>
+        <div style="position:relative;height:200px;overflow:hidden"><canvas id="chart-performance"></canvas></div>
       </div>
     </div>
   </div>
