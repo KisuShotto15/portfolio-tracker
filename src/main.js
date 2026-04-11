@@ -685,7 +685,7 @@ function renderCatChart(month){
   var map={};
   var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'&&c!=='Investments'; });
   S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&DONUT_CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
-  var cats=Object.keys(map); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
+  var cats=Object.keys(map).sort(function(a,b){ return map[b]-map[a]; }); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
   var colors=cats.map(function(c){ return CCOLORS[c]||'#888'; });
   var leg=document.getElementById('cat-leg');
   if(!cats.length){
