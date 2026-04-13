@@ -2,3 +2,11 @@ node_modules
 dist
 .env
 .env.local
+
+# Personal notes / reference docs
+*.pdf
+*.png
+CLAUDE\ (1).md
+13\ instrucciones\ para\ ahorrar\ tokens\ en\ Claude\ y\ Claude\ Code.md
+CONTEXT.md
+SESSION_CONTEXT.md

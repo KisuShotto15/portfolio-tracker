@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && cp p2p-monitor.html dist/",
+    "build": "vite build && cp apps/p2p-monitor.html dist/",
     "preview": "vite preview"
   },
   "devDependencies": {
