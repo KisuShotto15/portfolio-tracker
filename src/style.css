@@ -2,7 +2,9 @@
 body{font-family:var(--font-sans,system-ui);background:radial-gradient(ellipse 80% 60% at 15% 5%,rgba(155,112,240,0.13) 0%,transparent 55%),radial-gradient(ellipse 55% 45% at 88% 90%,rgba(29,158,117,0.08) 0%,transparent 55%),#0c0c14;background-attachment:fixed;color:var(--color-text-primary);font-size:15px;line-height:1.5}
 .app{display:flex;min-height:100vh}
 .sb{width:200px;min-width:200px;background:rgba(12,12,20,0.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-right:0.5px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;padding:.875rem 0;position:sticky;top:0;height:100vh;overflow-y:auto}
-.sb-logo{padding:0 1rem .875rem;font-size:22px;font-weight:500;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:.5rem;text-align:center}
+.sb-logo{padding:0 1rem .875rem;font-size:22px;font-weight:500;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:.5rem;text-align:center;position:relative}
+.hub-back{position:absolute;left:1rem;top:50%;transform:translateY(-60%);display:inline-flex;align-items:center;color:rgba(255,255,255,0.35);text-decoration:none;transition:color .15s}
+.hub-back:hover{color:rgba(255,255,255,0.75)}
 .sb-sync{padding:.5rem 1rem;font-size:11px;display:flex;align-items:center;gap:5px;color:var(--color-text-secondary)}
 .sync-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .nb{display:flex;align-items:center;gap:11px;padding:12px 1.1rem;cursor:pointer;border:none;background:transparent;color:var(--color-text-secondary);font-size:17px;width:100%;text-align:left}
@@ -79,8 +81,6 @@ tr:hover td{background:rgba(128,128,128,0.08)}
 .hint{font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;line-height:1.6}
 .tool-card{background:rgba(255,255,255,0.055);border:0.5px solid rgba(255,255,255,0.08);border-radius:18px;padding:1.25rem 1rem;margin-bottom:0}
 #page-tools{display:flex;flex-direction:column;gap:1.1rem}
-.hub-back{display:inline-flex;align-items:center;color:rgba(255,255,255,0.35);margin-right:6px;text-decoration:none;transition:color .15s}
-.hub-back:hover{color:rgba(255,255,255,0.75)}
 .tool-title{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:.5rem}
 .tool-card [id$="-cards"]{text-align:center;margin:0 auto;max-width:90%!important}
 .tool-card .field-row{max-width:90%;margin-left:auto;margin-right:auto}
