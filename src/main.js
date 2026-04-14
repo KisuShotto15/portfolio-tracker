@@ -427,6 +427,8 @@ function updateTx(){
 }
 function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); S.portfolioUpdatedAt=Date.now(); save(); renderHoldings(); }
 function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); syncCatOptions(); }
+function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var v=parseFloat(prompt('New balance for '+w.name+':',w.balance)); if(isNaN(v)) return; if(w.receivable){ var delta=v-w.balance; if(delta>0) S.receivableAtLastSnapshot=Math.max(0,(S.receivableAtLastSnapshot||0)); } w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
+window.editManualWalletBal=editManualWalletBal;
 
 function emptyState(title, sub){
   return '<div class="es"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:.25;margin-bottom:.75rem"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg><div class="es-title">'+title+'</div><div class="es-sub">'+sub+'</div></div>';
@@ -1021,7 +1023,7 @@ function renderWallets(){
     var dot=w.receivable?'#9B70F0':'#EF9F27';
     var badge=w.receivable?'<span class="badge-t" style="background:#2d1a4a;color:#9B70F0">por cobrar</span>':'<span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span>';
     var pc=getPendingContrib(); var pendingNote=w.receivable&&pc>0?'<div style="font-size:11px;color:#9B70F0;margin-top:3px">contrib pendiente: '+fmtUSD(pc)+'</div>':'';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+'<button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div>');
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+'<div style="display:flex;gap:6px;margin-top:5px"><button class="btn btns" style="font-size:11px" onclick="editManualWalletBal('+w.id+')">Edit</button><button class="btn btnd" style="font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div></div>');
   });
   grid.innerHTML=cards.join('');
   syncCatOptions();
