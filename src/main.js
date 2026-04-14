@@ -1,7 +1,7 @@
 import './style.css';
 
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
-var PROXY        = 'https://fintrackerbinanceapi.efrenalejandro2010.workers.dev';
+var PROXY        = 'https://portfolio-balance-worker.efrenalejandro2010.workers.dev';
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
 var DATA_TOKEN   = '151322';
 // Autofill rules: matched against the first word of the note (case-insensitive)
