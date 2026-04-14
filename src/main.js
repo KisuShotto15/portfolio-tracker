@@ -201,8 +201,8 @@ async function fetchBinanceBalance(){
   var key=await crypto.subtle.importKey('raw',new TextEncoder().encode(S.binanceSecret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   var sigBuf=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(qs));
   var sig=Array.from(new Uint8Array(sigBuf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  var r=await fetch('https://api.binance.com/api/v3/account?'+qs+'&signature='+sig,{headers:{'X-MBX-APIKEY':S.binanceKey}});
-  if(!r.ok){ var e=await r.text(); throw new Error('Binance '+r.status+': '+e.slice(0,120)); }
+  var r=await fetch('https://api.binance.com/api/v3/account?'+qs+'&signature='+sig,{headers:{'X-MBX-APIKEY':S.binanceKey}}).catch(function(e){ throw new Error('Network/CORS error: '+e.message+' — check VPN (must be Japan) and browser console'); });
+  if(!r.ok){ var e=await r.text(); throw new Error('Binance HTTP '+r.status+': '+e.slice(0,120)); }
   var data=await r.json(); if(data.code) throw new Error(data.msg||JSON.stringify(data));
   var usdt=Array.isArray(data.balances)?data.balances.find(function(b){return b.asset==='USDT';}):null;
   S.binanceBalance=parseFloat(((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0):0)).toFixed(2));
