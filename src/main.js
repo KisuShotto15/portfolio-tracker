@@ -1024,6 +1024,7 @@ function renderWallets(){
     cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+'<button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div>');
   });
   grid.innerHTML=cards.join('');
+  syncCatOptions();
 }
 
 function addHolding(){
