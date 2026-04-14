@@ -259,7 +259,11 @@
   <div id="page-settings" class="page">
     <div class="fc">
       <h3>Binance API</h3>
-      <p class="hint">Credentials stored in Cloudflare Worker env vars (BINANCE_KEY, BINANCE_SECRET).</p>
+      <p class="hint">Keys stored locally in browser. Requests go directly to Binance using your VPN.</p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+        <input id="bn-key" type="password" placeholder="API Key" oninput="S.binanceKey=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
+        <input id="bn-secret" type="password" placeholder="API Secret" oninput="S.binanceSecret=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
+      </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn btnp" onclick="testBinance()">Test connection</button>
         <button class="btn" style="color:#E24B4A" onclick="clearBinance()">Reset</button>

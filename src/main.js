@@ -30,6 +30,7 @@ var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
   budgetTotal:600,
+  binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bybitBalance:null,   bybitUpdated:null,
   okxBalance:null,     okxUpdated:null,
@@ -191,10 +192,16 @@ function showManualRate(){
 function updateRateUI(){ if(!S.rate) return; document.getElementById('rate-display').textContent=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD'; document.getElementById('rate-date').textContent=S.rateDate||''; }
 
 async function fetchBinanceBalance(){
-  var r=await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'}});
-  if(!r.ok){ var e=await r.text(); throw new Error('Binance '+r.status+': '+e); }
-  var data=await r.json(); if(data.error) throw new Error(data.error);
-  var usdt=Array.isArray(data)?data.find(function(b){ return b.asset==='USDT'; }):null;
+  if(!S.binanceKey||!S.binanceSecret) throw new Error('API key/secret not configured');
+  var ts=Date.now();
+  var qs='timestamp='+ts;
+  var key=await crypto.subtle.importKey('raw',new TextEncoder().encode(S.binanceSecret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  var sigBuf=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(qs));
+  var sig=Array.from(new Uint8Array(sigBuf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  var r=await fetch('https://api.binance.com/api/v3/account?'+qs+'&signature='+sig,{headers:{'X-MBX-APIKEY':S.binanceKey}});
+  if(!r.ok){ var e=await r.text(); throw new Error('Binance '+r.status+': '+e.slice(0,120)); }
+  var data=await r.json(); if(data.code) throw new Error(data.msg||JSON.stringify(data));
+  var usdt=Array.isArray(data.balances)?data.balances.find(function(b){return b.asset==='USDT';}):null;
   S.binanceBalance=parseFloat(((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0):0)).toFixed(2));
   S.binanceUpdated=new Date().toLocaleTimeString('en-US'); S.binanceFetchedAt=Date.now(); save(); return S.binanceBalance;
 }
@@ -1282,6 +1289,8 @@ async function init(){
   populateWalletSelects(); updateRateUI();
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
+  if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
+  if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
