@@ -6,6 +6,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const secret = process.env.API_SECRET;
+  if (secret && req.headers['x-api-secret'] !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const r = await fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

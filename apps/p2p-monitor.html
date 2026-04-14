@@ -631,6 +631,7 @@ var CFG = {
 };
 
 var PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/p2p-search';
+var VERCEL_SECRET = 'ptk-2025-kisu';
 
 // ── Estado ───────────────────────────────────────────
 var ST = {
@@ -663,7 +664,7 @@ async function fetchTier(transAmount, maxPages) {
     };
     var r = await fetch(PROXY, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Api-Secret': VERCEL_SECRET },
       body: JSON.stringify(body)
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);

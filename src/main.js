@@ -3,6 +3,7 @@ import './style.css';
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://portfolio-balance-worker.efrenalejandro2010.workers.dev';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance'; // Vercel function (non-blocked IPs)
+var VERCEL_SECRET = 'ptk-2025-kisu'; // must match API_SECRET env var in Vercel
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
 var DATA_TOKEN   = '151322';
 // Autofill rules: matched against the first word of the note (case-insensitive)
@@ -197,7 +198,7 @@ async function fetchBinanceBalance(){
   if(keyEl&&keyEl.value) S.binanceKey=keyEl.value;
   if(secEl&&secEl.value) S.binanceSecret=secEl.value;
   if(!S.binanceKey||!S.binanceSecret) throw new Error('API key/secret not configured');
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:S.binanceKey,secret:S.binanceSecret})});
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({key:S.binanceKey,secret:S.binanceSecret})});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;

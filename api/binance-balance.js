@@ -3,10 +3,15 @@ import crypto from 'node:crypto';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Secret');
 
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const apiSecret = process.env.API_SECRET;
+  if (apiSecret && req.headers['x-api-secret'] !== apiSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const { key, secret } = req.body || {};
   if (!key || !secret) return res.status(400).json({ error: 'key and secret required' });
