@@ -568,7 +568,7 @@ input:focus {
       </div>
 
       <!-- Config bot -->
-      <div class="cfg-row"><span>Worker URL</span><input type="text" id="cfg-bot-url" value="https://p2p-bot-worker.efrenalejandro2010.workers.dev" style="width:200px;font-size:14px"></div>
+      <div class="cfg-row"><span>Worker URL</span><input type="text" id="cfg-bot-url" value="https://portfolio-tracker-psi-hazel.vercel.app/api/binance-bot" style="width:200px;font-size:14px"></div>
       <div class="cfg-row"><span>Bot Token</span><input type="password" id="cfg-bot-token" placeholder="mibot2024"></div>
       <div class="cfg-row"><span>Ad Number</span><input type="text" id="cfg-bot-adno" placeholder="12855611733778165760" style="font-size:14px"></div>
       <div class="cfg-row"><span>Incremento (Bs)</span><input type="number" id="cfg-bot-inc" value="0.001" min="0.001" step="0.001"></div>
@@ -630,7 +630,7 @@ var CFG = {
   commission:  0.0       // Comisión Binance por anuncio (%)
 };
 
-var PROXY = 'https://p2p-binance-proxy.efrenalejandro2010.workers.dev';
+var PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/p2p-search';
 
 // ── Estado ───────────────────────────────────────────
 var ST = {
@@ -1084,7 +1084,7 @@ var BOT = {
 };
 
 var BOT_CFG = {
-  url: 'https://p2p-bot-worker.efrenalejandro2010.workers.dev',
+  url: 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-bot',
   token: '',
   adNo: '',
   increment: 0.001,
@@ -1139,10 +1139,10 @@ function botUpdateCeiling() {
 }
 
 async function botCallWorker(path, body) {
-  var r = await fetch(BOT_CFG.url + path, {
+  var r = await fetch(BOT_CFG.url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Bot-Token': BOT_CFG.token },
-    body: JSON.stringify(body || {})
+    body: JSON.stringify({ path: path, params: body || {} })
   });
   if (!r.ok) throw new Error('Worker ' + r.status);
   return r.json();
