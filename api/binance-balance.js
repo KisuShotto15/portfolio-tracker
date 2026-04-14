@@ -12,14 +12,15 @@ export default async function handler(req, res) {
   if (!key || !secret) return res.status(400).json({ error: 'key and secret required' });
 
   const ts = Date.now();
-  const qs = `timestamp=${ts}`;
+  const qs = `asset=USDT&timestamp=${ts}`;
   const sig = crypto.createHmac('sha256', secret).update(qs).digest('hex');
 
-  const r = await fetch(`https://api.binance.com/api/v3/account?${qs}&signature=${sig}`, {
+  const r = await fetch(`https://api.binance.com/sapi/v1/asset/get-funding-asset?${qs}&signature=${sig}`, {
+    method: 'POST',
     headers: { 'X-MBX-APIKEY': key },
   });
   const data = await r.json();
   if (!r.ok || data.code) return res.status(502).json({ error: data.msg || JSON.stringify(data) });
 
-  res.json(data.balances || []);
+  res.json(Array.isArray(data) ? data : []);
 }
