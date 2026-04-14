@@ -825,9 +825,10 @@ function renderEquityChart(){
 
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
-  var manual=S.manualWallets.reduce(function(s,w){ return s+calcTrackerBal(w.name); },0);
+  var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+calcTrackerBal(w.name); },0);
+  var manualBal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var zelle=calcTrackerBal('Zelle');
-  return parseFloat((api+manual+zelle).toFixed(2));
+  return parseFloat((api+trackerBal+manualBal+zelle).toFixed(2));
 }
 
 function recordSnapshot(){
