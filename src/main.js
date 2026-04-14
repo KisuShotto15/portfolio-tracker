@@ -2,6 +2,7 @@ import './style.css';
 
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://portfolio-balance-worker.efrenalejandro2010.workers.dev';
+var BINANCE_PROXY = 'https://portfolio-tracker-kisu.vercel.app/api/binance-balance'; // Vercel function (non-blocked IPs)
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
 var DATA_TOKEN   = '151322';
 // Autofill rules: matched against the first word of the note (case-insensitive)
@@ -196,15 +197,10 @@ async function fetchBinanceBalance(){
   if(keyEl&&keyEl.value) S.binanceKey=keyEl.value;
   if(secEl&&secEl.value) S.binanceSecret=secEl.value;
   if(!S.binanceKey||!S.binanceSecret) throw new Error('API key/secret not configured');
-  var ts=Date.now();
-  var qs='timestamp='+ts;
-  var key=await crypto.subtle.importKey('raw',new TextEncoder().encode(S.binanceSecret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
-  var sigBuf=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(qs));
-  var sig=Array.from(new Uint8Array(sigBuf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  var r=await fetch('https://api.binance.com/api/v3/account?'+qs+'&signature='+sig,{headers:{'X-MBX-APIKEY':S.binanceKey}}).catch(function(e){ throw new Error('Network/CORS error: '+e.message+' — check VPN (must be Japan) and browser console'); });
-  if(!r.ok){ var e=await r.text(); throw new Error('Binance HTTP '+r.status+': '+e.slice(0,120)); }
-  var data=await r.json(); if(data.code) throw new Error(data.msg||JSON.stringify(data));
-  var usdt=Array.isArray(data.balances)?data.balances.find(function(b){return b.asset==='USDT';}):null;
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:S.binanceKey,secret:S.binanceSecret})});
+  if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
+  var data=await r.json(); if(data.error) throw new Error(data.error);
+  var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
   S.binanceBalance=parseFloat(((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0):0)).toFixed(2));
   S.binanceUpdated=new Date().toLocaleTimeString('en-US'); S.binanceFetchedAt=Date.now(); save(); return S.binanceBalance;
 }
