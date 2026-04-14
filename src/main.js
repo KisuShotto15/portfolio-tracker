@@ -38,6 +38,7 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
+  pendingContrib:0,
   dashGoal:0, projectionReturn:10, projectionContrib:null,
   categoryBudgets:{}
 };
@@ -349,8 +350,12 @@ function addTx(){
   if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
   snapshot();
   S.transactions.push({id:Date.now(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false});
+  if(cat==='Cobrar'&&type==='Credit'){
+    var rw=S.manualWallets.find(function(w){ return w.receivable; });
+    if(rw){ rw.balance=parseFloat(Math.max(0,rw.balance-amtUSD).toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); }
+  }
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
-  save(); renderTx(); renderSummary();
+  save(); renderTx(); renderSummary(); renderWallets();
   closeTxForm();
 }
 
@@ -421,7 +426,7 @@ function updateTx(){
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
 function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); S.portfolioUpdatedAt=Date.now(); save(); renderHoldings(); }
-function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
+function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); syncCatOptions(); }
 
 function emptyState(title, sub){
   return '<div class="es"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:.25;margin-bottom:.75rem"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg><div class="es-title">'+title+'</div><div class="es-sub">'+sub+'</div></div>';
@@ -506,7 +511,8 @@ function getSnapshotPnL(){
     var txBetween=S.transactions.filter(function(t){ return t.date>=s1.date&&t.date<=s2.date&&t.category==='Investments'; });
     var invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
     var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:invOut,invIn:invIn,profit:(s2.total-s1.total)+invOut-invIn });
+    var contrib=s2.contrib||0;
+    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:invOut,invIn:invIn,contrib:contrib,profit:(s2.total-s1.total)+invOut-invIn-contrib });
   }
   return results;
 }
@@ -703,17 +709,18 @@ function computeMonthlyPerformance(){
   if(snaps.length<2) return [];
   // Last snapshot per month
   var byMonth={};
-  snaps.forEach(function(s){ byMonth[s.date.slice(0,7)]=s.total; });
+  snaps.forEach(function(s){ byMonth[s.date.slice(0,7)]=s; });
   var months=Object.keys(byMonth).sort();
   if(months.length<2) return [];
   var result=[];
   for(var i=1;i<months.length;i++){
-    var sc=byMonth[months[i-1]], ec=byMonth[months[i]];
-    var profit=parseFloat((ec-sc).toFixed(2));
+    var snapS=byMonth[months[i-1]], snapE=byMonth[months[i]];
+    var sc=snapS.total, ec=snapE.total, contrib=snapE.contrib||0;
+    var profit=parseFloat((ec-sc-contrib).toFixed(2));
     var monthlyReturn=sc>0?parseFloat((profit/sc*100).toFixed(2)):0;
     var avg=(sc+ec)/2;
     var efficiency=avg>0?parseFloat((profit/avg*100).toFixed(2)):0;
-    result.push({month:months[i],startingCapital:sc,endingCapital:ec,profit:profit,monthlyReturn:monthlyReturn,capitalEfficiency:efficiency});
+    result.push({month:months[i],startingCapital:sc,endingCapital:ec,contrib:contrib,profit:profit,monthlyReturn:monthlyReturn,capitalEfficiency:efficiency});
   }
   return result;
 }
@@ -827,15 +834,20 @@ function getTotalBalance(){
 
 function recordSnapshot(){
   var auto=getTotalBalance();
-  var val=parseFloat(prompt('Record portfolio snapshot\n\nAuto-sum from wallets: $'+auto.toFixed(2)+'\n\nEnter total (or leave to use auto-sum):',auto.toFixed(2)));
+  var pending=S.pendingContrib||0;
+  var msg='Record portfolio snapshot\n\nAuto-sum from wallets: $'+auto.toFixed(2);
+  if(pending>0) msg+='\nContrib pendiente (por cobrar): $'+pending.toFixed(2)+' — se descontará del P&L';
+  msg+='\n\nEnter total (or leave to use auto-sum):';
+  var val=parseFloat(prompt(msg,auto.toFixed(2)));
   if(isNaN(val)||val<0) return;
   if(!S.snapshots) S.snapshots=[];
   var today=localToday();
   var existing=S.snapshots.findIndex(function(s){ return s.date===today; });
   if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
-  S.snapshots.push({id:Date.now(),date:today,total:val});
+  S.snapshots.push({id:Date.now(),date:today,total:val,contrib:pending});
+  S.pendingContrib=0;
   S.snapshotsUpdatedAt=Date.now();
-  save(); renderEquityChart();
+  save(); renderEquityChart(); renderWallets();
 }
 
 function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
@@ -966,12 +978,17 @@ function renderBudget(){
 function saveManualWallet(){
   var name=document.getElementById('wm-name').value.trim(); var bal=parseFloat(document.getElementById('wm-bal').value)||0; var type=document.getElementById('wm-type').value;
   if(!name){ alert('Name required'); return; }
+  var isReceivable=type==='receivable';
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
-  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker'};
+  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:false,receivable:isReceivable};
+  if(isReceivable){
+    var prevBal=idx>=0?S.manualWallets[idx].balance:0;
+    S.pendingContrib=parseFloat(((S.pendingContrib||0)+(bal-prevBal)).toFixed(2));
+  }
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   S.manualWalletsUpdatedAt=Date.now();
   document.getElementById('wm-name').value=''; document.getElementById('wm-bal').value='';
-  save(); renderWallets(); populateWalletSelects();
+  save(); renderWallets(); populateWalletSelects(); syncCatOptions();
 }
 
 function calcTrackerBal(name){
@@ -1004,7 +1021,10 @@ function renderWallets(){
     cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+name+' <span class="badge-t">tracker</span></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">Calculated from transactions</div>'+del+'</div>');
   });
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+w.name+' <span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span></div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div><button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div>');
+    var dot=w.receivable?'#9B70F0':'#EF9F27';
+    var badge=w.receivable?'<span class="badge-t" style="background:#2d1a4a;color:#9B70F0">por cobrar</span>':'<span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span>';
+    var pendingNote=w.receivable&&(S.pendingContrib||0)>0?'<div style="font-size:11px;color:#9B70F0;margin-top:3px">contrib pendiente: '+fmtUSD(S.pendingContrib)+'</div>':'';
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+'<button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div>');
   });
   grid.innerHTML=cards.join('');
 }
@@ -1035,6 +1055,15 @@ function populateWalletSelects(){
     var cur=el.value; var isF=id.startsWith('tf');
     el.innerHTML=(isF?'<option value="">All wallets</option>':'')+names.map(function(n){ return '<option>'+n+'</option>'; }).join('');
     if(cur) el.value=cur;
+  });
+}
+function syncCatOptions(){
+  var hasReceivable=S.manualWallets.some(function(w){ return w.receivable; });
+  ['tx-cat','tf-cat'].forEach(function(id){
+    var sel=document.getElementById(id); if(!sel) return;
+    var existing=Array.from(sel.options).find(function(o){ return o.value==='Cobrar'; });
+    if(hasReceivable&&!existing){ var opt=document.createElement('option'); opt.value='Cobrar'; opt.textContent='Cobrar'; sel.appendChild(opt); }
+    else if(!hasReceivable&&existing){ sel.removeChild(existing); }
   });
 }
 
@@ -1269,9 +1298,9 @@ async function init(){
   document.getElementById('tx-date').value=today;
   document.getElementById('po-date').value=today;
   document.getElementById('tf-month').value=today.slice(0,7);
-  populateWalletSelects(); updateRateUI();
+  populateWalletSelects(); syncCatOptions(); updateRateUI();
   var pulled=await pullFromCloud();
-  if(pulled){ populateWalletSelects(); updateRateUI(); }
+  if(pulled){ populateWalletSelects(); syncCatOptions(); updateRateUI(); }
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
