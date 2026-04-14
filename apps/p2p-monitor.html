@@ -714,10 +714,8 @@ async function fetchOnce() {
 
     ST.allAds     = ST.mayoristas; // para compatibilidad con historial
 
-    if (!ST.mayoristas.length && !ST.smallAds.length) throw new Error('Sin anuncios disponibles');
-
     // Historial de precio (mejor mayorista)
-    var bestMay = ST.mayoristas[0] ? ST.mayoristas[0].price : (ST.allAds[0] ? ST.allAds[0].price : null);
+    var bestMay = ST.mayoristas[0] ? ST.mayoristas[0].price : null;
     if (bestMay) {
       ST.priceHist.push({ ts: Date.now(), price: bestMay });
       if (ST.priceHist.length > 200) ST.priceHist.shift();
@@ -726,7 +724,8 @@ async function fetchOnce() {
     ST.lastFetch = new Date();
     renderAll();
     checkAlerts();
-    document.getElementById('last-update').textContent = 'Actualizado ' + ST.lastFetch.toLocaleTimeString('es-VE');
+    var emptyNote = (!ST.mayoristas.length && !ST.smallAds.length) ? ' — sin anuncios en rango' : '';
+    document.getElementById('last-update').textContent = 'Actualizado ' + ST.lastFetch.toLocaleTimeString('es-VE') + emptyNote;
   } catch(e) {
     document.getElementById('last-update').textContent = '⚠ ' + e.message;
     addAlert('info', 'Error de conexión', e.message);
