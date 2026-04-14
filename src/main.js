@@ -1014,16 +1014,19 @@ function renderWallets(){
   cards.push(apiCard('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'fetchBybitBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'fetchOKXBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('Trezor (BSC USDT)',true,S.trezorBalance,S.trezorUpdated,'fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
+  var icoPen='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  var icoX='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   trackerNames.forEach(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){ return w.name===name; });
-    var del=mw?'<button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+mw.id+')">Remove</button>':'';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+name+' <span class="badge-t">tracker</span></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">Calculated from transactions</div>'+del+'</div>');
+    var actions=mw?'<div class="wcard-actions"><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icoX+'</button></div>':'';
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+name+' <span class="badge-t">tracker</span></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">Calculated from transactions</div>'+actions+'</div>');
   });
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
     var dot=w.receivable?'#9B70F0':'#EF9F27';
     var badge=w.receivable?'<span class="badge-t" style="background:#2d1a4a;color:#9B70F0">por cobrar</span>':'<span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span>';
     var pc=getPendingContrib(); var pendingNote=w.receivable&&pc>0?'<div style="font-size:11px;color:#9B70F0;margin-top:3px">contrib pendiente: '+fmtUSD(pc)+'</div>':'';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+'<div style="display:flex;gap:6px;margin-top:5px"><button class="btn btns" style="font-size:11px" onclick="editManualWalletBal('+w.id+')">Edit</button><button class="btn btnd" style="font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div></div>');
+    var actions='<div class="wcard-actions"><button class="wico" onclick="editManualWalletBal('+w.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icoX+'</button></div>';
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+actions+'</div>');
   });
   grid.innerHTML=cards.join('');
   syncCatOptions();
