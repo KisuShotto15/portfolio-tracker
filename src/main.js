@@ -38,7 +38,7 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
-  pendingContrib:0,
+  receivableAtLastSnapshot:0,
   dashGoal:0, projectionReturn:10, projectionContrib:null,
   categoryBudgets:{}
 };
@@ -834,7 +834,7 @@ function getTotalBalance(){
 
 function recordSnapshot(){
   var auto=getTotalBalance();
-  var pending=S.pendingContrib||0;
+  var pending=getPendingContrib();
   var msg='Record portfolio snapshot\n\nAuto-sum from wallets: $'+auto.toFixed(2);
   if(pending>0) msg+='\nContrib pendiente (por cobrar): $'+pending.toFixed(2)+' — se descontará del P&L';
   msg+='\n\nEnter total (or leave to use auto-sum):';
@@ -844,8 +844,9 @@ function recordSnapshot(){
   var today=localToday();
   var existing=S.snapshots.findIndex(function(s){ return s.date===today; });
   if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
+  var totalReceivable=S.manualWallets.filter(function(w){ return w.receivable; }).reduce(function(s,w){ return s+w.balance; },0);
   S.snapshots.push({id:Date.now(),date:today,total:val,contrib:pending});
-  S.pendingContrib=0;
+  S.receivableAtLastSnapshot=totalReceivable;
   S.snapshotsUpdatedAt=Date.now();
   save(); renderEquityChart(); renderWallets();
 }
@@ -981,10 +982,6 @@ function saveManualWallet(){
   var isReceivable=type==='receivable';
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var obj={id:Date.now(),name:name,balance:bal,trackerOnly:false,receivable:isReceivable};
-  if(isReceivable){
-    var prevBal=idx>=0?S.manualWallets[idx].balance:0;
-    S.pendingContrib=parseFloat(((S.pendingContrib||0)+(bal-prevBal)).toFixed(2));
-  }
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   S.manualWalletsUpdatedAt=Date.now();
   document.getElementById('wm-name').value=''; document.getElementById('wm-bal').value='';
@@ -1023,7 +1020,7 @@ function renderWallets(){
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
     var dot=w.receivable?'#9B70F0':'#EF9F27';
     var badge=w.receivable?'<span class="badge-t" style="background:#2d1a4a;color:#9B70F0">por cobrar</span>':'<span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span>';
-    var pendingNote=w.receivable&&(S.pendingContrib||0)>0?'<div style="font-size:11px;color:#9B70F0;margin-top:3px">contrib pendiente: '+fmtUSD(S.pendingContrib)+'</div>':'';
+    var pc=getPendingContrib(); var pendingNote=w.receivable&&pc>0?'<div style="font-size:11px;color:#9B70F0;margin-top:3px">contrib pendiente: '+fmtUSD(pc)+'</div>':'';
     cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+dot+'"></span>'+w.name+' '+badge+'</div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+pendingNote+'<button class="btn btnd" style="margin-top:5px;font-size:11px" onclick="deleteManualWallet('+w.id+')">Remove</button></div>');
   });
   grid.innerHTML=cards.join('');
@@ -1056,6 +1053,10 @@ function populateWalletSelects(){
     el.innerHTML=(isF?'<option value="">All wallets</option>':'')+names.map(function(n){ return '<option>'+n+'</option>'; }).join('');
     if(cur) el.value=cur;
   });
+}
+function getPendingContrib(){
+  var totalReceivable=S.manualWallets.filter(function(w){ return w.receivable; }).reduce(function(s,w){ return s+w.balance; },0);
+  return parseFloat(Math.max(0,totalReceivable-(S.receivableAtLastSnapshot||0)).toFixed(2));
 }
 function syncCatOptions(){
   var hasReceivable=S.manualWallets.some(function(w){ return w.receivable; });
