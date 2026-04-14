@@ -981,7 +981,7 @@ function saveManualWallet(){
   if(!name){ alert('Name required'); return; }
   var isReceivable=type==='receivable';
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
-  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:false,receivable:isReceivable};
+  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker',receivable:isReceivable};
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   S.manualWalletsUpdatedAt=Date.now();
   document.getElementById('wm-name').value=''; document.getElementById('wm-bal').value='';
