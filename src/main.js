@@ -192,6 +192,9 @@ function showManualRate(){
 function updateRateUI(){ if(!S.rate) return; document.getElementById('rate-display').textContent=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD'; document.getElementById('rate-date').textContent=S.rateDate||''; }
 
 async function fetchBinanceBalance(){
+  var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
+  if(keyEl&&keyEl.value) S.binanceKey=keyEl.value;
+  if(secEl&&secEl.value) S.binanceSecret=secEl.value;
   if(!S.binanceKey||!S.binanceSecret) throw new Error('API key/secret not configured');
   var ts=Date.now();
   var qs='timestamp='+ts;
