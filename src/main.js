@@ -427,6 +427,8 @@ function updateTx(){
 }
 function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); S.portfolioUpdatedAt=Date.now(); save(); renderHoldings(); }
 function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); syncCatOptions(); }
+function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var v=prompt('Rename "'+w.name+'" to:',w.name); if(!v||!v.trim()||v.trim()===w.name) return; w.name=v.trim(); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
+window.renameManualWallet=renameManualWallet;
 function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var v=parseFloat(prompt('New balance for '+w.name+':',w.balance)); if(isNaN(v)) return; if(w.receivable){ var delta=v-w.balance; if(delta>0) S.receivableAtLastSnapshot=Math.max(0,(S.receivableAtLastSnapshot||0)); } w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
 window.editManualWalletBal=editManualWalletBal;
 
@@ -1018,7 +1020,7 @@ function renderWallets(){
   var icoX='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   trackerNames.forEach(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){ return w.name===name; });
-    var actions=mw?'<div class="wcard-actions"><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icoX+'</button></div>':'';
+    var actions=mw?'<div class="wcard-actions"><button class="wico" onclick="renameManualWallet('+mw.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icoX+'</button></div>':'';
     cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+name+' <span class="badge-t">tracker</span></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">Calculated from transactions</div>'+actions+'</div>');
   });
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
