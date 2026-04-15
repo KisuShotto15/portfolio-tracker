@@ -3,6 +3,7 @@ import './style.css';
 var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var PROXY        = 'https://portfolio-balance-worker.efrenalejandro2010.workers.dev';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance'; // Vercel function (non-blocked IPs)
+var ANKR_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
 var VERCEL_SECRET = 'ptk-2025-kisu'; // must match API_SECRET env var in Vercel
 var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
 var DATA_TOKEN   = '151322';
@@ -63,9 +64,7 @@ function setSyncStatus(state, msg){
 
 function saveLocal(){ try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
 function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} }
-// Credentials stored outside S so cloud sync never overwrites them
-function getAnkrKey(){ try{ return localStorage.getItem('ft13_ankr')||''; }catch(e){ return ''; } }
-function setAnkrKey(v){ try{ localStorage.setItem('ft13_ankr',v); }catch(e){} }
+
 
 async function pushToCloud(){
   try{
@@ -259,7 +258,6 @@ function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getE
 var TREZOR_ADDRESS = '0xe0c19374255aCDA45aC2727A5359f0Cfe59cF29B';
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
-var ANKR_URL       = 'https://rpc.ankr.com/multichain/';
 async function fetchTrezorBalance(){
   var padded = '000000000000000000000000' + TREZOR_ADDRESS.slice(2).toLowerCase();
   var data   = '0x70a08231' + padded;
@@ -278,29 +276,11 @@ async function fetchTrezorBalance(){
 async function fetchWalletHoldings(){
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US'); save(); return []; }
-  var _ankrKey=getAnkrKey();
-  if(!_ankrKey) throw new Error('ANKR API key required — add it in Settings');
-  var ankrEndpoint = ANKR_URL + _ankrKey;
-  var allHoldings=[];
-  for(var i=0;i<wallets.length;i++){
-    var w=wallets[i];
-    var res=await fetch(ankrEndpoint,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ jsonrpc:'2.0', method:'ankr_getAccountBalance',
-        params:{ blockchain:['eth','arbitrum','base','bsc'], walletAddress:w.address, onlyWhitelisted:false }, id:1 })
-    });
-    if(!res.ok) throw new Error('ANKR HTTP '+res.status);
-    var json=await res.json();
-    if(json.error) throw new Error(json.error.message||json.error.code||JSON.stringify(json.error));
-    var assets=(json.result&&json.result.assets)||[];
-    var holdings=assets
-      .filter(function(a){ return parseFloat(a.balanceUsd)>1; })
-      .map(function(a){ return { walletId:w.id, walletLabel:w.label, symbol:a.tokenSymbol, name:a.tokenName,
-        balance:parseFloat(a.balance), balanceUsd:parseFloat(a.balanceUsd), price:parseFloat(a.tokenPrice),
-        network:a.blockchain }; });
-    allHoldings=allHoldings.concat(holdings);
-  }
-  S.walletHoldings=allHoldings.sort(function(a,b){ return b.balanceUsd-a.balanceUsd; });
+  var r=await fetch(ANKR_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({wallets:wallets})});
+  if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Proxy error '+r.status); }
+  var data=await r.json();
+  if(data.error) throw new Error(data.error);
+  S.walletHoldings=Array.isArray(data)?data:[];
   S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US');
   save(); return S.walletHoldings;
 }
@@ -1352,7 +1332,6 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
-  var _ak=document.getElementById('ankr-key'); if(_ak) _ak.value=getAnkrKey();
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
