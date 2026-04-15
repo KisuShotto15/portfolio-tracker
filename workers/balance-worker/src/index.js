@@ -11,6 +11,7 @@ export default {
     const path = new URL(request.url).pathname;
 
     try {
+      if (path === '/debug-ip')                return await debugIP();
       if (path === '/' || path === '/binance') return await binanceBalance(env);
       if (path === '/bybit')                   return await bybitBalance(env);
       if (path === '/okx')                     return await okxBalance(env);
@@ -21,6 +22,22 @@ export default {
     return json({ error: 'Unknown route' }, 404);
   }
 };
+
+// ── Debug ─────────────────────────────────────────────
+
+async function debugIP() {
+  const [ipRes, apiTest, p2pTest] = await Promise.all([
+    fetch('https://api.ipify.org?format=json').then(r => r.json()).catch(() => ({})),
+    fetch('https://api.binance.com/api/v3/time').then(async r => ({ status: r.status, body: (await r.text()).slice(0, 80) })).catch(e => ({ error: e.message })),
+    fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset: 'USDT', fiat: 'VES', merchantCheck: false, page: 1, rows: 1, tradeType: 'SELL', transAmount: 100 })
+    }).then(async r => ({ status: r.status, body: (await r.text()).slice(0, 80) })).catch(e => ({ error: e.message })),
+  ]);
+  const ip = ipRes.ip || 'n/a';
+  const geo = await fetch(`http://ip-api.com/json/${ip}`).then(r => r.json()).catch(() => ({}));
+  return json({ ip, country: geo.country, isp: geo.isp, api_binance: apiTest, p2p_binance: p2pTest });
+}
 
 // ── Helpers ───────────────────────────────────────────
 
