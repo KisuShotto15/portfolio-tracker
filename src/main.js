@@ -38,6 +38,7 @@ var S = {
   okxBalance:null,     okxUpdated:null,
   trezorBalance:null,  trezorUpdated:null,
   walletHoldings:[],   walletHoldingsUpdated:null,
+  onchainWallets:[],   onchainWalletsUpdatedAt:null,
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
@@ -100,6 +101,11 @@ async function pushToCloud(){
           if(cd.data.portfolio&&(cd.data.portfolioUpdatedAt||0)>=(S.portfolioUpdatedAt||0)){
             S.portfolio=cd.data.portfolio;
             S.portfolioUpdatedAt=cd.data.portfolioUpdatedAt;
+            needRender=true;
+          }
+          if(cd.data.onchainWallets&&(cd.data.onchainWalletsUpdatedAt||0)>=(S.onchainWalletsUpdatedAt||0)){
+            S.onchainWallets=cd.data.onchainWallets;
+            S.onchainWalletsUpdatedAt=cd.data.onchainWalletsUpdatedAt;
             needRender=true;
           }
           if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); renderHoldings(); populateWalletSelects(); }
@@ -267,49 +273,95 @@ async function fetchTrezorBalance(){
 }
 
 async function fetchWalletHoldings(){
-  var res = await fetch(ANKR_URL, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jsonrpc:'2.0', method:'ankr_getAccountBalance',
-      params:{ blockchain:['eth','arbitrum','base','bsc'], walletAddress:TREZOR_ADDRESS, onlyWhitelisted:false }, id:1 })
-  });
-  var json = await res.json();
-  if(json.error) throw new Error(json.error.message);
-  var assets = (json.result && json.result.assets) || [];
-  S.walletHoldings = assets
-    .filter(function(a){ return parseFloat(a.balanceUsd) > 1; })
-    .map(function(a){ return { symbol:a.tokenSymbol, name:a.tokenName,
-      balance:parseFloat(a.balance), balanceUsd:parseFloat(a.balanceUsd), price:parseFloat(a.tokenPrice),
-      network:a.blockchain }; })
-    .sort(function(a,b){ return b.balanceUsd - a.balanceUsd; });
-  S.walletHoldingsUpdated = new Date().toLocaleTimeString('en-US');
+  var wallets = S.onchainWallets||[];
+  if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US'); save(); return []; }
+  var allHoldings=[];
+  for(var i=0;i<wallets.length;i++){
+    var w=wallets[i];
+    var res=await fetch(ANKR_URL,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ jsonrpc:'2.0', method:'ankr_getAccountBalance',
+        params:{ blockchain:['eth','arbitrum','base','bsc'], walletAddress:w.address, onlyWhitelisted:false }, id:1 })
+    });
+    var json=await res.json();
+    if(json.error) throw new Error(json.error.message);
+    var assets=(json.result&&json.result.assets)||[];
+    var holdings=assets
+      .filter(function(a){ return parseFloat(a.balanceUsd)>1; })
+      .map(function(a){ return { walletId:w.id, walletLabel:w.label, symbol:a.tokenSymbol, name:a.tokenName,
+        balance:parseFloat(a.balance), balanceUsd:parseFloat(a.balanceUsd), price:parseFloat(a.tokenPrice),
+        network:a.blockchain }; });
+    allHoldings=allHoldings.concat(holdings);
+  }
+  S.walletHoldings=allHoldings.sort(function(a,b){ return b.balanceUsd-a.balanceUsd; });
+  S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US');
   save(); return S.walletHoldings;
 }
 function renderWalletHoldings(){
-  var wrap = document.getElementById('wh-wrap');
-  var upd  = document.getElementById('wh-updated');
+  var wrap=document.getElementById('wh-wrap');
+  var upd=document.getElementById('wh-updated');
   if(!wrap) return;
-  if(upd && S.walletHoldingsUpdated) upd.textContent = 'Updated '+S.walletHoldingsUpdated;
-  var data = S.walletHoldings || [];
-  if(!data.length){ wrap.innerHTML=emptyState('No on-chain holdings found','Click Refresh to load live balances from your Trezor'); return; }
+  if(upd&&S.walletHoldingsUpdated) upd.textContent='Updated '+S.walletHoldingsUpdated;
+  var data=S.walletHoldings||[];
+  var wallets=S.onchainWallets||[];
+  if(!wallets.length){ wrap.innerHTML=emptyState('No wallets configured','Add a wallet address above to track on-chain balances'); return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No on-chain holdings found','Click Refresh to load live balances'); return; }
   var netLabel={'eth':'ETH','arbitrum':'ARB','base':'BASE','bsc':'BSC'};
   var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#378ADD','bsc':'#EF9F27'};
-  var rows = data.map(function(h){
-    var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
-    return '<tr><td style="font-weight:500">'+h.symbol+'</td>'
-      +'<td style="color:var(--color-text-secondary);font-size:12px">'+h.name+'</td>'
-      +'<td><span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+nc+'22;color:'+nc+';font-weight:600">'+net+'</span></td>'
-      +'<td>'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
-      +'<td>'+fmtUSD(h.price)+'</td>'
-      +'<td style="font-weight:500">'+fmtUSD(h.balanceUsd)+'</td></tr>';
+  var grouped={};
+  data.forEach(function(h){ if(!grouped[h.walletLabel]) grouped[h.walletLabel]=[]; grouped[h.walletLabel].push(h); });
+  var grandTotal=data.reduce(function(s,h){ return s+h.balanceUsd; },0);
+  var html='';
+  if(wallets.length>1) html='<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px"><div class="mc-l">Total</div><div class="mc-v b">'+fmtUSD(grandTotal)+'</div></div>';
+  Object.keys(grouped).forEach(function(label){
+    var items=grouped[label];
+    var wTotal=items.reduce(function(s,h){ return s+h.balanceUsd; },0);
+    var rows=items.map(function(h){
+      var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
+      return '<tr><td style="font-weight:500">'+h.symbol+'</td>'
+        +'<td style="color:var(--color-text-secondary);font-size:12px">'+h.name+'</td>'
+        +'<td><span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+nc+'22;color:'+nc+';font-weight:600">'+net+'</span></td>'
+        +'<td>'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
+        +'<td>'+fmtUSD(h.price)+'</td>'
+        +'<td style="font-weight:500">'+fmtUSD(h.balanceUsd)+'</td></tr>';
+    }).join('');
+    html+='<div class="mc" style="margin-bottom:.5rem;display:inline-block;min-width:170px"><div class="mc-l">'+label+'</div><div class="mc-v b">'+fmtUSD(wTotal)+'</div></div>'
+      +'<table><thead><tr><th>Symbol</th><th>Name</th><th>Network</th><th>Balance</th><th>Price</th><th>Value</th></tr></thead>'
+      +'<tbody>'+rows+'</tbody></table>';
+  });
+  wrap.innerHTML=html;
+}
+function renderOnchainWallets(){
+  var wrap=document.getElementById('ow-list');
+  if(!wrap) return;
+  var wallets=S.onchainWallets||[];
+  if(!wallets.length){ wrap.innerHTML='<p class="hint" style="margin:0">No wallets added yet.</p>'; return; }
+  wrap.innerHTML=wallets.map(function(w){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
+      +'<span style="font-weight:500;flex-shrink:0">'+w.label+'</span>'
+      +'<span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace;word-break:break-all;flex:1">'+w.address+'</span>'
+      +'<button class="btn" style="color:#E24B4A;padding:2px 7px;flex-shrink:0" onclick="deleteOnchainWallet('+w.id+')">&#x2715;</button>'
+      +'</div>';
   }).join('');
-  var total = data.reduce(function(s,h){ return s+h.balanceUsd; },0);
-  wrap.innerHTML = '<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px">'
-    +'<div class="mc-l">Trezor Total</div><div class="mc-v b">'+fmtUSD(total)+'</div></div>'
-    +'<table><thead><tr><th>Symbol</th><th>Name</th><th>Network</th><th>Balance</th><th>Price</th><th>Value</th></tr></thead>'
-    +'<tbody>'+rows+'</tbody></table>';
+}
+function saveOnchainWallet(){
+  var label=document.getElementById('ow-label').value.trim();
+  var addr=document.getElementById('ow-addr').value.trim();
+  if(!label||!addr) return;
+  if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){ alert('Invalid ETH/EVM address (must be 0x + 40 hex chars)'); return; }
+  S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,address:addr}]);
+  S.onchainWalletsUpdatedAt=Date.now();
+  document.getElementById('ow-label').value='';
+  document.getElementById('ow-addr').value='';
+  save(); renderOnchainWallets();
+}
+function deleteOnchainWallet(id){
+  S.onchainWallets=(S.onchainWallets||[]).filter(function(w){ return w.id!==id; });
+  S.onchainWalletsUpdatedAt=Date.now();
+  save(); renderOnchainWallets();
 }
 async function refreshWalletHoldings(){
-  var wrap = document.getElementById('wh-wrap');
+  var wrap=document.getElementById('wh-wrap');
   if(wrap) wrap.innerHTML='<div class="empty">Loading...</div>';
   try{ await fetchWalletHoldings(); renderWalletHoldings(); }
   catch(e){ if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+e.message+'</div>'; }
@@ -1138,7 +1190,7 @@ function showPage(id,btn){
   else if(id==='transactions') renderTx();
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
-  else if(id==='holdings'){ renderHoldings(); renderWalletHoldings(); }
+  else if(id==='holdings'){ renderHoldings(); renderOnchainWallets(); renderWalletHoldings(); }
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -1176,6 +1228,8 @@ window.saveManualWallet = saveManualWallet;
 window.deleteManualWallet = deleteManualWallet;
 window.addHolding = addHolding;
 window.deleteHolding = deleteHolding;
+window.saveOnchainWallet = saveOnchainWallet;
+window.deleteOnchainWallet = deleteOnchainWallet;
 window.renderWallets = renderWallets;
 window.testBinance = testBinance;
 window.clearBinance = clearBinance;
@@ -1295,6 +1349,7 @@ async function init(){
   showPage(hash||'summary', null);
   fetchRate(false);
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
+  renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   calcSpread(); calcBDV(); calcWally(); calcZinli();
   autoFetchBinance();
