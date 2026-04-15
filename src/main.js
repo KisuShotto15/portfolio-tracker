@@ -39,6 +39,7 @@ var S = {
   trezorBalance:null,  trezorUpdated:null,
   walletHoldings:[],   walletHoldingsUpdated:null,
   onchainWallets:[],   onchainWalletsUpdatedAt:null,
+  ankrKey:'',
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
@@ -275,16 +276,19 @@ async function fetchTrezorBalance(){
 async function fetchWalletHoldings(){
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US'); save(); return []; }
+  if(!S.ankrKey) throw new Error('ANKR API key required — add it in Settings');
+  var ankrEndpoint = ANKR_URL + S.ankrKey;
   var allHoldings=[];
   for(var i=0;i<wallets.length;i++){
     var w=wallets[i];
-    var res=await fetch(ANKR_URL,{
+    var res=await fetch(ankrEndpoint,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ jsonrpc:'2.0', method:'ankr_getAccountBalance',
         params:{ blockchain:['eth','arbitrum','base','bsc'], walletAddress:w.address, onlyWhitelisted:false }, id:1 })
     });
+    if(!res.ok) throw new Error('ANKR HTTP '+res.status);
     var json=await res.json();
-    if(json.error) throw new Error(json.error.message);
+    if(json.error) throw new Error(json.error.message||json.error.code||JSON.stringify(json.error));
     var assets=(json.result&&json.result.assets)||[];
     var holdings=assets
       .filter(function(a){ return parseFloat(a.balanceUsd)>1; })
@@ -364,7 +368,7 @@ async function refreshWalletHoldings(){
   var wrap=document.getElementById('wh-wrap');
   if(wrap) wrap.innerHTML='<div class="empty">Loading...</div>';
   try{ await fetchWalletHoldings(); renderWalletHoldings(); }
-  catch(e){ if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+e.message+'</div>'; }
+  catch(e){ console.error('fetchWalletHoldings:',e); if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+(e.message||e.toString())+'</div>'; }
 }
 
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
@@ -1345,6 +1349,7 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
+  if(S.ankrKey){ var ak=document.getElementById('ankr-key'); if(ak) ak.value=S.ankrKey; }
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);

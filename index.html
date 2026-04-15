@@ -280,6 +280,11 @@
       <div id="bn-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
     <div class="fc">
+      <h3>ANKR API</h3>
+      <p class="hint">Required for on-chain holdings. Free at <a href="https://www.ankr.com/rpc/" target="_blank" style="color:var(--color-accent)">ankr.com/rpc</a> → My Apps → Create App → copy the key.</p>
+      <input id="ankr-key" type="password" placeholder="ANKR API Key" oninput="S.ankrKey=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box;margin-bottom:8px">
+    </div>
+    <div class="fc">
       <h3>Bybit API</h3>
       <p class="hint">Credentials stored in Cloudflare Worker env vars (BYBIT_KEY, BYBIT_SECRET).</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
