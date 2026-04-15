@@ -39,7 +39,6 @@ var S = {
   trezorBalance:null,  trezorUpdated:null,
   walletHoldings:[],   walletHoldingsUpdated:null,
   onchainWallets:[],   onchainWalletsUpdatedAt:null,
-  ankrKey:'',
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
@@ -64,6 +63,9 @@ function setSyncStatus(state, msg){
 
 function saveLocal(){ try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
 function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} }
+// Credentials stored outside S so cloud sync never overwrites them
+function getAnkrKey(){ try{ return localStorage.getItem('ft13_ankr')||''; }catch(e){ return ''; } }
+function setAnkrKey(v){ try{ localStorage.setItem('ft13_ankr',v); }catch(e){} }
 
 async function pushToCloud(){
   try{
@@ -276,8 +278,9 @@ async function fetchTrezorBalance(){
 async function fetchWalletHoldings(){
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US'); save(); return []; }
-  if(!S.ankrKey) throw new Error('ANKR API key required — add it in Settings');
-  var ankrEndpoint = ANKR_URL + S.ankrKey;
+  var _ankrKey=getAnkrKey();
+  if(!_ankrKey) throw new Error('ANKR API key required — add it in Settings');
+  var ankrEndpoint = ANKR_URL + _ankrKey;
   var allHoldings=[];
   for(var i=0;i<wallets.length;i++){
     var w=wallets[i];
@@ -1349,7 +1352,7 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
-  if(S.ankrKey){ var ak=document.getElementById('ankr-key'); if(ak) ak.value=S.ankrKey; }
+  var _ak=document.getElementById('ankr-key'); if(_ak) _ak.value=getAnkrKey();
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
