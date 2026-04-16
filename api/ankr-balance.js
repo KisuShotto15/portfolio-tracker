@@ -21,12 +21,13 @@ export default async function handler(req, res) {
 
   const allHoldings = [];
   for (const w of wallets) {
+    const blockchains = w.chain === 'btc' ? ['bitcoin'] : ['eth', 'arbitrum', 'base', 'bsc'];
     const r = await fetch(ANKR_URL + ankrKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'ankr_getAccountBalance',
-        params: { blockchain: ['eth', 'arbitrum', 'base', 'bsc'], walletAddress: w.address, onlyWhitelisted: true },
+        params: { blockchain: blockchains, walletAddress: w.address, onlyWhitelisted: true },
         id: 1
       }),
     });

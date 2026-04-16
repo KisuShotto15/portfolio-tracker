@@ -186,9 +186,10 @@
       </div>
       <p class="hint" style="margin-top:6px">Live token balances across ETH, ARB, BASE and BSC. Read-only — not counted in any totals.</p>
       <div id="ow-list" style="margin-bottom:8px"></div>
-      <div class="fr" style="max-width:560px">
-        <input type="text" id="ow-label" placeholder="Label (e.g. Trezor)" style="max-width:130px"/>
-        <input type="text" id="ow-addr" placeholder="0x address" style="font-family:monospace;font-size:12px"/>
+      <div class="fr" style="max-width:640px">
+        <input type="text" id="ow-label" placeholder="Label (e.g. Trezor)" style="max-width:120px"/>
+        <select id="ow-chain" style="max-width:90px"><option value="evm">EVM</option><option value="btc">Bitcoin</option></select>
+        <input type="text" id="ow-addr" placeholder="Address" style="font-family:monospace;font-size:12px"/>
         <button class="btn btnp" onclick="saveOnchainWallet()">Add wallet</button>
       </div>
       <div id="wh-wrap" style="margin-top:12px"></div>

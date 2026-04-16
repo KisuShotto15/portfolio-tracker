@@ -333,10 +333,12 @@ function renderOnchainWallets(){
 }
 function saveOnchainWallet(){
   var label=document.getElementById('ow-label').value.trim();
+  var chain=document.getElementById('ow-chain').value;
   var addr=document.getElementById('ow-addr').value.trim();
   if(!label||!addr) return;
-  if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){ alert('Invalid ETH/EVM address (must be 0x + 40 hex chars)'); return; }
-  S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,address:addr}]);
+  if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ alert('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
+  if(chain==='btc'&&!/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87}$/.test(addr)){ alert('Invalid Bitcoin address'); return; }
+  S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr}]);
   S.onchainWalletsUpdatedAt=Date.now();
   document.getElementById('ow-label').value='';
   document.getElementById('ow-addr').value='';
