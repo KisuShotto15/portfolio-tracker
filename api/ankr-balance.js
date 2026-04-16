@@ -20,14 +20,38 @@ export default async function handler(req, res) {
   if (!Array.isArray(wallets) || !wallets.length) return res.status(400).json({ error: 'wallets array required' });
 
   const allHoldings = [];
-  for (const w of wallets) {
-    const blockchains = w.chain === 'btc' ? ['bitcoin'] : ['eth', 'arbitrum', 'base', 'bsc'];
+  const btcWallets = wallets.filter(w => w.chain === 'btc');
+  const evmWallets = wallets.filter(w => w.chain !== 'btc');
+
+  // BTC via Blockstream (no API key needed)
+  if (btcWallets.length) {
+    const priceRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+    const priceJson = await priceRes.json();
+    const btcPrice = priceJson?.bitcoin?.usd || 0;
+    for (const w of btcWallets) {
+      const r = await fetch(`https://blockstream.info/api/address/${w.address}`);
+      const data = await r.json();
+      if (data.chain_stats) {
+        const satoshis = data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum;
+        const balance = satoshis / 1e8;
+        const balanceUsd = balance * btcPrice;
+        if (balanceUsd > 0.01) allHoldings.push({
+          walletId: w.id, walletLabel: w.label,
+          symbol: 'BTC', name: 'Bitcoin',
+          balance, balanceUsd, price: btcPrice, network: 'bitcoin',
+        });
+      }
+    }
+  }
+
+  // EVM via ANKR
+  for (const w of evmWallets) {
     const r = await fetch(ANKR_URL + ankrKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'ankr_getAccountBalance',
-        params: { blockchain: blockchains, walletAddress: w.address, onlyWhitelisted: true },
+        params: { blockchain: ['eth', 'arbitrum', 'base', 'bsc'], walletAddress: w.address, onlyWhitelisted: true },
         id: 1
       }),
     });
