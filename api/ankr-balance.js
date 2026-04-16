@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'ankr_getAccountBalance',
-        params: { blockchain: ['eth', 'arbitrum', 'base', 'bsc'], walletAddress: w.address, onlyWhitelisted: false },
+        params: { blockchain: ['eth', 'arbitrum', 'base', 'bsc'], walletAddress: w.address, onlyWhitelisted: true },
         id: 1
       }),
     });
