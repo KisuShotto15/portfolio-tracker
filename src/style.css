@@ -50,7 +50,7 @@ body{font-family:var(--font-sans,system-ui);background:radial-gradient(ellipse 8
 .btn-edit-tx{background:none;border:none;cursor:pointer;color:var(--color-text-secondary);padding:3px 5px;border-radius:5px;vertical-align:middle}
 .btn-edit-tx:hover{color:#9B70F0}
 .btnd:hover{background:rgba(226,75,74,.12)}
-tr:hover .btn-edit-tx,tr:hover .btnd{opacity:1}
+tr:hover .btn-edit-tx,tr:hover .btnd,.ow-row:hover .btnd{opacity:1}
 .wcard .btnd{opacity:1}
 .btns{padding:5px 10px;font-size:13px}
 .btn-add{border:1.5px solid #9B70F0;color:#9B70F0;font-weight:500;padding:7px 20px;font-size:14px}

@@ -309,7 +309,6 @@ function renderWalletHoldings(){
       var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
       return '<tr>'
         +'<td style="font-weight:500">'+h.symbol+'</td>'
-        +'<td style="color:var(--color-text-secondary);font-size:12px">'+h.name+'</td>'
         +'<td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:'+nc+'18;color:'+nc+';font-weight:600;letter-spacing:.04em">'+net+'</span></td>'
         +'<td style="text-align:right;font-variant-numeric:tabular-nums">'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
         +'<td style="text-align:right;color:var(--color-text-secondary);font-size:13px">'+fmtUSD(h.price)+'</td>'
@@ -321,7 +320,7 @@ function renderWalletHoldings(){
       +'<h3 style="margin:0">'+label+'</h3>'
       +'<span style="font-size:20px;font-weight:600">'+fmtUSD(wTotal)+'</span>'
       +'</div>'
-      +'<table><thead><tr><th>Asset</th><th>Name</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead>'
+      +'<table><thead><tr><th>Asset</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead>'
       +'<tbody>'+rows+'</tbody></table>'
       +'</div>';
   });
@@ -337,7 +336,7 @@ function renderOnchainWallets(){
   wrap.innerHTML=wallets.map(function(w){
     var c=w.chain||'evm'; var cc=chainColor[c]||'#888'; var cl=chainLabel[c]||c.toUpperCase();
     var addr=w.address.length>20?w.address.slice(0,10)+'…'+w.address.slice(-6):w.address;
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
+    return '<div class="ow-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
       +'<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:'+cc+'18;color:'+cc+';font-weight:600;letter-spacing:.04em;flex-shrink:0">'+cl+'</span>'
       +'<span style="font-weight:500;flex-shrink:0;font-size:14px">'+w.label+'</span>'
       +'<span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace;flex:1">'+addr+'</span>'
