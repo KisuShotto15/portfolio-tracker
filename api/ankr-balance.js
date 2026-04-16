@@ -23,24 +23,32 @@ export default async function handler(req, res) {
   const btcWallets = wallets.filter(w => w.chain === 'btc');
   const evmWallets = wallets.filter(w => w.chain !== 'btc');
 
-  // BTC via Blockstream (no API key needed)
+  // BTC via Trezor Blockbook (xpub/zpub/ypub) or Blockstream (single address)
   if (btcWallets.length) {
     const priceRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
     const priceJson = await priceRes.json();
     const btcPrice = priceJson?.bitcoin?.usd || 0;
     for (const w of btcWallets) {
-      const r = await fetch(`https://blockstream.info/api/address/${w.address}`);
-      const data = await r.json();
-      if (data.chain_stats) {
-        const satoshis = data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum;
-        const balance = satoshis / 1e8;
-        const balanceUsd = balance * btcPrice;
-        if (balanceUsd > 0.01) allHoldings.push({
-          walletId: w.id, walletLabel: w.label,
-          symbol: 'BTC', name: 'Bitcoin',
-          balance, balanceUsd, price: btcPrice, network: 'bitcoin',
-        });
+      const isXpub = /^[xyz]pub/.test(w.address);
+      let satoshis = 0;
+      if (isXpub) {
+        // Trezor Blockbook supports xpub/ypub/zpub natively
+        const r = await fetch(`https://btc1.trezor.io/api/v2/xpub/${w.address}?details=basic`);
+        const data = await r.json();
+        if (data.error) throw new Error('Blockbook: ' + data.error);
+        satoshis = parseInt(data.balance || '0') + parseInt(data.unconfirmedBalance || '0');
+      } else {
+        const r = await fetch(`https://blockstream.info/api/address/${w.address}`);
+        const data = await r.json();
+        if (data.chain_stats) satoshis = data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum;
       }
+      const balance = satoshis / 1e8;
+      const balanceUsd = balance * btcPrice;
+      if (balanceUsd > 0.01) allHoldings.push({
+        walletId: w.id, walletLabel: w.label,
+        symbol: 'BTC', name: 'Bitcoin',
+        balance, balanceUsd, price: btcPrice, network: 'bitcoin',
+      });
     }
   }
 

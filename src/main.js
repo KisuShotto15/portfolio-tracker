@@ -337,7 +337,7 @@ function saveOnchainWallet(){
   var addr=document.getElementById('ow-addr').value.trim();
   if(!label||!addr) return;
   if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ alert('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
-  if(chain==='btc'&&!/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87}$/.test(addr)){ alert('Invalid Bitcoin address'); return; }
+  if(chain==='btc'&&!/^([xyz]pub[A-Za-z0-9]{100,}|(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87})$/.test(addr)){ alert('Invalid Bitcoin address or xpub/zpub/ypub'); return; }
   S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr}]);
   S.onchainWalletsUpdatedAt=Date.now();
   document.getElementById('ow-label').value='';
