@@ -110,7 +110,7 @@ async function pushToCloud(){
             S.onchainWalletsUpdatedAt=cd.data.onchainWalletsUpdatedAt;
             needRender=true;
           }
-          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); renderHoldings(); populateWalletSelects(); }
+          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); }
         }
       }
     }catch(e){ /* continue with push even if merge-pull fails */ }
@@ -291,30 +291,39 @@ function renderWalletHoldings(){
   if(upd&&S.walletHoldingsUpdated) upd.textContent='Updated '+S.walletHoldingsUpdated;
   var data=S.walletHoldings||[];
   var wallets=S.onchainWallets||[];
-  if(!wallets.length){ wrap.innerHTML=emptyState('No wallets configured','Add a wallet address above to track on-chain balances'); return; }
-  if(!data.length){ wrap.innerHTML=emptyState('No on-chain holdings found','Click Refresh to load live balances'); return; }
-  var netLabel={'eth':'ETH','arbitrum':'ARB','base':'BASE','bsc':'BSC'};
-  var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#378ADD','bsc':'#EF9F27'};
+  if(!wallets.length){ wrap.innerHTML=''; return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Click Refresh to load live balances'); return; }
+  var netLabel={'eth':'ETH','arbitrum':'ARB','base':'BASE','bsc':'BSC','bitcoin':'BTC'};
+  var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#5BA4F5','bsc':'#EF9F27','bitcoin':'#F7931A'};
   var grouped={};
   data.forEach(function(h){ if(!grouped[h.walletLabel]) grouped[h.walletLabel]=[]; grouped[h.walletLabel].push(h); });
   var grandTotal=data.reduce(function(s,h){ return s+h.balanceUsd; },0);
   var html='';
-  if(wallets.length>1) html='<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px"><div class="mc-l">Total</div><div class="mc-v b">'+fmtUSD(grandTotal)+'</div></div>';
+  if(wallets.length>1){
+    html='<div class="mc" style="margin-bottom:1rem"><div class="mc-l">Total Value</div><div class="mc-v" style="font-size:24px;font-weight:600">'+fmtUSD(grandTotal)+'</div></div>';
+  }
   Object.keys(grouped).forEach(function(label){
     var items=grouped[label];
     var wTotal=items.reduce(function(s,h){ return s+h.balanceUsd; },0);
     var rows=items.map(function(h){
       var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
-      return '<tr><td style="font-weight:500">'+h.symbol+'</td>'
+      return '<tr>'
+        +'<td style="font-weight:500">'+h.symbol+'</td>'
         +'<td style="color:var(--color-text-secondary);font-size:12px">'+h.name+'</td>'
-        +'<td><span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+nc+'22;color:'+nc+';font-weight:600">'+net+'</span></td>'
-        +'<td>'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
-        +'<td>'+fmtUSD(h.price)+'</td>'
-        +'<td style="font-weight:500">'+fmtUSD(h.balanceUsd)+'</td></tr>';
+        +'<td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:'+nc+'18;color:'+nc+';font-weight:600;letter-spacing:.04em">'+net+'</span></td>'
+        +'<td style="text-align:right;font-variant-numeric:tabular-nums">'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
+        +'<td style="text-align:right;color:var(--color-text-secondary);font-size:13px">'+fmtUSD(h.price)+'</td>'
+        +'<td style="text-align:right;font-weight:500">'+fmtUSD(h.balanceUsd)+'</td>'
+        +'</tr>';
     }).join('');
-    html+='<div class="mc" style="margin-bottom:.5rem;display:inline-block;min-width:170px"><div class="mc-l">'+label+'</div><div class="mc-v b">'+fmtUSD(wTotal)+'</div></div>'
-      +'<table><thead><tr><th>Symbol</th><th>Name</th><th>Network</th><th>Balance</th><th>Price</th><th>Value</th></tr></thead>'
-      +'<tbody>'+rows+'</tbody></table>';
+    html+='<div class="fc" style="margin-bottom:1rem">'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem">'
+      +'<h3 style="margin:0">'+label+'</h3>'
+      +'<span style="font-size:20px;font-weight:600">'+fmtUSD(wTotal)+'</span>'
+      +'</div>'
+      +'<table><thead><tr><th>Asset</th><th>Name</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead>'
+      +'<tbody>'+rows+'</tbody></table>'
+      +'</div>';
   });
   wrap.innerHTML=html;
 }
@@ -322,12 +331,17 @@ function renderOnchainWallets(){
   var wrap=document.getElementById('ow-list');
   if(!wrap) return;
   var wallets=S.onchainWallets||[];
-  if(!wallets.length){ wrap.innerHTML='<p class="hint" style="margin:0">No wallets added yet.</p>'; return; }
+  if(!wallets.length){ wrap.innerHTML='<p style="font-size:13px;color:var(--color-text-secondary);padding:2px 0">No wallets added yet.</p>'; return; }
+  var chainColor={'evm':'#378ADD','btc':'#F7931A'};
+  var chainLabel={'evm':'EVM','btc':'BTC'};
   wrap.innerHTML=wallets.map(function(w){
-    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
-      +'<span style="font-weight:500;flex-shrink:0">'+w.label+'</span>'
-      +'<span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace;word-break:break-all;flex:1">'+w.address+'</span>'
-      +'<button class="btn" style="color:#E24B4A;padding:2px 7px;flex-shrink:0" onclick="deleteOnchainWallet('+w.id+')">&#x2715;</button>'
+    var c=w.chain||'evm'; var cc=chainColor[c]||'#888'; var cl=chainLabel[c]||c.toUpperCase();
+    var addr=w.address.length>20?w.address.slice(0,10)+'…'+w.address.slice(-6):w.address;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
+      +'<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:'+cc+'18;color:'+cc+';font-weight:600;letter-spacing:.04em;flex-shrink:0">'+cl+'</span>'
+      +'<span style="font-weight:500;flex-shrink:0;font-size:14px">'+w.label+'</span>'
+      +'<span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace;flex:1">'+addr+'</span>'
+      +'<button class="btn btnd" onclick="deleteOnchainWallet('+w.id+')">&#x2715;</button>'
       +'</div>';
   }).join('');
 }
@@ -1179,7 +1193,7 @@ function showPage(id,btn){
   else if(id==='transactions') renderTx();
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
-  else if(id==='holdings'){ renderHoldings(); renderOnchainWallets(); renderWalletHoldings(); }
+  else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -1327,7 +1341,6 @@ async function init(){
   loadLocal();
   var today=localToday();
   document.getElementById('tx-date').value=today;
-  document.getElementById('po-date').value=today;
   document.getElementById('tf-month').value=today.slice(0,7);
   populateWalletSelects(); updateRateUI();
   var pulled=await pullFromCloud();
@@ -1348,7 +1361,7 @@ async function init(){
   // Prevents stale open tabs from overwriting changes made on other devices
   document.addEventListener('visibilitychange', function(){
     if(!document.hidden) pullFromCloud().then(function(pulled){
-      if(pulled){ populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderHoldings(); }
+      if(pulled){ populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); }
     }).then(function(){ autoFetchBinance(); });
   });
 }

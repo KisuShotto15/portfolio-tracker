@@ -163,37 +163,24 @@
   </div>
 
   <div id="page-holdings" class="page">
-    <div class="fc">
-      <h3>Add holding</h3>
-      <div class="fr">
-        <input type="date" id="po-date"/>
-        <input type="text" id="po-asset" placeholder="Asset (BTC)"/>
-        <select id="po-type"><option>Spot</option><option>Staking</option><option>Airdrop</option><option>Other</option></select>
-        <input type="number" id="po-qty" placeholder="Quantity" step="any"/>
-        <input type="number" id="po-price" placeholder="Buy price USD" step="0.01"/>
-        <input type="text" id="po-notes" placeholder="Notes"/>
-      </div>
-      <button class="btn btnp" onclick="addHolding()">Add</button>
-    </div>
-    <div class="section-hdr">Portfolio Holdings</div>
-    <div id="po-wrap"></div>
-    <div class="section-hdr">On-chain Balances</div>
-    <div class="fc" style="margin-top:0">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <h3 style="margin:0">On-chain Holdings</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.07em">Holdings</span>
+      <div style="display:flex;align-items:center;gap:10px">
         <span id="wh-updated" style="font-size:11px;color:var(--color-text-secondary)"></span>
-        <button class="btn btns" style="margin-left:auto;padding:4px 9px" onclick="refreshWalletHoldings()">&#8635; Refresh</button>
+        <button class="btn btns" onclick="refreshWalletHoldings()">&#8635; Refresh</button>
       </div>
-      <p class="hint" style="margin-top:6px">Live token balances across ETH, ARB, BASE and BSC. Read-only — not counted in any totals.</p>
-      <div id="ow-list" style="margin-bottom:8px"></div>
-      <div class="fr" style="max-width:640px">
-        <input type="text" id="ow-label" placeholder="Label (e.g. Trezor)" style="max-width:120px"/>
-        <select id="ow-chain" style="max-width:90px"><option value="evm">EVM</option><option value="btc">Bitcoin</option></select>
-        <input type="text" id="ow-addr" placeholder="Address" style="font-family:monospace;font-size:12px"/>
-        <button class="btn btnp" onclick="saveOnchainWallet()">Add wallet</button>
-      </div>
-      <div id="wh-wrap" style="margin-top:12px"></div>
     </div>
+    <div class="fc">
+      <h3>Wallets</h3>
+      <div id="ow-list"></div>
+      <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="ow-label" placeholder="Label" style="padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px;width:100px"/>
+        <select id="ow-chain" style="padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px"><option value="evm">EVM</option><option value="btc">Bitcoin</option></select>
+        <input type="text" id="ow-addr" placeholder="Address / xpub / zpub" style="padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:12px;font-family:monospace;flex:1;min-width:180px"/>
+        <button class="btn btnp btns" onclick="saveOnchainWallet()">Add</button>
+      </div>
+    </div>
+    <div id="wh-wrap"></div>
   </div>
 
   <div id="page-tools" class="page">
