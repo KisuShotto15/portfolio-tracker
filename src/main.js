@@ -1,12 +1,10 @@
 import './style.css';
 
-var RATE_URL     = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
-var PROXY        = 'https://portfolio-balance-worker.efrenalejandro2010.workers.dev';
-var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance'; // Vercel function (non-blocked IPs)
-var ANKR_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
-var VERCEL_SECRET = 'ptk-2025-kisu'; // must match API_SECRET env var in Vercel
-var DATA_URL     = 'https://portfolio-data.efrenalejandro2010.workers.dev';
-var DATA_TOKEN   = '151322';
+var RATE_URL      = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
+var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
+var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
+var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
+var VERCEL_SECRET = 'ptk-2025-kisu';
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
@@ -52,7 +50,7 @@ var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
-var syncTimer=null, syncPending=false;
+var syncTimer=null, _srchTimer=null;
 
 function setSyncStatus(state, msg){
   var dot=document.getElementById('sync-dot');
@@ -72,7 +70,7 @@ async function pushToCloud(){
     // Merge-first: fetch cloud state and add any transactions missing locally.
     // Prevents a stale open tab from overwriting changes made on another device.
     try{
-      var cr=await fetch(DATA_URL+'/data',{headers:{'Authorization':'Bearer '+DATA_TOKEN}});
+      var cr=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
       if(cr.ok){
         var cd=await cr.json();
         if(cd.data){
@@ -114,9 +112,9 @@ async function pushToCloud(){
         }
       }
     }catch(e){ /* continue with push even if merge-pull fails */ }
-    var r=await fetch(DATA_URL+'/data',{
+    var r=await fetch(SYNC_PROXY,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+DATA_TOKEN},
+      headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},
       body:JSON.stringify(S)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -132,8 +130,8 @@ async function pushToCloud(){
 async function pullFromCloud(){
   try{
     setSyncStatus('syncing','Loading...');
-    var r=await fetch(DATA_URL+'/data',{
-      headers:{'Authorization':'Bearer '+DATA_TOKEN}
+    var r=await fetch(SYNC_PROXY,{
+      headers:{'X-Api-Secret':VERCEL_SECRET}
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
     var res=await r.json();
@@ -317,7 +315,7 @@ function renderWalletHoldings(){
     }).join('');
     html+='<div class="fc" style="margin-bottom:1rem">'
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem">'
-      +'<h3 style="margin:0">'+label+'</h3>'
+      +'<h3 style="margin:0">'+escHtml(label)+'</h3>'
       +'<span style="font-size:20px;font-weight:600">'+fmtUSD(wTotal)+'</span>'
       +'</div>'
       +'<table><thead><tr><th>Asset</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead>'
@@ -338,8 +336,9 @@ function renderOnchainWallets(){
     var addr=w.address.length>20?w.address.slice(0,10)+'…'+w.address.slice(-6):w.address;
     return '<div class="ow-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
       +'<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:'+cc+'18;color:'+cc+';font-weight:600;letter-spacing:.04em;flex-shrink:0">'+cl+'</span>'
-      +'<span style="font-weight:500;flex-shrink:0;font-size:14px">'+w.label+'</span>'
+      +'<span style="font-weight:500;flex-shrink:0;font-size:14px">'+escHtml(w.label)+'</span>'
       +'<span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace;flex:1">'+addr+'</span>'
+      +'<button class="btn btns" onclick="copyAddr(\''+w.address+'\')" title="Copy full address" style="padding:2px 8px;opacity:0.55;font-size:13px">⎘</button>'
       +'<button class="btn btnd" onclick="deleteOnchainWallet('+w.id+')">&#x2715;</button>'
       +'</div>';
   }).join('');
@@ -362,11 +361,21 @@ function deleteOnchainWallet(id){
   S.onchainWalletsUpdatedAt=Date.now();
   save(); renderOnchainWallets();
 }
+function copyAddr(a){
+  navigator.clipboard.writeText(a).then(function(){
+    var el=event&&event.target; if(!el) return;
+    var prev=el.textContent; el.textContent='✓'; el.style.opacity='1';
+    setTimeout(function(){ el.textContent=prev; el.style.opacity='0.55'; },1500);
+  });
+}
 async function refreshWalletHoldings(){
+  var btn=document.querySelector('[onclick="refreshWalletHoldings()"]');
   var wrap=document.getElementById('wh-wrap');
+  if(btn){ btn.disabled=true; btn.textContent='Loading...'; }
   if(wrap) wrap.innerHTML='<div class="empty">Loading...</div>';
   try{ await fetchWalletHoldings(); renderWalletHoldings(); }
   catch(e){ console.error('fetchWalletHoldings:',e); if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+(e.message||e.toString())+'</div>'; }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='↺ Refresh'; } }
 }
 
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
@@ -481,7 +490,6 @@ function updateTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
-function deleteHolding(id){ S.portfolio=S.portfolio.filter(function(t){ return t.id!==id; }); S.portfolioUpdatedAt=Date.now(); save(); renderHoldings(); }
 function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
 function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var v=prompt('Rename "'+w.name+'" to:',w.name); if(!v||!v.trim()||v.trim()===w.name) return; w.name=v.trim(); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
@@ -494,9 +502,9 @@ function emptyState(title, sub){
 function localToday(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB','Eating Out':'tA',Support:'tA',Investments:'tA',Savings:'tG',
   Services:'tP','Help others':'tA',Emergency:'tR',Zelle:'tZ',Other:'tX'}; return m[cat]||'tX'; }
-function fmtCat(cat){ return cat||'—'; }
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
 
 function renderTx(){
@@ -527,7 +535,7 @@ function renderTx(){
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
       var trk=isTrk?'<span class="badge-t">tracker</span>':'';
       var wTag=t.wallet==='Binance'?'tBinance':'tX';
-      return '<tr><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+t.desc+'">'+t.desc+'</td><td><span class="tag '+wTag+'">'+(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td>'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+t.category+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td style="white-space:nowrap"><button class="btn-edit-tx" title="Edit" onclick="editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
+      return '<tr><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.desc)+'">'+escHtml(t.desc)+'</td><td><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td><td><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td><td>'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td><td style="font-size:12px;color:var(--color-text-secondary)">'+orig+'</td><td style="font-weight:500;color:'+col+'">'+fmtUSD(t.amountUSD)+'</td><td style="white-space:nowrap"><button class="btn-edit-tx" title="Edit" onclick="editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></td></tr>';
     }).join('');
     return sep+txRows;
   }).join('');
@@ -1071,32 +1079,15 @@ function renderWallets(){
   trackerNames.forEach(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){ return w.name===name; });
     var actions=mw?'<div class="wcard-actions"><button class="wico" onclick="renameManualWallet('+mw.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icoX+'</button></div>':'';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+name+' <span class="badge-t">tracker</span></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">Calculated from transactions</div>'+actions+'</div>');
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(name)+' <span class="badge-t">tracker</span></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">Calculated from transactions</div>'+actions+'</div>');
   });
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
     var actions='<div class="wcard-actions"><button class="wico" onclick="editManualWalletBal('+w.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icoX+'</button></div>';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+w.name+' <span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span></div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+actions+'</div>');
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(w.name)+' <span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span></div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+actions+'</div>');
   });
   grid.innerHTML=cards.join('');
 }
 
-function addHolding(){
-  var date=document.getElementById('po-date').value; var asset=document.getElementById('po-asset').value.trim().toUpperCase();
-  var type=document.getElementById('po-type').value; var qty=parseFloat(document.getElementById('po-qty').value);
-  var price=parseFloat(document.getElementById('po-price').value); var notes=document.getElementById('po-notes').value.trim();
-  if(!date||!asset||isNaN(qty)||isNaN(price)){ alert('Fill required fields'); return; }
-  S.portfolio.push({id:Date.now(),date:date,asset:asset,type:type,qty:qty,price:price,notes:notes,totalUSD:parseFloat((qty*price).toFixed(4))});
-  S.portfolioUpdatedAt=Date.now();
-  ['po-asset','po-qty','po-price','po-notes'].forEach(function(id){ document.getElementById(id).value=''; });
-  save(); renderHoldings();
-}
-function renderHoldings(){
-  var wrap=document.getElementById('po-wrap'); var data=S.portfolio.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  var total=data.reduce(function(s,e){ return s+e.totalUSD; },0);
-  if(!data.length){ wrap.innerHTML=emptyState('No holdings recorded','Add your first asset above to track your portfolio'); return; }
-  var rows=data.map(function(e){ return '<tr><td>'+e.date+'</td><td style="font-weight:500">'+e.asset+'</td><td><span class="tag tB">'+e.type+'</span></td><td>'+e.qty+'</td><td>'+fmtUSD(e.price)+'</td><td style="font-weight:500">'+fmtUSD(e.totalUSD)+'</td><td style="color:var(--color-text-secondary)">'+(e.notes||'-')+'</td><td><button class="btn btnd" onclick="deleteHolding('+e.id+')">x</button></td></tr>'; }).join('');
-  wrap.innerHTML='<div class="mc" style="margin-bottom:.875rem;display:inline-block;min-width:170px"><div class="mc-l">Total invested</div><div class="mc-v b">'+fmtUSD(total)+'</div></div><table><thead><tr><th>Date</th><th>Asset</th><th>Type</th><th>Qty</th><th>Price</th><th>Total</th><th>Notes</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
-}
 
 function populateWalletSelects(){
   var names=['Binance','Zelle','Cash'];
@@ -1228,10 +1219,9 @@ window.saveCategoryBudget = saveCategoryBudget;
 window.saveBudget = saveBudget;
 window.saveManualWallet = saveManualWallet;
 window.deleteManualWallet = deleteManualWallet;
-window.addHolding = addHolding;
-window.deleteHolding = deleteHolding;
 window.saveOnchainWallet = saveOnchainWallet;
 window.deleteOnchainWallet = deleteOnchainWallet;
+window.copyAddr = copyAddr;
 window.renderWallets = renderWallets;
 window.testBinance = testBinance;
 window.clearBinance = clearBinance;
