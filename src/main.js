@@ -50,7 +50,7 @@ var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
-var syncTimer=null, _srchTimer=null;
+var syncTimer=null, _srchTimer=null, syncFailed=false;
 
 function setSyncStatus(state, msg){
   var dot=document.getElementById('sync-dot');
@@ -118,11 +118,13 @@ async function pushToCloud(){
       body:JSON.stringify(S)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
+    syncFailed=false;
     setSyncStatus('synced','Synced');
     var cs=document.getElementById('cloud-status');
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US');
   }catch(e){
-    setSyncStatus('offline','Offline (local only)');
+    syncFailed=true;
+    setSyncStatus('offline','⚠ Cambios sin sincronizar');
     console.warn('push failed:',e.message);
   }
 }
@@ -130,13 +132,25 @@ async function pushToCloud(){
 async function pullFromCloud(){
   try{
     setSyncStatus('syncing','Loading...');
-    var r=await fetch(SYNC_PROXY,{
-      headers:{'X-Api-Secret':VERCEL_SECRET}
-    });
+    var r=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
     if(!r.ok) throw new Error('HTTP '+r.status);
     var res=await r.json();
     if(res.data){
-      S=Object.assign({},S,res.data);
+      var cloud=res.data;
+      // Additive merge for transactions — never discard local txs not yet pushed
+      if(cloud.transactions){
+        var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cloud.deletedTxIds||[]));
+        S.deletedTxIds=Array.from(mergedDeleted);
+        S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
+        var localIds=new Set(S.transactions.map(function(t){ return t.id; }));
+        var missing=cloud.transactions.filter(function(t){ return !localIds.has(t.id)&&!mergedDeleted.has(t.id); });
+        if(missing.length) S.transactions=S.transactions.concat(missing);
+      }
+      // Replace all other fields normally
+      var rest=Object.assign({},cloud);
+      delete rest.transactions;
+      delete rest.deletedTxIds;
+      S=Object.assign({},S,rest);
       saveLocal();
       setSyncStatus('synced','Synced');
       return true;
@@ -149,6 +163,10 @@ async function pullFromCloud(){
     return false;
   }
 }
+
+window.addEventListener('online', function(){
+  if(syncFailed){ syncFailed=false; pushToCloud(); }
+});
 
 function save(){
   saveLocal();
@@ -1305,6 +1323,7 @@ function calcProfit(){
   var spent     = parseFloat(document.getElementById('pc-amount').value)||0;
   var buyRate   = parseFloat(document.getElementById('pc-buy').value)||0;
   var cardComm  = parseFloat(document.getElementById('pc-card').value)||0;
+  try{ localStorage.setItem('ft13_pc', JSON.stringify({sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value, buy:document.getElementById('pc-buy').value, card:document.getElementById('pc-card').value})); }catch(e){}
 
   var usdt         = (sellRate > 0 && spent > 0) ? spent * buyRate / sellRate : 0;
   var bpayRecharge = spent > 0 ? spent / (1 + cardComm / 100) : 0;
@@ -1412,6 +1431,7 @@ async function init(){
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
+  try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; if(_pc.buy) document.getElementById('pc-buy').value=_pc.buy; if(_pc.card) document.getElementById('pc-card').value=_pc.card; }catch(e){}
   renderToolToggles(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
   autoFetchBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
