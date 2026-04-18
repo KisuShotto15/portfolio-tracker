@@ -185,12 +185,40 @@
 
   <div id="page-tools" class="page">
 
-    <div class="tool-card">
+    <div id="tc-profit" class="tool-card" style="padding-bottom:.6rem">
+      <div class="tool-title" style="margin-bottom:.75rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">Profit Calculator</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Profit from selling USDT after card commission (buy side) and Bpay 3.3% fee (sell side).</span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Tasa Venta</span>
+          <input type="number" id="pc-sell" placeholder="0.00" step="0.001" oninput="calcProfit()"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Invertido ($)</span>
+          <input type="number" id="pc-amount" placeholder="0.00" step="0.01" oninput="calcProfit()"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Tasa Compra</span>
+          <input type="number" id="pc-buy" placeholder="0.00" step="0.001" oninput="calcProfit()"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Comisión (%)</span>
+          <input type="number" id="pc-card" placeholder="0.00" step="0.1" oninput="calcProfit()"/>
+        </div>
+      </div>
+      <div id="pc-result" style="max-width:90%;margin:0 auto">
+        <div id="pc-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
+      </div>
+    </div>
+
+    <div id="tc-p2p" class="tool-card">
       <div class="tool-title" style="margin-bottom:.75rem">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">P2P Spread</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Sell USDT → buy USD at lower rate → reconvert via BDV→Bpay. Shows raw P2P spread and effective net gain after fees.</span></span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.875rem;max-width:90%;margin-left:auto;margin-right:auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Sell</span>
           <input type="number" id="p2p-sell" placeholder="0.00" step="0.01" oninput="calcSpread()"/>
@@ -200,10 +228,12 @@
           <input type="number" id="p2p-buy" placeholder="0.00" step="0.01" oninput="calcSpread()"/>
         </div>
       </div>
-      <div id="p2p-result" style="max-width:90%;margin:0 auto"></div>
+      <div id="p2p-result" style="max-width:90%;margin:0 auto">
+        <div id="p2p-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:520px"></div>
+      </div>
     </div>
 
-    <div class="tool-card">
+    <div id="tc-bdvbpay" class="tool-card">
       <div class="tool-title">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Bpay</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Bpay keeps 3.3% of the recharge</span></span>
@@ -219,7 +249,7 @@
       </div>
     </div>
 
-    <div class="tool-card">
+    <div id="tc-bdvwally" class="tool-card">
       <div class="tool-title">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Wally</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Wally fee: 3.5% + 7% ITBMS on commission = 3.745% charged upfront</span></span>
@@ -235,7 +265,7 @@
       </div>
     </div>
 
-    <div class="tool-card">
+    <div id="tc-bdvzinli" class="tool-card">
       <div class="tool-title">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Zinli</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Zinli fee: 3.75% charged upfront</span></span>
@@ -250,6 +280,8 @@
         <div id="zinli-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
       </div>
     </div>
+
+    <div id="tools-toggles" style="grid-column:1/-1"></div>
 
   </div>
 

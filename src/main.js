@@ -1184,6 +1184,7 @@ function showPage(id,btn){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
+  else if(id==='tools') renderToolToggles();
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -1242,17 +1243,82 @@ window.clearAll = clearAll;
 window.handleCSV = handleCSV;
 window.save = save;
 
-function renderCalcCards(cardsId, resultId, cards){
+function renderCalcCards(cardsId, resultId, cards, small){
+  var pad   = small ? '.28rem .4rem' : '.75rem .625rem';
+  var vSize = small ? '13px' : '18px';
+  var lSize = small ? '9px'  : '11px';
+  var sSize = small ? '8px'  : '10px';
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
     var color = c.green ? 'var(--color-accent)' : c.red ? '#E24B4A' : 'var(--color-text-primary)';
-    return '<div class="fc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:9px;padding:.75rem .625rem;text-align:center">'
-      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:3px">'+c.label+'</div>'
-      +'<div class="bdv-val" style="font-size:18px;font-weight:500;color:'+color+'">'+c.value+'</div>'
-      +'<div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">'+c.sub+'</div>'
+    return '<div class="fc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:9px;padding:'+pad+';text-align:center">'
+      +'<div style="font-size:'+lSize+';color:var(--color-text-secondary);margin-bottom:2px">'+c.label+'</div>'
+      +'<div class="bdv-val" style="font-size:'+vSize+';font-weight:500;color:'+color+'">'+c.value+'</div>'
+      +'<div style="font-size:'+sSize+';color:var(--color-text-secondary);margin-top:2px">'+c.sub+'</div>'
       +'</div>';
   }).join('');
   document.getElementById(resultId).style.display = 'block';
 }
+
+var TOOLS = [
+  { id:'profit',   label:'Profit Calc' },
+  { id:'p2p',      label:'P2P Spread'  },
+  { id:'bdvbpay',  label:'BDV→Bpay'   },
+  { id:'bdvwally', label:'BDV→Wally'  },
+  { id:'bdvzinli', label:'BDV→Zinli'  },
+];
+
+function renderToolToggles(){
+  if(!S.hiddenTools) S.hiddenTools={};
+  var wrap=document.getElementById('tools-toggles');
+  if(!wrap) return;
+  var green='#22c55e';
+  wrap.innerHTML='<div class="fc">'
+    +'<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem">Manage Tools</div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap">'
+    +TOOLS.map(function(t){
+      var hidden=!!S.hiddenTools[t.id];
+      var boxBg=hidden?'transparent':green;
+      var boxBorder=hidden?'rgba(255,255,255,0.22)':green;
+      return '<div onclick="toggleTool(\''+t.id+'\')" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;user-select:none">'
+        +'<span style="font-size:10px;color:rgba(255,255,255,'+(hidden?'0.4':'0.75')+');text-transform:uppercase;letter-spacing:.05em">'+t.label+'</span>'
+        +'<div style="width:20px;height:20px;border:1.5px solid '+boxBorder+';border-radius:4px;background:'+boxBg+'"></div>'
+        +'</div>';
+    }).join('')
+    +'</div>'
+    +'</div>';
+  TOOLS.forEach(function(t){
+    var el=document.getElementById('tc-'+t.id);
+    if(el) el.style.display=S.hiddenTools[t.id]?'none':'';
+  });
+}
+window.toggleTool=function(id){
+  if(!S.hiddenTools) S.hiddenTools={};
+  S.hiddenTools[id]=!S.hiddenTools[id];
+  save();
+  renderToolToggles();
+};
+window.renderToolToggles=renderToolToggles;
+
+function calcProfit(){
+  var sellRate  = parseFloat(document.getElementById('pc-sell').value)||0;
+  var spent     = parseFloat(document.getElementById('pc-amount').value)||0;
+  var buyRate   = parseFloat(document.getElementById('pc-buy').value)||0;
+  var cardComm  = parseFloat(document.getElementById('pc-card').value)||0;
+
+  var usdt         = (sellRate > 0 && spent > 0) ? spent * buyRate / sellRate : 0;
+  var bpayRecharge = spent > 0 ? spent / (1 + cardComm / 100) : 0;
+  var bpayReceived = bpayRecharge * 0.967;
+  var profit       = bpayReceived - usdt;
+  var profitPct    = usdt > 0 ? (profit / usdt) * 100 : 0;
+
+  var isPos = profit >= 0;
+  renderCalcCards('pc-cards','pc-result',[
+    { label:'USDT recibidos',  value: usdt > 0 ? usdt.toFixed(2)+' USDT' : '—', sub: '—' },
+    { label:'Bpay Recharge',   value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2)+' después de Bpay' },
+    { label:'Profit neto',     value:(isPos?'+':'')+'$'+profit.toFixed(2), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
+  ], true);
+}
+window.calcProfit = calcProfit;
 
 function calcSpread(){
   var sellRate = parseFloat(document.getElementById('p2p-sell').value)||0;
@@ -1264,24 +1330,11 @@ function calcSpread(){
   var effectivePct = sellRate && buyRate ? ((sellRate / buyRate) * bpayFactor - 1) * 100 : 0;
   var feesPct      = spreadPct - effectivePct;
 
-  var fmt = function(n,d){ return n.toFixed(d||2); };
-  var pct = function(n){ return (n>=0?'+':'')+fmt(n)+'%'; };
-  var ac  = 'var(--color-accent)';
-  var rc  = '#E24B4A';
-
-  document.getElementById('p2p-result').innerHTML =
-    '<div style="display:flex;justify-content:center;gap:8px;margin-top:.5rem">'
-    +'<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;padding:.75rem;flex:1;max-width:200px">'
-      +'<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P2P Spread</div>'
-      +'<div style="font-size:24px;font-weight:700;color:'+(spreadPct>0?ac:'var(--color-text-primary)')+'">'+pct(spreadPct)+'</div>'
-      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">'+(sellRate&&buyRate ? sellRate+' → '+buyRate+' Bs' : '—')+'</div>'
-    +'</div>'
-    +'<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;padding:.75rem;flex:1;max-width:200px">'
-      +'<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Net BDV-Bpay</div>'
-      +'<div style="font-size:24px;font-weight:700;color:'+(effectivePct>0?ac:effectivePct<0?rc:'var(--color-text-primary)')+'">'+pct(effectivePct)+'</div>'
-      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">after <span style="color:'+rc+'">'+fmt(feesPct)+'%</span> BDV+Bpay fees</div>'
-    +'</div>'
-  +'</div>';
+  var pct = function(n){ return (n>=0?'+':'')+n.toFixed(2)+'%'; };
+  renderCalcCards('p2p-cards','p2p-result',[
+    { label:'P2P Spread',   value:pct(spreadPct),   sub: sellRate&&buyRate ? sellRate+' → '+buyRate : '—', green:spreadPct>0 },
+    { label:'Net BDV-Bpay', value:pct(effectivePct), sub:'after '+feesPct.toFixed(2)+'% fees', green:effectivePct>0, red:effectivePct<0 },
+  ]);
 }
 window.calcSpread = calcSpread;
 
@@ -1342,7 +1395,7 @@ async function init(){
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
-  calcSpread(); calcBDV(); calcWally(); calcZinli();
+  renderToolToggles(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli();
   autoFetchBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
   setInterval(function(){ autoFetchBinance(); }, BINANCE_AUTO_MS);
