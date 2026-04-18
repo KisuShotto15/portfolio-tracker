@@ -1260,11 +1260,12 @@ function renderCalcCards(cardsId, resultId, cards, small){
 }
 
 var TOOLS = [
-  { id:'profit',   label:'Profit Calc' },
-  { id:'p2p',      label:'P2P Spread'  },
-  { id:'bdvbpay',  label:'BDV→Bpay'   },
-  { id:'bdvwally', label:'BDV→Wally'  },
-  { id:'bdvzinli', label:'BDV→Zinli'  },
+  { id:'profit',   label:'Profit Calc'    },
+  { id:'p2p',      label:'P2P Spread'     },
+  { id:'bdvbpay',  label:'BDV→Bpay'      },
+  { id:'bdvwally', label:'BDV→Wally'     },
+  { id:'bdvzinli', label:'BDV→Zinli'     },
+  { id:'bcvemily', label:'BCV→Emily USD' },
 ];
 
 function renderToolToggles(){
@@ -1370,6 +1371,22 @@ function calcWalletUpfront(bank, walletFeeRate, resultId, cardsId){
   ]);
 }
 
+function calcBCVEmily(){
+  var usd      = parseFloat(document.getElementById('be-usd').value)||0;
+  var usdtRate = parseFloat(document.getElementById('be-usdt').value)||0;
+  var bcvRate  = S.rate || 0;
+
+  var totalBs       = usd * bcvRate;
+  var effectiveRate = usdtRate * 0.9;
+  var usdtOut       = (totalBs > 0 && effectiveRate > 0) ? totalBs / effectiveRate : 0;
+
+  renderCalcCards('be-cards','be-result',[
+    { label:'Total Bs',       value: totalBs > 0 ? totalBs.toFixed(2)+' Bs' : '—', sub: bcvRate ? usd+'$ × '+bcvRate+' Bs' : 'Tasa BCV no disponible' },
+    { label:'USDT recibidos', value: usdtOut > 0 ? usdtOut.toFixed(2)+' USDT' : '—', sub: effectiveRate > 0 ? 'tasa efectiva: '+effectiveRate.toFixed(2) : '—', green: usdtOut > 0 },
+  ]);
+}
+window.calcBCVEmily = calcBCVEmily;
+
 function calcWally(){
   calcWalletUpfront(parseFloat(document.getElementById('wally-input').value), 0.03745, 'wally-result', 'wally-cards');
 }
@@ -1395,7 +1412,7 @@ async function init(){
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
-  renderToolToggles(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli();
+  renderToolToggles(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
   autoFetchBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
   setInterval(function(){ autoFetchBinance(); }, BINANCE_AUTO_MS);

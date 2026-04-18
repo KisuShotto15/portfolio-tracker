@@ -281,6 +281,26 @@
       </div>
     </div>
 
+    <div id="tc-bcvemily" class="tool-card">
+      <div class="tool-title" style="margin-bottom:.75rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BCV to Emily USD</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Convierte dólares a Bs via tasa BCV, luego compra USDT a 10% por debajo del precio de mercado.</span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Dólares ($)</span>
+          <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Precio USDT</span>
+          <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
+        </div>
+      </div>
+      <div id="be-result" style="max-width:90%;margin:0 auto">
+        <div id="be-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:520px"></div>
+      </div>
+    </div>
+
     <div id="tools-toggles" style="grid-column:1/-1"></div>
 
   </div>
