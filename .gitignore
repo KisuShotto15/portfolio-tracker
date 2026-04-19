@@ -6,6 +6,7 @@ dist
 # Personal notes / reference docs
 *.pdf
 *.png
+!/public/KS.png
 CLAUDE\ (1).md
 13\ instrucciones\ para\ ahorrar\ tokens\ en\ Claude\ y\ Claude\ Code.md
 CONTEXT.md
