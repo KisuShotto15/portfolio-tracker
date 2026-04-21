@@ -4,6 +4,8 @@ var RATE_URL      = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
 var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
 var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
+var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
+var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var VERCEL_SECRET = 'ptk-2025-kisu';
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
@@ -244,7 +246,7 @@ async function autoFetchBinance(){
 }
 
 async function fetchBybitBalance(){
-  var r=await fetch(PROXY+'/bybit'); if(!r.ok) throw new Error('Bybit '+r.status);
+  var r=await fetch(BYBIT_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('Bybit '+r.status);
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var list=(d.result&&d.result.list)||[]; var total=0;
   list.forEach(function(acc){ var usdt=acc.coin&&acc.coin.find(function(c){ return c.coin==='USDT'; }); if(usdt) total+=parseFloat(usdt.walletBalance||0); });
@@ -258,7 +260,7 @@ async function testBybit(){
 function clearBybit(){ S.bybitBalance=null; S.bybitUpdated=null; save(); document.getElementById('bb-status').textContent='Reset.'; renderWallets(); }
 
 async function fetchOKXBalance(){
-  var r=await fetch(PROXY+'/okx'); if(!r.ok) throw new Error('OKX '+r.status);
+  var r=await fetch(OKX_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('OKX '+r.status);
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var details=(d.data&&d.data[0]&&d.data[0].details)||[];
   var usdt=details.find(function(c){ return c.ccy==='USDT'; });
