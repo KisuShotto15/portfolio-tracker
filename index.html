@@ -124,7 +124,7 @@
       <button class="btn btns" style="margin-left:4px;padding:2px 7px" onclick="fetchRate(true)">&#8635;</button>
     </div>
     <div class="frow">
-      <input type="search" id="tf-search" placeholder="Search transactions..." oninput="clearTimeout(_srchTimer);_srchTimer=setTimeout(renderTx,220)" style="min-width:180px"/>
+      <input type="search" id="tf-search" placeholder="Search transactions..." style="min-width:180px"/>
       <select id="tf-type" onchange="renderTx()"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div class="frow-break"></div>
       <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>

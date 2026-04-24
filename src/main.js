@@ -1422,6 +1422,7 @@ async function init(){
   var today=localToday();
   document.getElementById('tx-date').value=today;
   document.getElementById('tf-month').value=today.slice(0,7);
+  document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI();
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
