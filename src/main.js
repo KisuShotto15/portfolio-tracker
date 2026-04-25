@@ -52,7 +52,7 @@ var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
-var syncTimer=null, _srchTimer=null, syncFailed=false;
+var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={};
 
 function setSyncStatus(state, msg){
   var dot=document.getElementById('sync-dot');
@@ -320,9 +320,12 @@ function renderWalletHoldings(){
   if(wallets.length>1){
     html='<div class="mc" style="margin-bottom:1rem"><div class="mc-l">Total Value</div><div class="mc-v" style="font-size:24px;font-weight:600">'+fmtUSD(grandTotal)+'</div></div>';
   }
+  var CHEV_DOWN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  var CHEV_RIGHT='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
   Object.keys(grouped).forEach(function(label){
     var items=grouped[label];
     var wTotal=items.reduce(function(s,h){ return s+h.balanceUsd; },0);
+    var collapsed=!!_whCollapsed[label];
     var rows=items.map(function(h){
       var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
       return '<tr>'
@@ -334,16 +337,18 @@ function renderWalletHoldings(){
         +'</tr>';
     }).join('');
     html+='<div class="fc" style="margin-bottom:1rem">'
-      +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem">'
-      +'<h3 style="margin:0">'+escHtml(label)+'</h3>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none" onclick="toggleWhCard(\''+escHtml(label)+'\')">'
+      +'<div style="display:flex;align-items:center;gap:7px"><h3 style="margin:0">'+escHtml(label)+'</h3><span style="color:rgba(255,255,255,0.28)">'+(collapsed?CHEV_RIGHT:CHEV_DOWN)+'</span></div>'
       +'<span style="font-size:20px;font-weight:600">'+fmtUSD(wTotal)+'</span>'
       +'</div>'
-      +'<table><thead><tr><th>Asset</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead>'
-      +'<tbody>'+rows+'</tbody></table>'
+      +(collapsed?'':'<div style="margin-top:1rem"><table><thead><tr><th>Asset</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead><tbody>'+rows+'</tbody></table></div>')
       +'</div>';
   });
   wrap.innerHTML=html;
 }
+function toggleWhCard(label){ _whCollapsed[label]=!_whCollapsed[label]; renderWalletHoldings(); }
+window.toggleWhCard=toggleWhCard;
+
 function renderOnchainWallets(){
   var wrap=document.getElementById('ow-list');
   if(!wrap) return;
