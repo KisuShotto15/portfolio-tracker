@@ -349,6 +349,15 @@ function renderWalletHoldings(){
 }
 function toggleWhCard(label){ _whCollapsed[label]=!_whCollapsed[label]; renderWalletHoldings(); }
 window.toggleWhCard=toggleWhCard;
+function toggleOwCard(){
+  var body=document.getElementById('ow-body'); var chev=document.getElementById('ow-chev');
+  var open=body.style.display!=='none';
+  body.style.display=open?'none':'block';
+  chev.innerHTML=open
+    ?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+    :'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+}
+window.toggleOwCard=toggleOwCard;
 
 function renderOnchainWallets(){
   var wrap=document.getElementById('ow-list');
