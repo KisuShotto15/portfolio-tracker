@@ -307,7 +307,8 @@ function renderWalletHoldings(){
   var upd=document.getElementById('wh-updated');
   if(!wrap) return;
   if(upd&&S.walletHoldingsUpdated) upd.textContent='Updated '+S.walletHoldingsUpdated;
-  var data=S.walletHoldings||[];
+  var MIN_USD=1;
+  var data=(S.walletHoldings||[]).filter(function(h){ return h.balanceUsd>=MIN_USD; });
   var wallets=S.onchainWallets||[];
   if(!wallets.length){ wrap.innerHTML=''; return; }
   if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Click Refresh to load live balances'); return; }
@@ -325,7 +326,7 @@ function renderWalletHoldings(){
   Object.keys(grouped).forEach(function(label){
     var items=grouped[label];
     var wTotal=items.reduce(function(s,h){ return s+h.balanceUsd; },0);
-    var collapsed=!!_whCollapsed[label];
+    var collapsed=_whCollapsed[label]!==false;
     var rows=items.map(function(h){
       var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
       return '<tr>'
