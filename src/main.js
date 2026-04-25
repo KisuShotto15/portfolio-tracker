@@ -639,24 +639,34 @@ function renderSnapshotPnL(){
   var simpleHdr='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span></div>';
   if(!snaps.length){ el.innerHTML=simpleHdr+emptyState('No snapshots yet','Record your first snapshot to begin tracking'); return; }
   if(snaps.length<2){ el.innerHTML=simpleHdr+'<div style="color:var(--color-text-secondary);font-size:13px">Record a second snapshot to see P&L between periods.</div>'; return; }
+  function fmtSnapDate(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}); }
   function makePnlRow(p){
     var c=p.profit>0?'#1D9E75':p.profit<0?'#E24B4A':'#888';
     var sign=p.profit>0?'+':'';
-    var adj=p.invOut>0||p.invIn>0?'<div style="font-size:11px;color:#EF9F27">'+(p.invOut>0?'Invested: '+fmtUSD(p.invOut):'')+(p.invIn>0?' · Returned: '+fmtUSD(p.invIn):'')+'</div>':'';
-    return '<div class="pnl-row"><div><div class="pnl-period">'+p.from+' → '+p.to+'</div>'
-      +'<div style="font-size:12px;color:var(--color-text-secondary)">'+fmtUSD(p.snap1)+' → '+fmtUSD(p.snap2)+'</div>'+adj+'</div>'
-      +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div></div>';
+    var adj=p.invOut>0||p.invIn>0?'<span class="pnl-adj">'+(p.invOut>0?'Invested '+fmtUSD(p.invOut):'')+(p.invIn>0?(p.invOut>0?' · ':'')+' Returned '+fmtUSD(p.invIn):'')+'</span>':'';
+    return '<div class="pnl-row">'
+      +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div>'
+      +'<div class="pnl-meta">'
+        +'<div class="pnl-period">'+fmtSnapDate(p.from)+' → '+fmtSnapDate(p.to)+'</div>'
+        +'<div class="pnl-range">'+fmtUSD(p.snap1)+' → '+fmtUSD(p.snap2)+'</div>'
+        +(adj?'<div>'+adj+'</div>':'')
+      +'</div>'
+      +'</div>';
   }
-  var latest=makePnlRow(pnls[pnls.length-1]);
   var older=pnls.slice(0,-1).reverse().map(makePnlRow).join('');
-  var total=pnls.reduce(function(s,p){ return s+p.profit; },0);
-  var tc=total>0?'#1D9E75':total<0?'#E24B4A':'#888';
   var histIcon=older?'<div class="hist-wrap"><button class="hist-btn" onclick="toggleHistPopup(this)" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">History</div><div class="pnl-list">'+older+'</div></div></div>':'';
-  var hdr='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+histIcon+'</div>';
-  el.innerHTML=hdr+'<div class="pnl-list">'+latest+'</div>'
-    +'<div style="display:flex;justify-content:space-between;padding:.75rem 0 0;border-top:0.5px solid var(--color-border-tertiary);margin-top:.5rem;font-size:13px">'
-    +'<span style="color:var(--color-text-secondary)">Total P&L</span>'
-    +'<span style="font-weight:600;color:'+tc+'">'+(total>=0?'+':'')+fmtUSD(total)+'</span></div>';
+  var hdr='<div style="position:relative;text-align:center;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(older?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)">'+histIcon+'</div>':'')+'</div>';
+  var latestP=pnls[pnls.length-1];
+  var lc=latestP.profit>0?'#1D9E75':latestP.profit<0?'#E24B4A':'#888';
+  var lsign=latestP.profit>0?'+':'';
+  var ladj=latestP.invOut>0||latestP.invIn>0?'<div style="margin-top:5px"><span class="pnl-adj">'+(latestP.invOut>0?'Invested '+fmtUSD(latestP.invOut):'')+(latestP.invIn>0?(latestP.invOut>0?' · ':'')+' Returned '+fmtUSD(latestP.invIn):'')+'</span></div>':'';
+  var latestHtml='<div class="pnl-row">'
+    +'<div class="pnl-period">'+fmtSnapDate(latestP.from)+' → '+fmtSnapDate(latestP.to)+'</div>'
+    +'<div class="pnl-range">'+fmtUSD(latestP.snap1)+' → '+fmtUSD(latestP.snap2)+'</div>'
+    +ladj
+    +'<div class="pnl-profit" style="color:'+lc+'">'+lsign+fmtUSD(latestP.profit)+'</div>'
+    +'</div>';
+  el.innerHTML=hdr+latestHtml;
 }
 
 function renderGoal(){
@@ -668,21 +678,25 @@ function renderGoal(){
   var contrib=getAvgMonthlyContribution();
   var remaining=goal>0?Math.max(0,goal-current):0;
   var months=contrib>0?Math.ceil(remaining/contrib):null;
-  var progBar=goal>0
-    ?'<div style="margin-top:.75rem">'
-      +'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);margin-bottom:5px"><span>'+fmtUSD(current)+'</span><span>'+fmtUSD(goal)+'</span></div>'
-      +'<div style="background:var(--color-background-secondary);border-radius:999px;height:7px;overflow:hidden">'
-      +'<div style="background:#9B70F0;height:100%;width:'+pct.toFixed(1)+'%;border-radius:999px"></div></div>'
-      +'<div style="display:flex;justify-content:space-between;margin-top:7px;font-size:13px">'
-      +'<span style="color:#9B70F0;font-weight:600">'+pct.toFixed(1)+'%</span>'
-      +(months?'<span style="color:var(--color-text-secondary)">~'+months+' mo · '+fmtUSD(contrib)+'/mo</span>':'')
-      +'</div></div>'
-    :'<div style="color:var(--color-text-secondary);font-size:13px;margin-top:.5rem">Set a target to track progress.</div>';
-  el.innerHTML='<div class="cleg" style="margin-bottom:.75rem">Financial Goal</div>'
-    +'<div style="display:flex;gap:8px;align-items:center">'
-    +'<input type="number" id="goal-input" value="'+(goal||'')+'" placeholder="Target e.g. 100000" style="flex:1;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:6px 10px;color:#fff;font-size:14px"/>'
+  var PENCIL='<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>';
+  var inputRow='<div id="goal-input-row" style="display:'+(goal>0?'none':'flex')+';gap:8px;align-items:center;margin-top:.5rem">'
+    +'<input type="number" id="goal-input" value="'+(goal||'')+'" placeholder="e.g. 100000" style="flex:1;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:6px 10px;color:#fff;font-size:14px"/>'
     +'<button class="btn btns" onclick="saveGoal()" style="padding:6px 14px">Set</button>'
-    +'</div>'+progBar;
+    +'</div>';
+  var progBar=goal>0
+    ?'<div style="margin-top:.875rem">'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);margin-bottom:6px"><span style="font-weight:500;color:var(--color-text-primary)">'+fmtUSD(current)+'</span><span>'+fmtUSD(goal)+'</span></div>'
+      +'<div style="background:rgba(255,255,255,0.07);border-radius:999px;height:10px;overflow:hidden">'
+      +'<div style="background:linear-gradient(90deg,#9B70F0,#7B5FD0);height:100%;width:'+pct.toFixed(1)+'%;border-radius:999px;transition:width .4s ease"></div></div>'
+      +'<div style="text-align:center;margin-top:10px">'
+      +'<div style="font-size:18px;font-weight:700;color:#9B70F0">'+pct.toFixed(1)+'%</div>'
+      +(months?'<div class="goal-eta" style="margin-top:2px">~'+months+' mo · '+fmtUSD(contrib)+'/mo</div>':'')
+      +'</div></div>'
+    :'';
+  el.innerHTML='<div style="position:relative;text-align:center;margin-bottom:'+(goal>0?'.25rem':'.75rem')+'">'
+    +'<span class="cleg" style="margin:0">Financial Goal</span>'
+    +(goal>0?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)"><button class="goal-edit-btn" title="Edit goal" onclick="document.getElementById(\'goal-input-row\').style.display=document.getElementById(\'goal-input-row\').style.display===\'none\'?\'flex\':\'none\'">'+PENCIL+'</button></div>':'')
+    +'</div>'+inputRow+progBar;
 }
 
 function renderProjection(){

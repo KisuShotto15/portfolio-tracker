@@ -25,7 +25,7 @@ body{font-family:var(--font-sans,system-ui);background:radial-gradient(ellipse 8
 .sum-mid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px}
 .sum-foot{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.1rem}
 .sum-foot .mc{background:transparent;border-color:rgba(255,255,255,0.06)}
-.mc{background:rgba(255,255,255,0.055);border:0.5px solid rgba(255,255,255,0.08);border-radius:14px;padding:.875rem}
+.mc{background:rgba(255,255,255,0.055);border:0.5px solid rgba(255,255,255,0.08);border-radius:14px;padding:.875rem;text-align:center}
 .mc-l{font-size:12px;color:var(--color-text-secondary);margin-bottom:3px}
 .mc-v{font-size:20px;font-weight:500}
 .g{color:#5DCAA5}.r{color:#E24B4A}.b{color:#378ADD}.a{color:#EF9F27}
@@ -148,7 +148,7 @@ tr.date-sep:first-child td{padding-top:0}
 /* ── Dashboard KPI strip ─────────────────────────────────────────────── */
 .kpi-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:0}
 .kpi-strip-4{grid-template-columns:repeat(4,minmax(0,1fr))}
-.kpi-card{background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.09);border-radius:18px;padding:1.25rem 1.4rem}
+.kpi-card{background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.09);border-radius:18px;padding:1.25rem 1.4rem;text-align:center}
 .kpi-lbl{font-size:11px;color:rgba(255,255,255,0.38);font-weight:400;margin-bottom:8px}
 .kpi-val{font-size:22px;font-weight:700;margin-bottom:3px;line-height:1.1;letter-spacing:-0.3px}
 .kpi-sub{font-size:11px;color:rgba(255,255,255,0.32)}
@@ -161,11 +161,21 @@ tr.date-sep:first-child td{padding-top:0}
 .hist-btn:hover{color:rgba(255,255,255,0.75);background:rgba(255,255,255,0.07)}
 .hist-popup{display:none;position:absolute;right:0;top:calc(100% + 6px);background:rgba(14,14,24,0.98);border:0.5px solid rgba(255,255,255,0.12);border-radius:12px;padding:.75rem;min-width:240px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
 .hist-wrap:hover .hist-popup,.hist-popup.open{display:block}
+/* ── Snapshot P&L + Financial Goal centered cards ───────────────────── */
+#snap-pnl-wrap,#goal-wrap{text-align:center;padding-left:1.75rem;padding-right:1.75rem}
+#goal-wrap{padding-bottom:.75rem}
+#snap-pnl-wrap .pnl-meta{text-align:center}
 /* ── Snapshot P&L ────────────────────────────────────────────────────── */
-.pnl-list{display:flex;flex-direction:column;gap:2px}
-.pnl-row{display:flex;align-items:flex-start;justify-content:space-between;padding:.5rem 0;border-bottom:0.5px solid var(--color-border-tertiary)}
-.pnl-period{font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
-.pnl-profit{font-weight:700;font-size:17px;min-width:80px;text-align:right;flex-shrink:0}
+.pnl-list{display:flex;flex-direction:column;gap:0}
+.pnl-row{display:flex;flex-direction:column;align-items:center;padding:.5rem 0}
+.pnl-profit{font-weight:700;font-size:22px;margin-top:.75rem}
+.pnl-meta{text-align:center}
+.pnl-period{font-size:11px;color:rgba(255,255,255,0.38);letter-spacing:.03em}
+.pnl-range{font-size:12px;color:var(--color-text-secondary);margin-top:1px}
+.pnl-adj{display:inline-block;margin-top:5px;background:rgba(239,159,39,0.12);color:#EF9F27;border-radius:20px;padding:2px 8px;font-size:11px}
+.goal-eta{font-size:12px;color:var(--color-text-secondary)}
+.goal-edit-btn{background:none;border:none;color:rgba(255,255,255,0.28);cursor:pointer;padding:2px 4px;border-radius:5px;display:flex;align-items:center;transition:color .15s,background .15s}
+.goal-edit-btn:hover{color:rgba(255,255,255,0.7);background:rgba(255,255,255,0.07)}
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media(max-width:768px){
   .kpi-strip,.kpi-strip-4{grid-template-columns:repeat(2,1fr)}
