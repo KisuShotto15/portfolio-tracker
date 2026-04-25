@@ -945,12 +945,39 @@ function recordSnapshot(){
   if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
   S.snapshots.push({id:Date.now(),date:today,total:val});
   S.snapshotsUpdatedAt=Date.now();
+  var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(sorted.length>=2){
+    var prev=sorted[sorted.length-2];
+    var txBetween=S.transactions.filter(function(t){ return t.date>=prev.date&&t.date<=today&&t.category==='Investments'; });
+    var invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    var profit=Math.round(((val-prev.total)+invOut-invIn)*100)/100;
+    if(confirm('Period profit: '+fmtUSD(profit)+'\n('+prev.date+' → '+today+')\n\nAdd as Income transaction in Binance?')){
+      var txId=Date.now()+1;
+      S.transactions.push({id:txId,date:today,desc:'USD Profit '+prev.date+' → '+today,type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
+      S.snapshots[S.snapshots.length-1].txId=txId;
+    }
+  }
   save(); renderEquityChart();
 }
 
 function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
 window.toggleHistPopup=toggleHistPopup;
-function deleteSnapshot(id){ if(!confirm('Delete this snapshot?')) return; S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; }); S.snapshotsUpdatedAt=Date.now(); save(); renderEquityChart(); renderSnapshotPnL(); }
+function deleteSnapshot(id){
+  if(!confirm('Delete this snapshot?')) return;
+  var snap=S.snapshots.find(function(s){ return s.id===id; });
+  S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; });
+  S.snapshotsUpdatedAt=Date.now();
+  if(snap&&snap.txId){
+    var linked=S.transactions.find(function(t){ return t.id===snap.txId; });
+    if(linked&&confirm('Also delete linked income transaction?\n'+linked.desc+' ('+fmtUSD(linked.amountUSD)+')')){
+      if(!S.deletedTxIds) S.deletedTxIds=[];
+      S.deletedTxIds.push(snap.txId);
+      S.transactions=S.transactions.filter(function(t){ return t.id!==snap.txId; });
+    }
+  }
+  save(); renderEquityChart(); renderSnapshotPnL();
+}
 function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var val=parseFloat(prompt('Edit snapshot value for '+snap.date+':',snap.total)); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); renderEquityChart(); renderSnapshotPnL(); }
 window.editSnapshot=editSnapshot;
 
