@@ -1385,7 +1385,7 @@ function calcProfit(){
 
   var usdt         = (sellRate > 0 && spent > 0) ? spent * buyRate / sellRate : 0;
   var bpayRecharge = spent > 0 ? spent / (1 + cardComm / 100) : 0;
-  var bpayReceived = bpayRecharge * 0.967;
+  var bpayReceived = bpayRecharge * 0.964;
   var profit       = bpayReceived - usdt;
   var profitPct    = usdt > 0 ? (profit / usdt) * 100 : 0;
 
@@ -1403,8 +1403,8 @@ function calcSpread(){
   var buyRate  = parseFloat(document.getElementById('p2p-buy').value)||0;
 
   var spreadPct   = sellRate && buyRate ? (sellRate / buyRate - 1) * 100 : 0;
-  // BDV→Bpay factor: bank fees (1%+1.5%) + Bpay 3.3% cut
-  var bpayFactor  = (1 / (1.01 * 1.015)) * 0.967;
+  // BDV→Bpay factor: bank fees (1%+1.5%) + Bpay 3.6% cut
+  var bpayFactor  = (1 / (1.01 * 1.015)) * 0.964;
   var effectivePct = sellRate && buyRate ? ((sellRate / buyRate) * bpayFactor - 1) * 100 : 0;
   var feesPct      = spreadPct - effectivePct;
 
@@ -1419,7 +1419,7 @@ window.calcSpread = calcSpread;
 function calcBDV(){
   var bank = parseFloat(document.getElementById('bdv-input').value)||0;
   var charge   = bank > 0 ? bank / (1.01 * 1.015) : 0;
-  var received = charge * 0.967;
+  var received = charge * 0.964;
   var lost     = bank - received;
   var lostPct  = bank > 0 ? (lost / bank) * 100 : 0;
   renderCalcCards('bdv-cards','bdv-result',[
