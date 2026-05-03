@@ -483,6 +483,7 @@ function cancelEditTx(){
   closeTxForm();
 }
 function openTxForm(){
+  if(!editingTxId) document.getElementById('tx-date').value=localToday();
   document.getElementById('tx-form-panel').classList.add('open');
   document.getElementById('tx-overlay').classList.add('open');
   document.getElementById('fab-add').style.display='none';
