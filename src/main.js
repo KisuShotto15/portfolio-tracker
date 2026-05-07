@@ -1400,24 +1400,24 @@ function calcProfit(){
 window.calcProfit = calcProfit;
 
 function saveP2PComm(){ try{ localStorage.setItem('ft13_p2pc', document.getElementById('p2p-comm').value); }catch(e){} }
-function toggleP2PSettings(btn){ var p=document.getElementById('p2p-settings-popup'); p.classList.toggle('open'); }
+function toggleP2PSettings(btn){
+  var p=document.getElementById('p2p-settings-popup'); var isOpen=p.classList.contains('open');
+  document.querySelectorAll('.hist-popup.open').forEach(function(el){ el.classList.remove('open'); });
+  if(!isOpen) p.classList.add('open');
+}
 window.saveP2PComm=saveP2PComm; window.toggleP2PSettings=toggleP2PSettings;
+document.addEventListener('click', function(e){
+  if(!e.target.closest('#tc-p2p .hist-wrap')) document.querySelectorAll('#p2p-settings-popup').forEach(function(el){ el.classList.remove('open'); });
+});
 
 function calcSpread(){
   var sellRate = parseFloat(document.getElementById('p2p-sell').value)||0;
   var buyRate  = parseFloat(document.getElementById('p2p-buy').value)||0;
-  var comm     = parseFloat(document.getElementById('p2p-comm').value)||3.6;
-
-  var spreadPct   = sellRate && buyRate ? (sellRate / buyRate - 1) * 100 : 0;
-  // BDV→Bpay factor: bank fees (1%+1.5%) + configurable Bpay cut
-  var bpayFactor  = (1 / (1.01 * 1.015)) * (1 - comm / 100);
-  var effectivePct = sellRate && buyRate ? ((sellRate / buyRate) * bpayFactor - 1) * 100 : 0;
-  var feesPct      = spreadPct - effectivePct;
-
+  var comm     = parseFloat(document.getElementById('p2p-comm').value)||0;
+  var netPct   = sellRate && buyRate ? ((sellRate / buyRate) * (1 - comm / 100) - 1) * 100 : 0;
   var pct = function(n){ return (n>=0?'+':'')+n.toFixed(2)+'%'; };
   renderCalcCards('p2p-cards','p2p-result',[
-    { label:'P2P Spread',   value:pct(spreadPct),   sub: sellRate&&buyRate ? sellRate+' → '+buyRate : '—', green:spreadPct>0 },
-    { label:'Net BDV-Bpay', value:pct(effectivePct), sub:'after '+feesPct.toFixed(2)+'% fees', green:effectivePct>0, red:effectivePct<0 },
+    { label:'P2P Spread', value:pct(netPct), sub: sellRate&&buyRate ? sellRate+' → '+buyRate : '—', green:netPct>0, red:netPct<0 },
   ]);
 }
 window.calcSpread = calcSpread;
