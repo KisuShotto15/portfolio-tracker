@@ -1399,13 +1399,18 @@ function calcProfit(){
 }
 window.calcProfit = calcProfit;
 
+function saveP2PComm(){ try{ localStorage.setItem('ft13_p2pc', document.getElementById('p2p-comm').value); }catch(e){} }
+function toggleP2PSettings(btn){ var p=document.getElementById('p2p-settings-popup'); p.classList.toggle('open'); }
+window.saveP2PComm=saveP2PComm; window.toggleP2PSettings=toggleP2PSettings;
+
 function calcSpread(){
   var sellRate = parseFloat(document.getElementById('p2p-sell').value)||0;
   var buyRate  = parseFloat(document.getElementById('p2p-buy').value)||0;
+  var comm     = parseFloat(document.getElementById('p2p-comm').value)||3.6;
 
   var spreadPct   = sellRate && buyRate ? (sellRate / buyRate - 1) * 100 : 0;
-  // BDV→Bpay factor: bank fees (1%+1.5%) + Bpay 3.6% cut
-  var bpayFactor  = (1 / (1.01 * 1.015)) * 0.964;
+  // BDV→Bpay factor: bank fees (1%+1.5%) + configurable Bpay cut
+  var bpayFactor  = (1 / (1.01 * 1.015)) * (1 - comm / 100);
   var effectivePct = sellRate && buyRate ? ((sellRate / buyRate) * bpayFactor - 1) * 100 : 0;
   var feesPct      = spreadPct - effectivePct;
 
@@ -1485,6 +1490,7 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
+  try{ var _p2pc=localStorage.getItem('ft13_p2pc'); if(_p2pc){ var el=document.getElementById('p2p-comm'); if(el) el.value=_p2pc; } }catch(e){}
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
