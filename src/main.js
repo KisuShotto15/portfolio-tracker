@@ -625,10 +625,15 @@ function renderKPIStrip(month){
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   var netWorth=snaps.length>0?snaps[0].total:getTotalBalance();
   var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
-  var income=txM.filter(function(t){ return t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var expenses=txM.filter(function(t){ return t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var cashFlow=income-expenses;
-  var savRate=income>0?Math.round((cashFlow/income)*100):0;
+  // Monthly Return = last snapshot period P&L
+  var pnls=getSnapshotPnL();
+  var lastPnl=pnls.length>0?pnls[pnls.length-1]:null;
+  var monthlyReturn=lastPnl?lastPnl.profit:null;
+  var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?((lastPnl.profit/lastPnl.snap1)*100):null;
+  // Savings Rate = growth / (growth + expenses)
+  var savBase=monthlyReturn!==null&&monthlyReturn>0?monthlyReturn:0;
+  var savRate=savBase+expenses>0?Math.round((savBase/(savBase+expenses))*100):null;
   var avgExp=getAvgMonthlyOutflows();
   var emgMo=avgExp>0?(netWorth/avgExp):null;
   var goalPct=(S.dashGoal>0)?Math.min(100,(netWorth/S.dashGoal)*100):null;
@@ -638,10 +643,14 @@ function renderKPIStrip(month){
   var emgColor=emgMo===null?'#888':emgMo>=6?'#1D9E75':emgMo>=3?'#EF9F27':'#E24B4A';
   var emgVal=emgMo!==null?emgMo.toFixed(1)+' mo':'—';
   var emgSub=avgExp>0?'÷ '+fmtUSD(avgExp)+'/mo':'no expense data';
+  var retColor=monthlyReturn===null?'#888':monthlyReturn>0?'#1D9E75':'#E24B4A';
+  var retVal=monthlyReturn!==null?(monthlyReturn>=0?'+':'')+fmtUSD(monthlyReturn):'—';
+  var retSub=monthlyReturnPct!==null?(monthlyReturnPct>=0?'+':'')+monthlyReturnPct.toFixed(2)+'% · '+(lastPnl.from+' → '+lastPnl.to):'no snapshots';
+  var savColor=savRate===null?'#888':savRate>=30?'#1D9E75':savRate>=15?'#EF9F27':'#E24B4A';
   document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(netWorth),snaps.length>0?'as of '+snaps[0].date:'live estimate','#fff')
-    +kpi('Cash Flow',(cashFlow>=0?'+':'')+fmtUSD(cashFlow),month,cashFlow>=0?'#1D9E75':'#E24B4A')
-    +kpi('Savings Rate',savRate+'%','of income',savRate>=20?'#1D9E75':savRate>=10?'#EF9F27':'#E24B4A')
+    +kpi('Monthly Return',retVal,retSub,retColor)
+    +kpi('Savings Rate',savRate!==null?savRate+'%':'—','of net flow',savColor)
     +kpi('Emergency Fund',emgVal,emgSub,emgColor)
     +kpi('Goal Progress',goalPct!==null?goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0')
     +'</div>';
