@@ -626,11 +626,12 @@ function renderKPIStrip(month){
   var netWorth=snaps.length>0?snaps[0].total:getTotalBalance();
   var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
   var expenses=txM.filter(function(t){ return t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  // Monthly Return = last snapshot period P&L
+  // Monthly Return = sum of snapshot periods ending in selected month
   var pnls=getSnapshotPnL();
-  var lastPnl=pnls.length>0?pnls[pnls.length-1]:null;
-  var monthlyReturn=lastPnl?lastPnl.profit:null;
-  var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?((lastPnl.profit/lastPnl.snap1)*100):null;
+  var monthPnls=pnls.filter(function(p){ return p.to.startsWith(month); });
+  var lastPnl=monthPnls.length>0?monthPnls[monthPnls.length-1]:null;
+  var monthlyReturn=monthPnls.length>0?monthPnls.reduce(function(s,p){ return s+p.profit; },0):null;
+  var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?((monthlyReturn/lastPnl.snap1)*100):null;
   // Savings Rate = growth / (growth + expenses)
   var savBase=monthlyReturn!==null&&monthlyReturn>0?monthlyReturn:0;
   var savRate=savBase+expenses>0?Math.round((savBase/(savBase+expenses))*100):null;
@@ -645,7 +646,7 @@ function renderKPIStrip(month){
   var emgSub=avgExp>0?'÷ '+fmtUSD(avgExp)+'/mo':'no expense data';
   var retColor=monthlyReturn===null?'#888':monthlyReturn>0?'#1D9E75':'#E24B4A';
   var retVal=monthlyReturn!==null?(monthlyReturn>=0?'+':'')+fmtUSD(monthlyReturn):'—';
-  var retSub=monthlyReturnPct!==null?(monthlyReturnPct>=0?'+':'')+monthlyReturnPct.toFixed(2)+'% · '+(lastPnl.from+' → '+lastPnl.to):'no snapshots';
+  var retSub=lastPnl!==null?(monthlyReturnPct!==null?(monthlyReturnPct>=0?'+':'')+monthlyReturnPct.toFixed(2)+'% · ':'')+lastPnl.from+' → '+lastPnl.to:'no snapshots for '+month;
   var savColor=savRate===null?'#888':savRate>=30?'#1D9E75':savRate>=15?'#EF9F27':'#E24B4A';
   document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(netWorth),snaps.length>0?'as of '+snaps[0].date:'live estimate','#fff')
