@@ -671,12 +671,12 @@ function renderSnapshotPnL(){
     var sign=p.profit>0?'+':'';
     var adj=p.invOut>0||p.invIn>0?'<span class="pnl-adj">'+(p.invOut>0?'Invested '+fmtUSD(p.invOut):'')+(p.invIn>0?(p.invOut>0?' · ':'')+' Returned '+fmtUSD(p.invIn):'')+'</span>':'';
     return '<div class="pnl-row">'
-      +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div>'
-      +'<div class="pnl-meta">'
+      +'<div>'
         +'<div class="pnl-period">'+fmtSnapDate(p.from)+' → '+fmtSnapDate(p.to)+'</div>'
         +'<div class="pnl-range">'+fmtUSD(p.snap1)+' → '+fmtUSD(p.snap2)+'</div>'
         +(adj?'<div>'+adj+'</div>':'')
       +'</div>'
+      +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div>'
       +'</div>';
   }
   var older=pnls.slice(0,-1).reverse().map(makePnlRow).join('');
@@ -687,9 +687,11 @@ function renderSnapshotPnL(){
   var lsign=latestP.profit>0?'+':'';
   var ladj=latestP.invOut>0||latestP.invIn>0?'<div style="margin-top:5px"><span class="pnl-adj">'+(latestP.invOut>0?'Invested '+fmtUSD(latestP.invOut):'')+(latestP.invIn>0?(latestP.invOut>0?' · ':'')+' Returned '+fmtUSD(latestP.invIn):'')+'</span></div>':'';
   var latestHtml='<div class="pnl-row">'
-    +'<div class="pnl-period">'+fmtSnapDate(latestP.from)+' → '+fmtSnapDate(latestP.to)+'</div>'
-    +'<div class="pnl-range">'+fmtUSD(latestP.snap1)+' → '+fmtUSD(latestP.snap2)+'</div>'
-    +ladj
+    +'<div>'
+      +'<div class="pnl-period">'+fmtSnapDate(latestP.from)+' → '+fmtSnapDate(latestP.to)+'</div>'
+      +'<div class="pnl-range">'+fmtUSD(latestP.snap1)+' → '+fmtUSD(latestP.snap2)+'</div>'
+      +ladj
+    +'</div>'
     +'<div class="pnl-profit" style="color:'+lc+'">'+lsign+fmtUSD(latestP.profit)+'</div>'
     +'</div>';
   el.innerHTML=hdr+latestHtml;
