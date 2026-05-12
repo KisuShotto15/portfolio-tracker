@@ -43,10 +43,10 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
-  dashGoal:0, projectionReturn:10, projectionContrib:null,
+  dashGoal:0,
   categoryBudgets:{}
 };
-var mChart=null, cChart=null, eChart=null, perfChart=null, undoStack=[], redoStack=[];
+var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
@@ -621,40 +621,227 @@ function getSnapshotPnL(){
 }
 
 // ── Dashboard render sections ──────────────────────────────────────────────
-function renderKPIStrip(month){
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  var netWorth=snaps.length>0?snaps[0].total:getTotalBalance();
+function prevMonth(month){
+  var p=month.split('-'); var y=parseInt(p[0]), m=parseInt(p[1])-1;
+  var d=new Date(y,m-1,1);
+  return d.toISOString().slice(0,7);
+}
+
+function getMonthlyKPIs(month){
+  // Net Worth = last snapshot of (or before) the month's end
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var monthEnd=month+'-31';
+  var snapsBefore=snaps.filter(function(s){ return s.date<=monthEnd; });
+  var netWorth=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].total:null;
+  // Tx for month
   var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
   var expenses=txM.filter(function(t){ return t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  // Monthly Return = sum of snapshot periods ending in selected month
+  // Monthly Return: snapshot periods ending in month
   var pnls=getSnapshotPnL();
   var monthPnls=pnls.filter(function(p){ return p.to.startsWith(month); });
-  var lastPnl=monthPnls.length>0?monthPnls[monthPnls.length-1]:null;
   var monthlyReturn=monthPnls.length>0?monthPnls.reduce(function(s,p){ return s+p.profit; },0):null;
-  var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?((monthlyReturn/lastPnl.snap1)*100):null;
-  // Savings Rate = growth / (growth + expenses)
+  var lastPnl=monthPnls.length>0?monthPnls[monthPnls.length-1]:null;
+  var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?(monthlyReturn/lastPnl.snap1)*100:null;
+  // Savings Rate: growth / (growth + expenses)
   var savBase=monthlyReturn!==null&&monthlyReturn>0?monthlyReturn:0;
   var savRate=savBase+expenses>0?Math.round((savBase/(savBase+expenses))*100):null;
+  // Emergency Fund: netWorth / avg monthly outflows
   var avgExp=getAvgMonthlyOutflows();
-  var emgMo=avgExp>0?(netWorth/avgExp):null;
-  var goalPct=(S.dashGoal>0)?Math.min(100,(netWorth/S.dashGoal)*100):null;
-  function kpi(label,val,sub,color){
-    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+'</div></div>';
+  var emgMo=netWorth!==null&&avgExp>0?netWorth/avgExp:null;
+  // Goal Progress
+  var goalPct=(S.dashGoal>0&&netWorth!==null)?Math.min(100,(netWorth/S.dashGoal)*100):null;
+  return {netWorth:netWorth,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,savRate:savRate,emgMo:emgMo,goalPct:goalPct,avgExp:avgExp};
+}
+
+function fmtDelta(cur,prev,opts){
+  opts=opts||{};
+  if(cur===null||cur===undefined||prev===null||prev===undefined) return '';
+  if(opts.abs){
+    var diff=cur-prev;
+    if(Math.abs(diff)<0.5) return '';
+    var sign=diff>0?'↑':'↓';
+    var cls=opts.invert?(diff>0?'down':'up'):(diff>0?'up':'down');
+    return '<span class="kpi-delta '+cls+'">'+sign+fmtUSD(Math.abs(diff))+'</span>';
   }
-  var emgColor=emgMo===null?'#888':emgMo>=6?'#1D9E75':emgMo>=3?'#EF9F27':'#E24B4A';
-  var emgVal=emgMo!==null?emgMo.toFixed(1)+' mo':'—';
-  var emgSub=avgExp>0?'÷ '+fmtUSD(avgExp)+'/mo':'no expense data';
-  var retColor=monthlyReturn===null?'#888':monthlyReturn>0?'#1D9E75':'#E24B4A';
-  var retVal=monthlyReturn!==null?(monthlyReturn>=0?'+':'')+fmtUSD(monthlyReturn):'—';
-  var retSub=lastPnl!==null?(monthlyReturnPct!==null?(monthlyReturnPct>=0?'+':'')+monthlyReturnPct.toFixed(2)+'% · ':'')+lastPnl.from+' → '+lastPnl.to:'no snapshots for '+month;
-  var savColor=savRate===null?'#888':savRate>=30?'#1D9E75':savRate>=15?'#EF9F27':'#E24B4A';
+  if(prev===0||prev===null) return '';
+  var pct=((cur-prev)/Math.abs(prev))*100;
+  if(Math.abs(pct)<0.5) return '';
+  var s=pct>0?'↑':'↓';
+  var c=opts.invert?(pct>0?'down':'up'):(pct>0?'up':'down');
+  return '<span class="kpi-delta '+c+'">'+s+Math.abs(pct).toFixed(1)+'%</span>';
+}
+
+function renderKPIStrip(month){
+  var cur=getMonthlyKPIs(month);
+  var prev=getMonthlyKPIs(prevMonth(month));
+  var snapsDesc=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  // Display net worth: prefer monthly snapshot, fallback to latest snapshot, fallback to live
+  var nwDisplay=cur.netWorth!==null?cur.netWorth:(snapsDesc.length>0?snapsDesc[0].total:getTotalBalance());
+  function kpi(label,val,sub,color,delta){
+    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+(delta?' '+delta:'')+'</div></div>';
+  }
+  var emgColor=cur.emgMo===null?'#888':cur.emgMo>=6?'#1D9E75':cur.emgMo>=3?'#EF9F27':'#E24B4A';
+  var emgVal=cur.emgMo!==null?cur.emgMo.toFixed(1)+' mo':'—';
+  var emgSub=cur.avgExp>0?'÷ '+fmtUSD(cur.avgExp)+'/mo':'no expense data';
+  var retColor=cur.monthlyReturn===null?'#888':cur.monthlyReturn>0?'#1D9E75':'#E24B4A';
+  var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
+  var retSub=cur.lastPnl!==null?(cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%':''):'no snapshots for '+month;
+  var savColor=cur.savRate===null?'#888':cur.savRate>=30?'#1D9E75':cur.savRate>=15?'#EF9F27':'#E24B4A';
   document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
-    +kpi('Net Worth',fmtUSD(netWorth),snaps.length>0?'as of '+snaps[0].date:'live estimate','#fff')
-    +kpi('Monthly Return',retVal,retSub,retColor)
-    +kpi('Savings Rate',savRate!==null?savRate+'%':'—','of net flow',savColor)
-    +kpi('Emergency Fund',emgVal,emgSub,emgColor)
-    +kpi('Goal Progress',goalPct!==null?goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0')
+    +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
+    +kpi('Monthly Return',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
+    +kpi('Savings Rate',cur.savRate!==null?cur.savRate+'%':'—','of net flow',savColor,fmtDelta(cur.savRate,prev.savRate))
+    +kpi('Emergency Fund',emgVal,emgSub,emgColor,fmtDelta(cur.emgMo,prev.emgMo))
+    +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
+}
+
+// ── Health Score ───────────────────────────────────────────────────────────
+function getWalletShares(){
+  var shares={};
+  shares['Binance']=S.binanceBalance||0;
+  shares['Bybit']=S.bybitBalance||0;
+  shares['OKX']=S.okxBalance||0;
+  shares['Trezor']=S.trezorBalance||0;
+  shares['Zelle']=calcTrackerBal('Zelle');
+  S.manualWallets.forEach(function(w){
+    var bal=w.trackerOnly?calcTrackerBal(w.name):w.balance;
+    shares[w.name]=bal;
+  });
+  return shares;
+}
+
+function renderHealthScore(){
+  var el=document.getElementById('health-wrap'); if(!el) return;
+  var pnls=getSnapshotPnL();
+  var lastPnl=pnls.length>0?pnls[pnls.length-1]:null;
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var netWorth=snaps.length>0?snaps[0].total:getTotalBalance();
+
+  // Growth (0-25): monthly return % from last snapshot period
+  var growthPct=lastPnl&&lastPnl.snap1>0?(lastPnl.profit/lastPnl.snap1)*100:0;
+  var growthPts=Math.max(0,Math.min(25,Math.round(growthPct*10)));
+
+  // Diversification (0-25): 1 - top wallet share (only positive shares)
+  var shares=getWalletShares();
+  var positiveShares=Object.keys(shares).map(function(k){ return shares[k]; }).filter(function(v){ return v>0; });
+  var totalPos=positiveShares.reduce(function(s,v){ return s+v; },0);
+  var topShare=positiveShares.length>0&&totalPos>0?Math.max.apply(null,positiveShares)/totalPos:1;
+  var divPts=positiveShares.length<=1?0:Math.round((1-topShare)*25/0.7);
+  divPts=Math.max(0,Math.min(25,divPts));
+
+  // Savings rate (0-25): use current month
+  var nowMonth=new Date().toISOString().slice(0,7);
+  var kpis=getMonthlyKPIs(nowMonth);
+  var savPts=kpis.savRate!==null?Math.max(0,Math.min(25,Math.round(kpis.savRate/2))):0;
+
+  // Emergency Fund (0-25): months / 6 * 25, capped
+  var emgPts=kpis.emgMo!==null?Math.max(0,Math.min(25,Math.round(kpis.emgMo/6*25))):0;
+
+  var total=growthPts+divPts+savPts+emgPts;
+  var color=total>=80?'#1D9E75':total>=60?'#A3CB48':total>=40?'#EF9F27':'#E24B4A';
+  var label=total>=80?'Excelente':total>=60?'Bien':total>=40?'Mejorable':'Atención';
+
+  function item(name,pts){
+    var pct=pts/25;
+    var c=pct>=0.8?'#1D9E75':pct>=0.5?'#A3CB48':pct>=0.3?'#EF9F27':'#E24B4A';
+    return '<div class="hb-item"><div class="hb-name">'+name+'</div><div class="hb-bar"><div class="hb-fill" style="width:'+(pct*100)+'%;background:'+c+'"></div></div><div class="hb-pts">'+pts+'/25</div></div>';
+  }
+  el.innerHTML='<div class="cleg" style="margin-bottom:.25rem">Salud Financiera</div>'
+    +'<div class="health-score" style="color:'+color+'">'+total+'</div>'
+    +'<div class="health-label">'+label+'</div>'
+    +'<div class="health-breakdown">'
+      +item('Growth',growthPts)
+      +item('Diversification',divPts)
+      +item('Savings',savPts)
+      +item('Emergency',emgPts)
+    +'</div>';
+}
+
+// ── Alerts ─────────────────────────────────────────────────────────────────
+function getActiveAlerts(){
+  var alerts=[];
+  var now=new Date();
+  var curMonth=now.toISOString().slice(0,7);
+
+  // 1. Overspend per category (current month vs 3-month avg excluding current)
+  EXPENSE_CATS_DASH.forEach(function(cat){
+    var curSpend=S.transactions.filter(function(t){ return t.date.startsWith(curMonth)&&t.type==='Debit'&&t.category===cat; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    if(curSpend<50) return;
+    var prior=[];
+    for(var i=1;i<=3;i++){
+      var d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      var m=d.toISOString().slice(0,7);
+      var spend=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&t.category===cat; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+      if(spend>0) prior.push(spend);
+    }
+    if(prior.length===0) return;
+    var avg=prior.reduce(function(s,v){ return s+v; },0)/prior.length;
+    if(avg<=0) return;
+    var pct=((curSpend-avg)/avg)*100;
+    if(pct>=40){
+      alerts.push({
+        sev:pct>=80?'crit':'warn',
+        msg:'Gasto en '+cat+': '+fmtUSD(curSpend)+' (↑'+pct.toFixed(0)+'% vs promedio)',
+        action:'Revisa transacciones de este mes en '+cat
+      });
+    }
+  });
+
+  // 2. Snapshot pendiente
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  if(snaps.length>0){
+    var last=new Date(snaps[0].date+'T00:00:00');
+    var daysSince=Math.floor((now-last)/(1000*60*60*24));
+    if(daysSince>30){
+      alerts.push({
+        sev:daysSince>45?'crit':'warn',
+        msg:'Último snapshot hace '+daysSince+' días',
+        action:'Registra snapshot ahora',
+        onClick:'recordSnapshot()'
+      });
+    }
+  }
+
+  // 3. Goal progress lento
+  if(S.dashGoal>0){
+    var nw=snaps.length>0?snaps[0].total:getTotalBalance();
+    var contrib=getAvgMonthlyContribution();
+    if(nw<S.dashGoal&&contrib>0){
+      var months=Math.ceil((S.dashGoal-nw)/contrib);
+      if(months>60){
+        alerts.push({
+          sev:'warn',
+          msg:'Al ritmo actual: '+months+' meses para la meta',
+          action:'Aumenta contribución mensual o ajusta la meta'
+        });
+      }
+    } else if(nw<S.dashGoal&&contrib<=0){
+      alerts.push({
+        sev:'warn',
+        msg:'Sin contribución mensual neta positiva',
+        action:'Necesitas income > gastos para avanzar hacia la meta'
+      });
+    }
+  }
+
+  return alerts;
+}
+
+function renderAlerts(){
+  var el=document.getElementById('alerts-wrap'); if(!el) return;
+  var alerts=getActiveAlerts();
+  var hdr='<div class="cleg" style="margin-bottom:.5rem">Alertas</div>';
+  if(alerts.length===0){
+    el.innerHTML=hdr+'<div class="alerts-empty">✓ Todo en orden</div>';
+    return;
+  }
+  var items=alerts.map(function(a){
+    var icon=a.sev==='crit'?'⚠':'!';
+    var clickAttr=a.onClick?' onclick="'+a.onClick+'" style="cursor:pointer"':'';
+    return '<div class="alert-item alert-'+a.sev+'"'+clickAttr+'><div class="alert-icon">'+icon+'</div><div class="alert-body"><div class="alert-msg">'+a.msg+'</div><div class="alert-action">'+a.action+'</div></div></div>';
+  }).join('');
+  el.innerHTML=hdr+'<div class="alert-list">'+items+'</div>';
 }
 
 function renderSnapshotPnL(){
@@ -727,65 +914,6 @@ function renderGoal(){
     +'</div>'+inputRow+progBar;
 }
 
-function renderProjection(){
-  var phdr=document.getElementById('proj-header');
-  var pftr=document.getElementById('proj-footer');
-  var pcanvas=document.getElementById('chart-projection');
-  if(!phdr||!pcanvas) return;
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  var current=snaps.length>0?snaps[snaps.length-1].total:getTotalBalance();
-  var baseContrib=getAvgMonthlyContribution();
-  var contrib=S.projectionContrib!==null&&S.projectionContrib!==undefined?S.projectionContrib:baseContrib;
-  var annRet=S.projectionReturn||10;
-  var moRet=annRet/100/12;
-  var isOverride=S.projectionContrib!==null&&S.projectionContrib!==undefined;
-
-  // Dataset 1: projected with return
-  var projected=[current];
-  for(var i=0;i<24;i++) projected.push(parseFloat((projected[projected.length-1]*(1+moRet)+contrib).toFixed(2)));
-  // Dataset 2: zero-return baseline (pure savings)
-  var baseline=[current];
-  for(var i=0;i<24;i++) baseline.push(parseFloat((baseline[baseline.length-1]+contrib).toFixed(2)));
-
-  var now=new Date(); var labels=['Now'];
-  for(var j=1;j<=24;j++){ var dd=new Date(now.getFullYear(),now.getMonth()+j,1); labels.push(dd.toLocaleString('en',{month:'short',year:'2-digit'})); }
-
-  var datasets=[
-    {label:'Projected',data:projected,borderColor:'#9B70F0',backgroundColor:'rgba(155,112,240,0.07)',borderWidth:2,pointRadius:2,pointHitRadius:15,tension:0.4,fill:true},
-    {label:'Savings only',data:baseline,borderColor:'#60A5FA',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],pointRadius:0,pointHitRadius:15,tension:0.4}
-  ];
-  // Dataset 3: goal line
-  if(S.dashGoal>0) datasets.push({label:'Goal',data:Array(25).fill(S.dashGoal),borderColor:'#EF9F27',backgroundColor:'transparent',borderWidth:1,borderDash:[6,3],pointRadius:0,pointHitRadius:0,tension:0});
-
-  var atTarget=S.dashGoal>0?projected.findIndex(function(v){ return v>=S.dashGoal; }):-1;
-
-  phdr.innerHTML='<div class="cleg" style="margin-bottom:.5rem">Projection (24 months)</div>'
-    +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:.6rem;font-size:13px">'
-    +'<span style="color:var(--color-text-secondary)">Monthly contrib: <input type="number" id="proj-contrib" value="'+parseFloat(contrib.toFixed(2))+'" min="0" step="1" style="width:72px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:2px 6px;color:#fff;font-size:13px;margin:0 3px" onchange="window.updateProjContrib(this.value)"/>'+(isOverride?'<span style="cursor:pointer;color:rgba(255,255,255,0.32);font-size:11px;margin-left:2px" onclick="window.resetProjContrib()" title="Reset to auto">↺ auto ('+fmtUSD(baseContrib)+')</span>':'')+'</span>'
-    +'<span style="color:var(--color-text-secondary)">Annual return: <input type="number" id="proj-return" value="'+annRet+'" min="0" max="500" style="width:48px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:2px 6px;color:#fff;font-size:13px;margin:0 3px" onchange="updateProjectionChart()"/>%</span>'
-    +'</div>'
-    +'<div style="display:flex;gap:12px;font-size:11px;margin-bottom:.5rem;color:var(--color-text-secondary)">'
-    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Projected</span>'
-    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#60A5FA;display:inline-block;opacity:.7"></span>Savings only</span>'
-    +(S.dashGoal>0?'<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#EF9F27;display:inline-block"></span>Goal '+fmtUSD(S.dashGoal)+'</span>':'')
-    +'</div>';
-  pftr.innerHTML=atTarget>0&&S.dashGoal>0?'<div style="font-size:12px;color:#9B70F0;margin-top:6px">At this pace, reach '+fmtUSD(S.dashGoal)+' in ~'+atTarget+' months</div>':atTarget===-1&&S.dashGoal>0?'<div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:6px">Goal '+fmtUSD(S.dashGoal)+' not reached in 24 months at this rate</div>':'';
-
-  if(window.projChart){ window.projChart.destroy(); window.projChart=null; }
-  window.projChart=new Chart(pcanvas,{type:'line',data:{labels:labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
-    if(ctx.dataset.label==='Goal') return null;
-    return ctx.dataset.label+': '+fmtUSD(ctx.raw);
-  }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(0)+'k':v); }}}}}});
-}
-
-function updateProjectionChart(){
-  var inp=document.getElementById('proj-return'); if(!inp) return;
-  S.projectionReturn=parseFloat(inp.value)||10; save(); renderProjection();
-}
-window.updateProjectionChart=updateProjectionChart;
-window.updateProjContrib=function(val){ var v=parseFloat(val); S.projectionContrib=(isNaN(v)||v<0)?null:v; save(); renderProjection(); };
-window.resetProjContrib=function(){ S.projectionContrib=null; save(); renderProjection(); };
-
 function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; save(); renderSummary(); } }
 
 function renderSummary(){
@@ -813,10 +941,11 @@ function renderSummary(){
   var invSub=invOut>0||invIn>0?'Out: '+fmtUSD(invOut)+(invIn>0?' · In: '+fmtUSD(invIn):''):'';
   document.getElementById('sum-cards').innerHTML='';
   renderKPIStrip(month);
+  renderHealthScore();
+  renderAlerts();
   renderSnapshotPnL();
   renderGoal();
-  renderProjection();
-  renderEquityChart(); renderMonthlyChart(); renderPerformanceChart();
+  renderEquityChart(); renderMonthlyChart();
 }
 
 function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
@@ -830,72 +959,6 @@ function renderMonthlyChart(){
   document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#34D399;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#F87171;display:inline-block"></span>Outflows</span>';
   if(mChart){ mChart.destroy(); mChart=null; }
   mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Outflows',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
-}
-
-// ── Monthly Performance Chart ──────────────────────────────────────────────
-function computeMonthlyPerformance(){
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  if(snaps.length<2) return [];
-  // Last snapshot per month
-  var byMonth={};
-  snaps.forEach(function(s){ byMonth[s.date.slice(0,7)]=s; });
-  var months=Object.keys(byMonth).sort();
-  if(months.length<2) return [];
-  var result=[];
-  for(var i=1;i<months.length;i++){
-    var snapS=byMonth[months[i-1]], snapE=byMonth[months[i]];
-    var sc=snapS.total, ec=snapE.total;
-    var profit=parseFloat((ec-sc).toFixed(2));
-    var monthlyReturn=sc>0?parseFloat((profit/sc*100).toFixed(2)):0;
-    var avg=(sc+ec)/2;
-    var efficiency=avg>0?parseFloat((profit/avg*100).toFixed(2)):0;
-    result.push({month:months[i],startingCapital:sc,endingCapital:ec,profit:profit,monthlyReturn:monthlyReturn,capitalEfficiency:efficiency});
-  }
-  return result;
-}
-function rollingAvg3(arr){
-  return arr.map(function(_,i){
-    var sl=arr.slice(Math.max(0,i-2),i+1);
-    return parseFloat((sl.reduce(function(s,v){ return s+v; },0)/sl.length).toFixed(2));
-  });
-}
-function renderPerformanceChart(){
-  var el=document.getElementById('chart-performance');
-  var wrap=document.getElementById('perf-wrap');
-  if(!el||!wrap) return;
-  var data=computeMonthlyPerformance();
-  if(data.length<1){
-    if(perfChart){ perfChart.destroy(); perfChart=null; }
-    el.style.display='none';
-    wrap.innerHTML='<div style="color:var(--color-text-secondary);font-size:13px;padding:2.5rem 0;text-align:center">Not enough data yet — need at least 2 months of snapshots</div>';
-    return;
-  }
-  el.style.display='';
-  wrap.innerHTML='';
-  var labels=data.map(function(d){ var p=d.month.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
-  var returns=data.map(function(d){ return d.monthlyReturn; });
-  var efficiencies=data.map(function(d){ return d.capitalEfficiency; });
-  var rolling=rollingAvg3(efficiencies);
-  var barBg=returns.map(function(v){ return v>=0?'rgba(93,202,165,0.7)':'rgba(232,75,74,0.7)'; });
-  var barBorder=returns.map(function(v){ return v>=0?'#5DCAA5':'#E24B4A'; });
-  if(perfChart){ perfChart.destroy(); perfChart=null; }
-  perfChart=new Chart(el,{type:'bar',data:{labels:labels,datasets:[
-    {type:'bar',label:'Monthly Return',data:returns,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,borderRadius:4,yAxisID:'yL',order:2},
-    {type:'line',label:'Capital Efficiency',data:efficiencies,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,yAxisID:'yR',order:1},
-    {type:'line',label:'3-Month Avg',data:rolling,borderColor:'#60A5FA',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],pointRadius:2,pointHitRadius:15,pointBackgroundColor:'#60A5FA',tension:0.3,yAxisID:'yR',order:0}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{
-    title:function(items){ return data[items[0].dataIndex].month; },
-    label:function(ctx){
-      var d=data[ctx.dataIndex];
-      if(ctx.dataset.label==='Monthly Return') return ['Profit: '+fmtUSD(d.profit),'Return: '+d.monthlyReturn+'%','Efficiency: '+d.capitalEfficiency+'%','Avg Capital: '+fmtUSD((d.startingCapital+d.endingCapital)/2)];
-      if(ctx.dataset.label==='3-Month Avg') return '3-mo Avg: '+ctx.parsed.y+'%';
-      return null;
-    }
-  }}},scales:{
-    x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},
-    yL:{type:'linear',position:'left',grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return v+'%'; }},title:{display:true,text:'Monthly Return (%)',color:'rgba(255,255,255,0.25)',font:{size:10}}},
-    yR:{type:'linear',position:'right',grid:{drawOnChartArea:false},ticks:{color:'#555',font:{size:11},callback:function(v){ return v+'%'; }},title:{display:true,text:'Capital Efficiency (%)',color:'rgba(255,255,255,0.25)',font:{size:10}}}
-  }}});
 }
 
 function renderCatChart(month){
