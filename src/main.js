@@ -1166,8 +1166,8 @@ function renderWallets(){
   trackerNames.forEach(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){ return w.name===name; });
     var actions=mw?'<div style="display:flex;gap:4px"><button class="wico" onclick="renameManualWallet('+mw.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icoX+'</button></div>':'';
-    var plus5=name==='Zelle'?'<div style="font-size:10px;color:var(--color-text-secondary)">+5%: '+fmtUSD(total*1.05)+'</div>':'';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(name)+' <span class="badge-t">tracker</span></div><div class="wcard-bal-row"><div class="wcard-bal-side"></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div class="wcard-bal-side">'+plus5+actions+'</div></div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">Calculated from transactions</div></div>');
+    var plus5=name==='Zelle'?'<div style="font-size:12px;color:var(--color-text-secondary)">+5%: '+fmtUSD(total*1.05)+'</div>':'';
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(name)+' <span class="badge-t">tracker</span></div><div class="wcard-bal-row"><div class="wcard-bal-side"></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div class="wcard-bal-side">'+plus5+actions+'</div></div><div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;white-space:nowrap">Calculated from transactions</div></div>');
   });
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
     var actions='<div style="display:flex;gap:4px"><button class="wico" onclick="editManualWalletBal('+w.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icoX+'</button></div>';
