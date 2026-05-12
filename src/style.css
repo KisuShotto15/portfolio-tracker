@@ -76,7 +76,8 @@ tr:hover td{background:rgba(128,128,128,0.08)}
 .pb{height:5px;border-radius:3px;background:var(--color-background-secondary);margin-top:4px;overflow:hidden}
 .pf{height:100%;border-radius:3px}
 .wgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:1.1rem}
-.wcard{background:rgba(255,255,255,0.055);border:0.5px solid rgba(255,255,255,0.08);border-radius:14px;padding:.875rem;display:flex;flex-direction:column}
+.wcard{background:rgba(255,255,255,0.055);border:0.5px solid rgba(255,255,255,0.08);border-radius:14px;padding:.875rem 1.1rem;display:flex;flex-direction:column;text-align:center}
+.wcard-bal-row{display:flex;align-items:center}.wcard-bal-row .wcard-bal{flex:1;text-align:center}.wcard-bal-row .wcard-bal-side{flex:0 0 auto;display:flex;align-items:center;gap:4px}
 .wcard-actions{margin-top:auto;padding-top:8px;display:flex;gap:4px;justify-content:flex-end}
 .wico{background:none;border:none;cursor:pointer;color:var(--color-text-secondary);padding:4px;border-radius:5px;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
 .wico:hover{color:#fff;background:rgba(255,255,255,0.08)}
