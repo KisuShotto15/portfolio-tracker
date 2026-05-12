@@ -1152,9 +1152,9 @@ function renderWallets(){
   var trackerTotal=trackerNames.reduce(function(s,n){ return s+calcTrackerBal(n); },0);
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var grand=apiTotal+trackerTotal+manualNormal;
-  cards.push('<div class="wcard" style="border-color:#5DCAA5;border-width:1px"><div class="wcard-name" style="color:#5DCAA5;font-weight:500">Total</div><div class="wcard-bal g">'+fmtUSD(grand)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">All wallets combined</div></div>');
+  cards.push('<div class="wcard"><div class="wcard-name" style="color:#5DCAA5;font-weight:500">Total</div><div class="wcard-bal g">'+fmtUSD(grand)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">All wallets combined</div></div>');
   function apiCard(name,connected,bal,upd,fn){
-    if(connected) return '<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+(bal!==null?'#1D9E75':'#E24B4A')+'"></span>'+name+'</div><div class="wcard-bal b">'+(bal!==null?'$'+bal.toFixed(2):'-')+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px">'+(upd?'Updated '+upd:'')+'</div><button class="btn btns" style="margin-top:7px" onclick="'+fn+'">&#8635;</button></div>';
+    if(connected) return '<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+(bal!==null?'#1D9E75':'#E24B4A')+'"></span>'+name+'</div><div style="display:flex;justify-content:space-between;align-items:center"><div class="wcard-bal b">'+(bal!==null?'$'+bal.toFixed(2):'-')+'</div><button class="btn btns" style="padding:4px 6px;height:auto" onclick="'+fn+'">&#8635;</button></div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">'+(upd?'Updated '+upd:'')+'</div></div>';
     return '<div class="wcard" style="border-style:dashed"><div class="wcard-name">'+name+'</div><div style="font-size:13px;color:var(--color-text-secondary);margin:5px 0">Not connected</div><button class="btn btns btnp" onclick="showPage(\'settings\',null)">Connect</button></div>';
   }
   cards.push(apiCard('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'fetchBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
@@ -1170,8 +1170,8 @@ function renderWallets(){
     cards.push('<div class="wcard"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="display:flex;align-items:center;gap:8px"><span class="wstatus" style="background:#EF9F27"></span><div><div>'+escHtml(name)+' <span class="badge-t">tracker</span></div></div></div>'+actions+'</div><div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px"><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div>'+plus5+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;padding:0 2px">Calculated from transactions</div></div>');
   });
   S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
-    var actions='<div class="wcard-actions"><button class="wico" onclick="editManualWalletBal('+w.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icoX+'</button></div>';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(w.name)+' <span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span></div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div>'+actions+'</div>');
+    var actions='<div style="display:flex;gap:4px"><button class="wico" onclick="editManualWalletBal('+w.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icoX+'</button></div>';
+    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(w.name)+' <span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span></div><div style="display:flex;justify-content:space-between;align-items:center">'+actions+'<div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div></div></div>');
   });
   grid.innerHTML=cards.join('');
 }
