@@ -1081,6 +1081,36 @@ function saveCategoryBudget(cat,val){
 }
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
 window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
+window._budPctLive=function(cat,val){
+  var v=parseFloat(val)||0;
+  var total=S.budgetTotal||600;
+  var pct=v>0?parseFloat(((v/total)*100).toFixed(1)):0;
+  var barW=Math.min(100,pct);
+  var barCol=pct>25?'#E24B4A':pct>15?'#EF9F27':'#1D9E75';
+  var key=cat.replace(/ /g,'-');
+  var pctEl=document.getElementById('bud-pct-'+key);
+  var barEl=document.getElementById('bud-bar-'+key);
+  if(pctEl){ pctEl.textContent=v>0?pct+'%':'—'; pctEl.style.color=v>0?barCol:'rgba(255,255,255,0.25)'; pctEl.style.fontWeight=v>0?'600':'400'; }
+  if(barEl){ barEl.style.width=barW+'%'; barEl.style.background=barCol; }
+  // Update allocated total bar
+  var allocEl=document.getElementById('bud-alloc-bar');
+  if(allocEl){
+    var cats=Object.keys(S.categoryBudgets||{});
+    var sum=cats.reduce(function(s,c){ return s+(c===cat?v:((S.categoryBudgets||{})[c]||0)); },0);
+    // add cats not in S.categoryBudgets (the one being typed)
+    var sumAll=0;
+    document.querySelectorAll('.budget-limits-grid input[type="number"]').forEach(function(inp,i){
+      sumAll+=parseFloat(inp.value)||0;
+    });
+    var ap=total>0?((sumAll/total)*100):0;
+    var ac=Math.abs(sumAll-total)<1?'#1D9E75':sumAll>total?'#E24B4A':'#EF9F27';
+    allocEl.innerHTML='<span style="color:var(--color-text-secondary)">Allocated:</span>'
+      +'<span style="color:'+ac+';font-weight:600">'+fmtUSD(sumAll)+'</span>'
+      +'<span style="color:var(--color-text-secondary)">/ '+fmtUSD(total)+'</span>'
+      +'<span style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;max-width:140px"><span style="display:block;height:100%;width:'+Math.min(100,ap)+'%;background:'+ac+';border-radius:3px;transition:width .2s"></span></span>'
+      +'<span style="color:'+ac+';font-weight:600">'+ap.toFixed(1)+'%</span>';
+  }
+};
 function renderBudget(){
   var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
   var months=getMonths();
@@ -1172,14 +1202,36 @@ function renderBudget(){
       +'<button class="btn btnp" onclick="saveBudget()">Save</button>'
       +'</div>'
       +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Category Limits</div>'
+      +(function(){
+        var total=BUDGET_CATS.reduce(function(s,c){ return s+((S.categoryBudgets||{})[c]||0); },0);
+        var pct=S.budgetTotal>0?((total/S.budgetTotal)*100):0;
+        var col=Math.abs(total-S.budgetTotal)<1?'#1D9E75':total>S.budgetTotal?'#E24B4A':'#EF9F27';
+        return '<div id="bud-alloc-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;font-size:12px">'
+          +'<span style="color:var(--color-text-secondary)">Allocated:</span>'
+          +'<span style="color:'+col+';font-weight:600">'+fmtUSD(total)+'</span>'
+          +'<span style="color:var(--color-text-secondary)">/ '+fmtUSD(S.budgetTotal)+'</span>'
+          +'<span style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;max-width:140px"><span style="display:block;height:100%;width:'+Math.min(100,pct)+'%;background:'+col+';border-radius:3px;transition:width .2s"></span></span>'
+          +'<span style="color:'+col+';font-weight:600">'+pct.toFixed(1)+'%</span>'
+          +'</div>';
+      })()
       +'<div class="budget-limits-grid">'
       +BUDGET_CATS.map(function(cat){
-        var v=(S.categoryBudgets||{})[cat]||'';
+        var v=(S.categoryBudgets||{})[cat]||0;
+        var pct=v>0&&S.budgetTotal>0?parseFloat(((v/S.budgetTotal)*100).toFixed(1)):0;
+        var barW=Math.min(100,pct);
+        var barCol=pct>25?'#E24B4A':pct>15?'#EF9F27':'#1D9E75';
         return '<div>'
-          +'<div style="margin-bottom:5px"><span class="tag '+tagCat(cat)+'" style="font-size:10px">'+cat+'</span></div>'
-          +'<input type="number" placeholder="No limit" step="1" value="'+v+'" '
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+            +'<span class="tag '+tagCat(cat)+'" style="font-size:10px">'+cat+'</span>'
+            +(v>0?'<span id="bud-pct-'+cat.replace(/ /g,'-')+'" style="font-size:10px;font-weight:600;color:'+barCol+'">'+pct+'%</span>':'<span id="bud-pct-'+cat.replace(/ /g,'-')+'" style="font-size:10px;color:rgba(255,255,255,0.25)">—</span>')
+          +'</div>'
+          +'<input type="number" placeholder="No limit" step="1" value="'+(v||'')+'" '
           +'style="width:100%;padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px" '
+          +'oninput="window._budPctLive(\''+cat+'\',this.value)" '
           +'onchange="saveCategoryBudget(\''+cat+'\',this.value)"/>'
+          +'<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:5px;overflow:hidden">'
+            +'<div id="bud-bar-'+cat.replace(/ /g,'-')+'" style="height:100%;width:'+barW+'%;background:'+barCol+';border-radius:2px;transition:width .2s"></div>'
+          +'</div>'
           +'</div>';
       }).join('')
       +'</div>'
