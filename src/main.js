@@ -586,10 +586,18 @@ function groupSum(txDebit, cats){ return cats.reduce(function(s,c){ return s+txD
 // ── Dashboard helpers ──────────────────────────────────────────────────────
 var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
 
+// Net spending for a category in a month: debits - credits (refunds reduce spend)
+function catNetSpend(month, cats){
+  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&(cats.indexOf(t.category)>=0); });
+  var d=txM.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var c=txM.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  return Math.max(0, d-c);
+}
+
 function getAvgMonthlyOutflows(){
   var now=new Date(); var months=[];
   for(var i=0;i<3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
-  var totals=months.map(function(m){ return S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0); });
+  var totals=months.map(function(m){ return catNetSpend(m, EXPENSE_CATS_DASH); });
   var nz=totals.filter(function(v){ return v>0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
@@ -599,7 +607,7 @@ function getAvgMonthlyContribution(){
   for(var i=0;i<3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
   var nets=months.map(function(m){
     var inc=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    var exp=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    var exp=catNetSpend(m, EXPENSE_CATS_DASH);
     return inc-exp;
   });
   var nz=nets.filter(function(v){ return v>0; });
@@ -635,7 +643,7 @@ function getMonthlyKPIs(month){
   var netWorth=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].total:null;
   // Tx for month
   var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
-  var expenses=txM.filter(function(t){ return t.type==='Debit'&&EXPENSE_CATS_DASH.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var expenses=catNetSpend(month, EXPENSE_CATS_DASH);
   // Monthly Return: snapshot periods ending in month
   var pnls=getSnapshotPnL();
   var monthPnls=pnls.filter(function(p){ return p.to.startsWith(month); });
@@ -766,13 +774,13 @@ function getActiveAlerts(){
 
   // 1. Overspend per category (current month vs 3-month avg excluding current)
   EXPENSE_CATS_DASH.forEach(function(cat){
-    var curSpend=S.transactions.filter(function(t){ return t.date.startsWith(curMonth)&&t.type==='Debit'&&t.category===cat; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+    var curSpend=catNetSpend(curMonth, [cat]);
     if(curSpend<50) return;
     var prior=[];
     for(var i=1;i<=3;i++){
       var d=new Date(now.getFullYear(),now.getMonth()-i,1);
       var m=d.toISOString().slice(0,7);
-      var spend=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&t.category===cat; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+      var spend=catNetSpend(m, [cat]);
       if(spend>0) prior.push(spend);
     }
     if(prior.length===0) return;
@@ -1118,7 +1126,7 @@ function renderBudget(){
   var month=_budMonth;
   var income=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
   var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&BUDGET_CATS.indexOf(t.category)>=0; });
-  var spent=debits.reduce(function(s,t){ return s+t.amountUSD; },0);
+  var spent=catNetSpend(month, BUDGET_CATS);
   var net=income-spent;
   var savRate=income>0?Math.round((net/income)*100):0;
   var remaining=S.budgetTotal-spent;
@@ -1166,7 +1174,7 @@ function renderBudget(){
   // Category card grid
   html+='<div class="budget-cat-grid" style="margin-bottom:1.1rem">';
   BUDGET_CATS.forEach(function(cat){
-    var s=debits.filter(function(t){ return t.category===cat; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+    var s=catNetSpend(month, [cat]);
     var catLim=(S.categoryBudgets||{})[cat]||0;
     var limBase=catLim>0?catLim:S.budgetTotal;
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
