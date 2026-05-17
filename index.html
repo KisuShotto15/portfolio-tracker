@@ -99,6 +99,17 @@
     </div>
   </div>
 
+  <div id="page-history" class="page">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+      <button class="btn btns" onclick="showPage('summary',null)" style="padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:5px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.07em" id="history-title">History</span>
+    </div>
+    <div id="history-wrap"></div>
+  </div>
+
   <div id="page-transactions" class="page">
     <div class="rbar">
       <span style="color:var(--color-text-secondary)">BCV Rate</span>

@@ -874,8 +874,10 @@ function renderSnapshotPnL(){
       +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div>'
       +'</div>';
   }
-  var older=pnls.slice(0,-1).reverse().map(makePnlRow).join('');
-  var histIcon=older?'<div class="hist-wrap"><button class="hist-btn" onclick="toggleHistPopup(this)" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">History</div><div class="pnl-list">'+older+'</div></div></div>':'';
+  var olderAll=pnls.slice(0,-1).reverse();
+  var olderPopup=olderAll.slice(0,3).map(makePnlRow).join('');
+  var hasMore=olderAll.length>0;
+  var histIcon=hasMore?'<div class="hist-wrap"><button class="hist-btn" onclick="showPage(\'history\',null,\'pnl\')" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Last '+Math.min(3,olderAll.length)+' periods</div><div class="pnl-list">'+olderPopup+'</div>'+(olderAll.length>3?'<div style="text-align:center;margin-top:.5rem;font-size:11px;color:#9B70F0">View all '+olderAll.length+' →</div>':'')+'</div></div>':'';
   var hdr='<div style="position:relative;text-align:center;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(older?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)">'+histIcon+'</div>':'')+'</div>';
   var latestP=pnls[pnls.length-1];
   var lc=latestP.profit>0?'#1D9E75':latestP.profit<0?'#E24B4A':'#888';
@@ -1010,10 +1012,11 @@ function renderEquityChart(){
   var snapsSorted=snaps.slice().reverse();
   function makeSnapRow(s){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:var(--color-text-secondary)">'+s.date+'</span><span style="font-weight:500">'+fmtUSD(s.total)+'</span><div style="display:flex;gap:4px"><button class="btn btns" onclick="editSnapshot('+s.id+')" style="font-size:11px;padding:2px 7px;opacity:1">edit</button><button class="btn btnd" onclick="deleteSnapshot('+s.id+')" style="font-size:11px;padding:2px 7px;opacity:1">×</button></div></div>'; }
   var latestSnap=makeSnapRow(snapsSorted[0]);
-  var olderSnaps=snapsSorted.slice(1).map(makeSnapRow).join('');
+  var olderAllSnaps=snapsSorted.slice(1);
+  var olderSnapsPopup=olderAllSnaps.slice(0,3).map(makeSnapRow).join('');
   var HIST_ICON2='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><polyline points="12 7 12 12 15 14"/></svg>';
   var eHist=document.getElementById('equity-hist');
-  if(eHist) eHist.innerHTML=olderSnaps?'<div class="hist-wrap"><button class="hist-btn" onclick="toggleHistPopup(this)" title="Snapshot history">'+HIST_ICON2+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">History</div><div style="font-size:13px">'+olderSnaps+'</div></div></div>':'';
+  if(eHist) eHist.innerHTML=olderAllSnaps.length>0?'<div class="hist-wrap"><button class="hist-btn" onclick="showPage(\'history\',null,\'snapshots\')" title="Snapshot history">'+HIST_ICON2+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Last '+Math.min(3,olderAllSnaps.length)+' snapshots</div><div style="font-size:13px">'+olderSnapsPopup+'</div>'+(olderAllSnaps.length>3?'<div style="text-align:center;margin-top:.5rem;font-size:11px;color:#9B70F0">View all '+olderAllSnaps.length+' →</div>':'')+'</div></div>':'';
   if(wrap) wrap.innerHTML='<div style="display:flex;gap:12px;font-size:12px;color:var(--color-text-secondary);margin-bottom:.5rem">'
     +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#5DCAA5;display:inline-block"></span>Tracked</span>'
     +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Incl. deployed capital</span>'
@@ -1077,7 +1080,7 @@ function deleteSnapshot(id){
   }
   save(); renderEquityChart(); renderSnapshotPnL();
 }
-function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var val=parseFloat(prompt('Edit snapshot value for '+snap.date+':',snap.total)); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); renderEquityChart(); renderSnapshotPnL(); }
+function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var val=parseFloat(prompt('Edit snapshot value for '+snap.date+':',snap.total)); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
@@ -1381,8 +1384,8 @@ function importJSON(file){
 
 function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ localStorage.removeItem('ft13'); location.reload(); } }
 
-function showPage(id,btn){
-  var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import'];
+function showPage(id,btn,arg){
+  var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('active'); });
@@ -1398,10 +1401,106 @@ function showPage(id,btn){
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools') renderToolToggles();
+  else if(id==='history') renderHistory(arg||'snapshots');
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
   document.body.classList.remove('nav-open');
 }
+window._historyView='snapshots';
+function renderHistory(view){
+  window._historyView=view||'snapshots';
+  var titleEl=document.getElementById('history-title');
+  var wrap=document.getElementById('history-wrap');
+  if(!wrap) return;
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(snaps.length===0){
+    if(titleEl) titleEl.textContent='History';
+    wrap.innerHTML='<div class="cw"><div style="text-align:center;color:var(--color-text-secondary);padding:2rem">No snapshots yet</div></div>';
+    return;
+  }
+  var firstTotal=snaps[0].total;
+  // Build period data for each snapshot (P&L vs previous)
+  var rows=snaps.map(function(s,i){
+    var prev=i>0?snaps[i-1]:null;
+    var profit=null, pct=null, invOut=0, invIn=0;
+    if(prev){
+      var txBetween=S.transactions.filter(function(t){ return t.date>prev.date&&t.date<=s.date&&t.category==='Investments'; });
+      invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+      invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+      profit=(s.total-prev.total)+invOut-invIn;
+      pct=prev.total>0?(profit/prev.total)*100:null;
+    }
+    var cumDelta=s.total-firstTotal;
+    var cumPct=firstTotal>0?(cumDelta/firstTotal)*100:0;
+    return {s:s,prev:prev,profit:profit,pct:pct,invOut:invOut,invIn:invIn,cumDelta:cumDelta,cumPct:cumPct};
+  });
+
+  if(view==='pnl'){
+    rows=rows.filter(function(r){ return r.prev!==null; });
+  }
+  rows.reverse();
+
+  if(titleEl) titleEl.textContent=view==='pnl'?'Snapshot P&L History':'Snapshot History';
+
+  function colorP(v){ return v>0?'#1D9E75':v<0?'#E24B4A':'#888'; }
+  function sign(v){ return v>0?'+':v<0?'-':''; }
+
+  var headers=view==='pnl'
+    ?['Period','From','To','P&L','%','Adjustments']
+    :['Date','Total','P&L','%','Adjustments','Cumulative','Actions'];
+
+  var html='<div class="cw" style="padding:0;overflow:hidden">'
+    +'<div style="overflow-x:auto"><table class="hist-table">'
+    +'<thead><tr>'+headers.map(function(h){ return '<th>'+h+'</th>'; }).join('')+'</tr></thead>'
+    +'<tbody>';
+
+  rows.forEach(function(r){
+    var adjTxt='';
+    if(r.invOut>0||r.invIn>0){
+      var parts=[];
+      if(r.invOut>0) parts.push('<span style="color:#EF9F27">Invested '+fmtUSD(r.invOut)+'</span>');
+      if(r.invIn>0) parts.push('<span style="color:#60A5FA">Returned '+fmtUSD(r.invIn)+'</span>');
+      adjTxt=parts.join(' · ');
+    } else adjTxt='<span style="color:rgba(255,255,255,0.2)">—</span>';
+
+    var profitCell=r.profit!==null
+      ?'<span style="color:'+colorP(r.profit)+'">'+sign(r.profit)+fmtUSD(Math.abs(r.profit))+'</span>'
+      :'<span style="color:rgba(255,255,255,0.2)">—</span>';
+    var pctCell=r.pct!==null
+      ?'<span style="color:'+colorP(r.pct)+'">'+sign(r.pct)+r.pct.toFixed(2)+'%</span>'
+      :'<span style="color:rgba(255,255,255,0.2)">—</span>';
+
+    if(view==='pnl'){
+      html+='<tr>'
+        +'<td>'+r.prev.date+' → '+r.s.date+'</td>'
+        +'<td>'+fmtUSD(r.prev.total)+'</td>'
+        +'<td>'+fmtUSD(r.s.total)+'</td>'
+        +'<td>'+profitCell+'</td>'
+        +'<td>'+pctCell+'</td>'
+        +'<td style="font-size:12px">'+adjTxt+'</td>'
+        +'</tr>';
+    } else {
+      var cumColor=colorP(r.cumDelta);
+      html+='<tr>'
+        +'<td>'+r.s.date+'</td>'
+        +'<td style="font-weight:500">'+fmtUSD(r.s.total)+'</td>'
+        +'<td>'+profitCell+'</td>'
+        +'<td>'+pctCell+'</td>'
+        +'<td style="font-size:12px">'+adjTxt+'</td>'
+        +'<td><span style="color:'+cumColor+'">'+sign(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+'</span> <span style="color:rgba(255,255,255,0.4);font-size:11px">('+sign(r.cumPct)+r.cumPct.toFixed(1)+'%)</span></td>'
+        +'<td style="white-space:nowrap"><button class="btn btns" style="padding:3px 8px;font-size:11px;margin-right:4px" onclick="editSnapshot('+r.s.id+')">edit</button><button class="btn btnd" style="padding:3px 8px;font-size:11px;opacity:1" onclick="deleteSnapshotFromHistory('+r.s.id+')">×</button></td>'
+        +'</tr>';
+    }
+  });
+  html+='</tbody></table></div></div>';
+  wrap.innerHTML=html;
+}
+window.renderHistory=renderHistory;
+function deleteSnapshotFromHistory(id){
+  deleteSnapshot(id);
+  renderHistory(window._historyView||'snapshots');
+}
+window.deleteSnapshotFromHistory=deleteSnapshotFromHistory;
 
 // Expose functions needed by inline HTML event handlers
 function toggleSidebar(){

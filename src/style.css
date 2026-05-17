@@ -184,6 +184,11 @@ tr.date-sep:first-child td{padding-top:0}
 .dash-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .dash-chart-row>.cw{min-width:0}
 .hist-wrap{position:relative;display:inline-block}
+.hist-table{width:100%;border-collapse:collapse;font-size:13px}
+.hist-table th{text-align:left;padding:.85rem 1rem;font-size:11px;font-weight:500;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.07em;border-bottom:0.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.02)}
+.hist-table td{padding:.7rem 1rem;border-bottom:0.5px solid rgba(255,255,255,0.04);color:var(--color-text-primary);font-variant-numeric:tabular-nums}
+.hist-table tbody tr:hover{background:rgba(255,255,255,0.025)}
+.hist-table tbody tr:last-child td{border-bottom:none}
 .hist-btn{background:none;border:none;color:rgba(255,255,255,0.28);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;line-height:1;transition:color .15s,background .15s}
 .hist-btn:hover{color:rgba(255,255,255,0.75);background:rgba(255,255,255,0.07)}
 .hist-popup{display:none;position:absolute;right:0;top:calc(100% + 6px);background:rgba(14,14,24,0.98);border:0.5px solid rgba(255,255,255,0.12);border-radius:12px;padding:.75rem;min-width:240px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
