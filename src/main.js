@@ -878,7 +878,7 @@ function renderSnapshotPnL(){
   var olderPopup=olderAll.slice(0,3).map(makePnlRow).join('');
   var hasMore=olderAll.length>0;
   var histIcon=hasMore?'<div class="hist-wrap"><button class="hist-btn" onclick="showPage(\'history\',null,\'pnl\')" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Last '+Math.min(3,olderAll.length)+' periods</div><div class="pnl-list">'+olderPopup+'</div>'+(olderAll.length>3?'<div style="text-align:center;margin-top:.5rem;font-size:11px;color:#9B70F0">View all '+olderAll.length+' →</div>':'')+'</div></div>':'';
-  var hdr='<div style="position:relative;text-align:center;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(older?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)">'+histIcon+'</div>':'')+'</div>';
+  var hdr='<div style="position:relative;text-align:center;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)">'+histIcon+'</div>':'')+'</div>';
   var latestP=pnls[pnls.length-1];
   var lc=latestP.profit>0?'#1D9E75':latestP.profit<0?'#E24B4A':'#888';
   var lsign=latestP.profit>0?'+':'';
