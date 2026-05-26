@@ -331,6 +331,19 @@
       <div id="bn-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
     <div class="fc">
+      <h3>Bibi Binance API</h3>
+      <p class="hint">Separate Binance keys for partner's wallet. Stored locally.</p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+        <input id="bbn-key" type="password" placeholder="API Key" oninput="S.bibiBinanceKey=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
+        <input id="bbn-secret" type="password" placeholder="API Secret" oninput="S.bibiBinanceSecret=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btnp" onclick="testBibiBinance()">Test connection</button>
+        <button class="btn" style="color:#E24B4A" onclick="clearBibiBinance()">Reset</button>
+      </div>
+      <div id="bbn-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
+    </div>
+    <div class="fc">
       <h3>Bybit API</h3>
       <p class="hint">Credentials stored in Cloudflare Worker env vars (BYBIT_KEY, BYBIT_SECRET).</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap">

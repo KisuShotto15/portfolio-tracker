@@ -35,6 +35,8 @@ var S = {
   budgetTotal:600,
   binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
+  bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
+  bibiBinanceKey:null, bibiBinanceSecret:null,
   bybitBalance:null,   bybitUpdated:null,
   okxBalance:null,     okxUpdated:null,
   trezorBalance:null,  trezorUpdated:null,
@@ -243,6 +245,31 @@ async function autoFetchBinance(){
   var age=S.binanceFetchedAt?Date.now()-S.binanceFetchedAt:Infinity;
   if(age<BINANCE_AUTO_MS) return;
   try{ await fetchBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
+}
+
+async function fetchBibiBinanceBalance(){
+  var keyEl=document.getElementById('bbn-key'); var secEl=document.getElementById('bbn-secret');
+  if(keyEl&&keyEl.value) S.bibiBinanceKey=keyEl.value;
+  if(secEl&&secEl.value) S.bibiBinanceSecret=secEl.value;
+  if(!S.bibiBinanceKey||!S.bibiBinanceSecret) throw new Error('API key/secret not configured');
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({key:S.bibiBinanceKey,secret:S.bibiBinanceSecret})});
+  if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
+  var data=await r.json(); if(data.error) throw new Error(data.error);
+  var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
+  S.bibiBinanceBalance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
+  S.bibiBinanceUpdated=new Date().toLocaleTimeString('en-US'); S.bibiBinanceFetchedAt=Date.now(); save(); return S.bibiBinanceBalance;
+}
+async function testBibiBinance(){
+  var st=document.getElementById('bbn-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
+  try{ await fetchBibiBinanceBalance(); st.textContent='Connected - Funding USDT: $'+S.bibiBinanceBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
+  catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
+}
+function clearBibiBinance(){ S.bibiBinanceBalance=null; S.bibiBinanceUpdated=null; S.bibiBinanceFetchedAt=null; save(); document.getElementById('bbn-status').textContent='Reset.'; renderWallets(); }
+async function autoFetchBibiBinance(){
+  if(S.bibiBinanceBalance===null) return;
+  var age=S.bibiBinanceFetchedAt?Date.now()-S.bibiBinanceFetchedAt:Infinity;
+  if(age<BINANCE_AUTO_MS) return;
+  try{ await fetchBibiBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
 }
 
 async function fetchBybitBalance(){
@@ -708,6 +735,7 @@ function renderKPIStrip(month){
 function getWalletShares(){
   var shares={};
   shares['Binance']=S.binanceBalance||0;
+  shares['Bibi Binance']=S.bibiBinanceBalance||0;
   shares['Bybit']=S.bybitBalance||0;
   shares['OKX']=S.okxBalance||0;
   shares['Trezor']=S.trezorBalance||0;
@@ -1029,7 +1057,7 @@ function renderEquityChart(){
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
 
 function getTotalBalance(){
-  var api=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
+  var api=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
   var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+calcTrackerBal(w.name); },0);
   var manualBal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var zelle=calcTrackerBal('Zelle');
@@ -1274,7 +1302,7 @@ function calcTrackerBal(name){
 
 function renderWallets(){
   var grid=document.getElementById('w-grid'); var cards=[];
-  var apiTotal=(S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
+  var apiTotal=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
   var trackerNames=['Zelle'];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
   var trackerTotal=trackerNames.reduce(function(s,n){ return s+calcTrackerBal(n); },0);
@@ -1286,6 +1314,7 @@ function renderWallets(){
     return '<div class="wcard" style="border-style:dashed"><div class="wcard-name">'+name+'</div><div style="font-size:13px;color:var(--color-text-secondary);margin:5px 0">Not connected</div><button class="btn btns btnp" onclick="showPage(\'settings\',null)">Connect</button></div>';
   }
   cards.push(apiCard('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'fetchBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
+  cards.push(apiCard('Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'fetchBibiBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'fetchBybitBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'fetchOKXBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
   cards.push(apiCard('Trezor (BSC USDT)',true,S.trezorBalance,S.trezorUpdated,'fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
@@ -1538,6 +1567,9 @@ window.copyAddr = copyAddr;
 window.renderWallets = renderWallets;
 window.testBinance = testBinance;
 window.clearBinance = clearBinance;
+window.fetchBibiBinanceBalance = fetchBibiBinanceBalance;
+window.testBibiBinance = testBibiBinance;
+window.clearBibiBinance = clearBibiBinance;
 window.testBybit = testBybit;
 window.clearBybit = clearBybit;
 window.testOKX = testOKX;
@@ -1725,6 +1757,8 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
+  if(S.bibiBinanceKey){ var bbk=document.getElementById('bbn-key'); if(bbk) bbk.value=S.bibiBinanceKey; }
+  if(S.bibiBinanceSecret){ var bbs=document.getElementById('bbn-secret'); if(bbs) bbs.value=S.bibiBinanceSecret; }
   try{ var _p2pc=localStorage.getItem('ft13_p2pc'); if(_p2pc){ var el=document.getElementById('p2p-comm'); if(el) el.value=_p2pc; } }catch(e){}
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
@@ -1734,15 +1768,15 @@ async function init(){
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; if(_pc.buy) document.getElementById('pc-buy').value=_pc.buy; if(_pc.card) document.getElementById('pc-card').value=_pc.card; }catch(e){}
   renderToolToggles(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
-  autoFetchBinance();
+  autoFetchBinance(); autoFetchBibiBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
-  setInterval(function(){ autoFetchBinance(); }, BINANCE_AUTO_MS);
+  setInterval(function(){ autoFetchBinance(); autoFetchBibiBinance(); }, BINANCE_AUTO_MS);
   // Pull fresh cloud state whenever user returns to this tab
   // Prevents stale open tabs from overwriting changes made on other devices
   document.addEventListener('visibilitychange', function(){
     if(!document.hidden) pullFromCloud().then(function(pulled){
       if(pulled){ populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); }
-    }).then(function(){ autoFetchBinance(); });
+    }).then(function(){ autoFetchBinance(); autoFetchBibiBinance(); });
   });
 }
 init();
