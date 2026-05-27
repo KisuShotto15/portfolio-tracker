@@ -69,10 +69,34 @@ function saveLocal(){ try{ localStorage.setItem('ft13',JSON.stringify(S)); }catc
 function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} }
 
 
+// Merge two transaction arrays using per-transaction last-writer-wins (updatedAt).
+// Cloud version of a tx wins unless local has a strictly higher updatedAt.
+// Local-only transactions (not in cloud) are always preserved.
+function mergeTxArrays(localTxs, cloudTxs, deletedSet){
+  var localById={};
+  localTxs.forEach(function(t){ if(!deletedSet.has(t.id)) localById[t.id]=t; });
+  var cloudById={};
+  cloudTxs.forEach(function(t){ cloudById[t.id]=t; });
+  var merged=[];
+  // For every cloud tx not deleted: pick whichever version has higher updatedAt
+  cloudTxs.forEach(function(t){
+    if(deletedSet.has(t.id)) return;
+    var local=localById[t.id];
+    if(!local){ merged.push(t); return; }
+    // Local wins only if it was explicitly modified more recently
+    merged.push((local.updatedAt||0)>(t.updatedAt||0)?local:t);
+  });
+  // Append local-only txs (not in cloud, not deleted)
+  localTxs.forEach(function(t){
+    if(!cloudById[t.id]&&!deletedSet.has(t.id)) merged.push(t);
+  });
+  return merged;
+}
+
 async function pushToCloud(){
   try{
     setSyncStatus('syncing','Syncing...');
-    // Merge-first: fetch cloud state and add any transactions missing locally.
+    // Merge-first: fetch cloud state and merge transactions before pushing.
     // Prevents a stale open tab from overwriting changes made on another device.
     try{
       var cr=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
@@ -80,24 +104,14 @@ async function pushToCloud(){
         var cd=await cr.json();
         if(cd.data){
           var needRender=false;
-          // transactions: last-writer-wins when cloud has newer timestamp; otherwise additive
+          // transactions: per-tx last-writer-wins merge
           if(cd.data.transactions){
             var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cd.data.deletedTxIds||[]));
             S.deletedTxIds=Array.from(mergedDeleted);
-            if((cd.data.transactionsUpdatedAt||0)>(S.transactionsUpdatedAt||0)){
-              // Cloud is newer: take cloud transactions, filter tombstones, keep local-only txs
-              var cloudFiltered=cd.data.transactions.filter(function(t){return !mergedDeleted.has(t.id);});
-              var cloudIds=new Set(cloudFiltered.map(function(t){return t.id;}));
-              var localOnly=S.transactions.filter(function(t){return !cloudIds.has(t.id)&&!mergedDeleted.has(t.id);});
-              S.transactions=cloudFiltered.concat(localOnly);
-              S.transactionsUpdatedAt=cd.data.transactionsUpdatedAt;
-              needRender=true;
-            } else {
-              S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
-              var localIds=new Set(S.transactions.map(function(t){return t.id;}));
-              var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id)&&!mergedDeleted.has(t.id);});
-              if(missing.length){ S.transactions=S.transactions.concat(missing); needRender=true; }
-            }
+            var before=JSON.stringify(S.transactions);
+            S.transactions=mergeTxArrays(S.transactions,cd.data.transactions,mergedDeleted);
+            S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cd.data.transactionsUpdatedAt||0)||null;
+            if(JSON.stringify(S.transactions)!==before) needRender=true;
           }
           // snapshots: timestamp-based (local wins if newer, cloud wins if newer)
           if(cd.data.snapshots&&(cd.data.snapshotsUpdatedAt||0)>(S.snapshotsUpdatedAt||0)){
@@ -152,23 +166,12 @@ async function pullFromCloud(){
     var res=await r.json();
     if(res.data){
       var cloud=res.data;
-      // Transactions: last-writer-wins when cloud has newer timestamp; otherwise additive
+      // Transactions: per-tx last-writer-wins merge
       if(cloud.transactions){
         var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cloud.deletedTxIds||[]));
         S.deletedTxIds=Array.from(mergedDeleted);
-        if((cloud.transactionsUpdatedAt||0)>(S.transactionsUpdatedAt||0)){
-          // Cloud is newer: replace transactions but preserve any local-only txs
-          var cloudFiltered=cloud.transactions.filter(function(t){return !mergedDeleted.has(t.id);});
-          var cloudIds=new Set(cloudFiltered.map(function(t){return t.id;}));
-          var localOnly=S.transactions.filter(function(t){return !cloudIds.has(t.id)&&!mergedDeleted.has(t.id);});
-          S.transactions=cloudFiltered.concat(localOnly);
-          S.transactionsUpdatedAt=cloud.transactionsUpdatedAt;
-        } else {
-          S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
-          var localIds=new Set(S.transactions.map(function(t){ return t.id; }));
-          var missing=cloud.transactions.filter(function(t){ return !localIds.has(t.id)&&!mergedDeleted.has(t.id); });
-          if(missing.length) S.transactions=S.transactions.concat(missing);
-        }
+        S.transactions=mergeTxArrays(S.transactions,cloud.transactions,mergedDeleted);
+        S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
       }
       // Replace all other fields normally
       var rest=Object.assign({},cloud);
@@ -203,7 +206,7 @@ async function forcePull(){
   if(cs) cs.textContent='Pulling...';
   var ok=await pullFromCloud();
   if(ok){
-    populateWalletSelects(); updateRateUI(); renderSummary();
+    populateWalletSelects(); updateRateUI(); sortTx(); renderTx(); renderSummary(); renderWallets();
     if(cs) cs.textContent='Pulled from cloud at '+new Date().toLocaleTimeString('en-US');
   } else {
     if(cs) cs.textContent='No cloud data found.';
@@ -500,8 +503,9 @@ function addTx(){
   var amtUSD=amt, amtVES=null;
   if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
   snapshot();
-  S.transactions.push({id:Date.now(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false});
-  S.transactionsUpdatedAt=Date.now();
+  var _now=Date.now();
+  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false,updatedAt:_now});
+  S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
   closeTxForm();
@@ -570,8 +574,9 @@ function updateTx(){
   if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
   snapshot();
   var t=S.transactions.find(function(x){ return x.id===editingTxId; });
-  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; }
-  S.transactionsUpdatedAt=Date.now();
+  var _now=Date.now();
+  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; t.updatedAt=_now; }
+  S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
