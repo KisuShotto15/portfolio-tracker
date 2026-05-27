@@ -45,6 +45,7 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
+  transactionsUpdatedAt:null,
   dashGoal:0,
   categoryBudgets:{}
 };
@@ -79,14 +80,24 @@ async function pushToCloud(){
         var cd=await cr.json();
         if(cd.data){
           var needRender=false;
-          // transactions: additive merge, but respect local deletions (tombstones)
+          // transactions: last-writer-wins when cloud has newer timestamp; otherwise additive
           if(cd.data.transactions){
             var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cd.data.deletedTxIds||[]));
             S.deletedTxIds=Array.from(mergedDeleted);
-            S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
-            var localIds=new Set(S.transactions.map(function(t){return t.id;}));
-            var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id)&&!mergedDeleted.has(t.id);});
-            if(missing.length){ S.transactions=S.transactions.concat(missing); needRender=true; }
+            if((cd.data.transactionsUpdatedAt||0)>(S.transactionsUpdatedAt||0)){
+              // Cloud is newer: take cloud transactions, filter tombstones, keep local-only txs
+              var cloudFiltered=cd.data.transactions.filter(function(t){return !mergedDeleted.has(t.id);});
+              var cloudIds=new Set(cloudFiltered.map(function(t){return t.id;}));
+              var localOnly=S.transactions.filter(function(t){return !cloudIds.has(t.id)&&!mergedDeleted.has(t.id);});
+              S.transactions=cloudFiltered.concat(localOnly);
+              S.transactionsUpdatedAt=cd.data.transactionsUpdatedAt;
+              needRender=true;
+            } else {
+              S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
+              var localIds=new Set(S.transactions.map(function(t){return t.id;}));
+              var missing=cd.data.transactions.filter(function(t){return !localIds.has(t.id)&&!mergedDeleted.has(t.id);});
+              if(missing.length){ S.transactions=S.transactions.concat(missing); needRender=true; }
+            }
           }
           // snapshots: timestamp-based (local wins if newer, cloud wins if newer)
           if(cd.data.snapshots&&(cd.data.snapshotsUpdatedAt||0)>(S.snapshotsUpdatedAt||0)){
@@ -141,14 +152,23 @@ async function pullFromCloud(){
     var res=await r.json();
     if(res.data){
       var cloud=res.data;
-      // Additive merge for transactions — never discard local txs not yet pushed
+      // Transactions: last-writer-wins when cloud has newer timestamp; otherwise additive
       if(cloud.transactions){
         var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cloud.deletedTxIds||[]));
         S.deletedTxIds=Array.from(mergedDeleted);
-        S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
-        var localIds=new Set(S.transactions.map(function(t){ return t.id; }));
-        var missing=cloud.transactions.filter(function(t){ return !localIds.has(t.id)&&!mergedDeleted.has(t.id); });
-        if(missing.length) S.transactions=S.transactions.concat(missing);
+        if((cloud.transactionsUpdatedAt||0)>(S.transactionsUpdatedAt||0)){
+          // Cloud is newer: replace transactions but preserve any local-only txs
+          var cloudFiltered=cloud.transactions.filter(function(t){return !mergedDeleted.has(t.id);});
+          var cloudIds=new Set(cloudFiltered.map(function(t){return t.id;}));
+          var localOnly=S.transactions.filter(function(t){return !cloudIds.has(t.id)&&!mergedDeleted.has(t.id);});
+          S.transactions=cloudFiltered.concat(localOnly);
+          S.transactionsUpdatedAt=cloud.transactionsUpdatedAt;
+        } else {
+          S.transactions=S.transactions.filter(function(t){ return !mergedDeleted.has(t.id); });
+          var localIds=new Set(S.transactions.map(function(t){ return t.id; }));
+          var missing=cloud.transactions.filter(function(t){ return !localIds.has(t.id)&&!mergedDeleted.has(t.id); });
+          if(missing.length) S.transactions=S.transactions.concat(missing);
+        }
       }
       // Replace all other fields normally
       var rest=Object.assign({},cloud);
@@ -196,10 +216,10 @@ async function forcePush(){
 }
 
 function snapshot(){ undoStack.push(JSON.stringify(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
-function doUndo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doUndo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.style.opacity=undoStack.length?'1':'0.35'; if(r) r.style.opacity=redoStack.length?'1':'0.35'; }
-function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; save(); renderTx(); renderSummary(); }
+function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
 
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return true; return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
@@ -481,12 +501,13 @@ function addTx(){
   if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
   snapshot();
   S.transactions.push({id:Date.now(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false});
+  S.transactionsUpdatedAt=Date.now();
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
   closeTxForm();
 }
 
-function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); save(); renderTx(); renderSummary(); }
+function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
 
 var editingTxId = null;
 function editTx(id){
@@ -550,6 +571,7 @@ function updateTx(){
   snapshot();
   var t=S.transactions.find(function(x){ return x.id===editingTxId; });
   if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; }
+  S.transactionsUpdatedAt=Date.now();
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
@@ -1085,6 +1107,7 @@ function recordSnapshot(){
     if(confirm('Period profit: '+fmtUSD(profit)+'\n('+prev.date+' → '+today+')\n\nAdd as Income transaction in Binance?')){
       var txId=Date.now()+1;
       S.transactions.push({id:txId,date:today,desc:'USD Profit '+prev.date+' → '+today,type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
+      S.transactionsUpdatedAt=Date.now();
       S.snapshots[S.snapshots.length-1].txId=txId;
     }
   }
@@ -1104,6 +1127,7 @@ function deleteSnapshot(id){
       if(!S.deletedTxIds) S.deletedTxIds=[];
       S.deletedTxIds.push(snap.txId);
       S.transactions=S.transactions.filter(function(t){ return t.id!==snap.txId; });
+      S.transactionsUpdatedAt=Date.now();
     }
   }
   save(); renderEquityChart(); renderSnapshotPnL();
@@ -1376,6 +1400,7 @@ function handleCSV(file){
       S.transactions.push({id:Date.now()+Math.random(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported});
       added++;
     });
+    if(added>0) S.transactionsUpdatedAt=Date.now();
     save();
     result.innerHTML='<div style="background:var(--color-background-secondary);border-radius:7px;padding:1rem;margin-top:1rem;font-size:13px"><div style="color:#5DCAA5;margin-bottom:5px">Imported: '+added+'</div><div style="color:var(--color-text-secondary)">Skipped duplicates: '+skipped+'</div><button class="btn btnp btns" style="margin-top:9px" onclick="showPage(\'transactions\',null)">View transactions</button></div>';
     renderSummary();
