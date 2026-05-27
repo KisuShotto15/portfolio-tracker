@@ -1812,3 +1812,22 @@ async function init(){
 init();
 
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js'); }
+
+// PWA install prompt
+var _pwaPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();
+  _pwaPrompt=e;
+  var btn=document.getElementById('pwa-install-btn');
+  if(btn) btn.style.display='flex';
+});
+window.addEventListener('appinstalled',function(){
+  _pwaPrompt=null;
+  var btn=document.getElementById('pwa-install-btn');
+  if(btn) btn.style.display='none';
+});
+window.installPWA=function(){
+  if(!_pwaPrompt) return;
+  _pwaPrompt.prompt();
+  _pwaPrompt.userChoice.then(function(){ _pwaPrompt=null; var btn=document.getElementById('pwa-install-btn'); if(btn) btn.style.display='none'; });
+};

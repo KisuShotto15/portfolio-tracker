@@ -29,6 +29,10 @@
     <span class="sync-dot" id="sync-dot" style="background:#888"></span>
     <span id="sync-label" style="display:none">Loading...</span>
   </div>
+  <button id="pwa-install-btn" onclick="installPWA()" title="Install app" style="display:none;align-items:center;gap:6px;background:rgba(155,112,240,0.15);border:1px solid rgba(155,112,240,0.3);color:#9B70F0;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;width:calc(100% - 2rem);margin:0 1rem">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
+    Install App
+  </button>
   <button class="nb active" data-tooltip="Dashboard" onclick="showPage('summary',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
     <span class="nb-label">Dashboard</span>
