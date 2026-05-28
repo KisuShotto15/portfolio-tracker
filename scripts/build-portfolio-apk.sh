@@ -198,6 +198,7 @@ android {
 
 dependencies {
     implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 }
 GRADLE
 
@@ -285,8 +286,10 @@ XML
 cat > "$RES/values/styles.xml" << XML
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
         <item name="colorPrimary">$THEME_COLOR</item>
+        <item name="colorPrimaryDark">$STATUS_BAR_COLOR</item>
+        <item name="android:windowBackground">@color/bg_color</item>
     </style>
 </resources>
 XML

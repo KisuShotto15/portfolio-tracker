@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.kisushotto.portfolio",
+    "sha256_cert_fingerprints": ["98:E0:72:93:93:21:28:A1:F5:56:40:3F:5E:35:35:13:E7:69:F4:4C:51:93:B0:49:BF:27:07:97:A4:62:F6:89"]
+  }
+}]
