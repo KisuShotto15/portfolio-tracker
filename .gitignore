@@ -3,6 +3,12 @@ dist
 .env
 .env.local
 
+# TWA build artifacts
+*.keystore
+.ks_pass_*
+portfolio-twa/build-src/
+*-release.apk
+
 # Personal notes / reference docs
 *.pdf
 *.png

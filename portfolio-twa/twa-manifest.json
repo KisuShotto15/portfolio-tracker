@@ -1,0 +1,19 @@
+{
+  "packageId": "com.kisushotto.portfolio",
+  "host": "portfolio.kisushotto.com",
+  "name": "Portfolio Tracker",
+  "launcherName": "Portfolio",
+  "display": "standalone",
+  "themeColor": "#9B70F0",
+  "navigationColor": "#0c0c14",
+  "statusBarColor": "#0c0c14",
+  "backgroundColor": "#0c0c14",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "signingKey": {
+    "path": "../portfolio-twa.keystore",
+    "alias": "portfoliokey"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0"
+}
