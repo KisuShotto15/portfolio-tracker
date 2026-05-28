@@ -124,11 +124,11 @@ tr.date-sep:first-child td{padding-top:0}
 @media(max-width:768px){
   .hamburger{display:flex;align-items:center;justify-content:center}
   .sb{position:fixed;top:0;left:0;height:100vh;z-index:100;transform:translateX(-100%);transition:transform .25s ease;width:180px;min-width:180px;align-items:flex-start;overflow:hidden}
-  .sb-sync{width:100%;padding:6px 1rem;justify-content:flex-start}
-  .sync-label-text{display:inline}
   .sb.open{transform:translateX(0);overflow-y:auto}
   .sb.open .nb-label{display:inline}
   .sb.open .nb{justify-content:flex-start;gap:10px;padding:10px 1rem}
+  .sb.open .sb-sync{width:100%;padding:6px 1rem;justify-content:flex-start}
+  .sb.open .sync-label-text{display:inline}
   .sb.open .nb[data-tooltip]::after{display:none}
   .overlay.open{display:block;left:180px}
   .main{padding:1rem;padding-top:3.2rem}
