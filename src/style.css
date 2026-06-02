@@ -166,8 +166,9 @@ tr.date-sep:first-child td{padding-top:0}
   /* ── Transactions: mobile card layout ── */
   .tx-hdr{display:none}
   .tx-list{padding:2px 0}
-  .tx-row{flex-direction:row;align-items:center;gap:0;cursor:pointer;background:rgba(255,255,255,0.03);border-radius:8px;border:none;border-left:3px solid #333;margin:0 0 5px;padding:10px 12px 10px 10px}
+  .tx-row{flex-direction:row;align-items:center;gap:0;cursor:pointer;background:rgba(255,255,255,0.03);border-radius:8px;border:none;border-left:3px solid #333;margin:0 0 5px;padding:6px 12px 6px 10px}
   .tx-row:hover{background:rgba(255,255,255,0.03)}
+  .tx-row.tx-sel{padding:10px 12px 10px 10px}
   .tx-row.tx-debit{border-left-color:#E24B4A}
   .tx-row.tx-credit{border-left-color:#5DCAA5}
   .tx-row.tx-tracker{border-left-color:#a78bfa}
@@ -179,6 +180,7 @@ tr.date-sep:first-child td{padding-top:0}
   .tx-amt{font-size:15px;font-weight:700;white-space:nowrap;flex-shrink:0}
   .tx-l2{display:none;align-items:center;gap:4px;flex-wrap:wrap}
   .tx-row.tx-sel .tx-l2{display:flex}
+  .tx-l2 .tR,.tx-l2 .tG{display:none}
   .tx-orig-d{display:none}
   .tx-orig-m{display:inline;font-size:11px;color:var(--color-text-secondary);white-space:nowrap;margin-left:auto;flex-shrink:0}
   .tx-btns{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:10px;padding-left:10px;align-self:stretch}
