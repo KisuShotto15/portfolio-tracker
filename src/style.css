@@ -62,6 +62,21 @@ th{text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--color-border
 td{padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:rgba(128,128,128,0.08)}
+/* Tx card structure (used on all breakpoints, styled differently per breakpoint) */
+.tx-list{width:100%}
+.tx-hdr{display:flex;align-items:center;padding:6px 10px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:13px;font-weight:600;color:var(--color-text-secondary);gap:8px}
+.tx-hdr span:first-child{flex:1}
+.tx-dsep{display:flex;align-items:center;gap:6px;border-top:1px solid #333;padding:6px 10px 4px}
+.tx-row{display:flex;align-items:center;padding:8px 10px;gap:8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.tx-row:hover{background:rgba(128,128,128,0.08)}
+.tx-l1{display:flex;align-items:center;flex:1;gap:8px;min-width:0}
+.tx-desc{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14px}
+.tx-orig{font-size:12px;color:var(--color-text-secondary);white-space:nowrap;flex-shrink:0}
+.tx-amt{font-weight:500;white-space:nowrap;font-size:14px;flex-shrink:0}
+.tx-l2{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.tx-acts{display:flex;align-items:center;gap:2px;margin-left:4px}
+.tx-acts .btn-edit-tx,.tx-acts .btnd{opacity:0;transition:opacity .15s}
+.tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:1}
 .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;white-space:nowrap}
 .tG{background:#0d2a1a;color:#5DCAA5}.tB{background:#091e38;color:#378ADD}
 .tP{background:#1a1538;color:#7F77DD}.tA{background:#271a00;color:#EF9F27}
@@ -145,26 +160,17 @@ tr.date-sep:first-child td{padding-top:0}
   .sum-foot{grid-template-columns:repeat(3,1fr)}
   .sum-top .mc .mc-v{font-size:20px}
 
-  /* ── Transactions: 2-line card layout ── */
-  #tx-wrap table{display:block}
-  #tx-wrap thead{display:none}
-  #tx-wrap tbody{display:block}
-  #tx-wrap tr:not(.date-sep){display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 5px;padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary)}
-  #tx-wrap tr:not(.date-sep):hover td{background:none}
-  #tx-wrap tr:not(.date-sep) td{display:inline-flex;align-items:center;padding:0;border:none}
-  /* Line 1: description (grows) + amount pinned top-right */
-  #tx-wrap tr:not(.date-sep) td:nth-child(1){order:1;flex:1;min-width:0;white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important;font-size:14px;align-self:flex-start}
-  #tx-wrap tr:not(.date-sep) td:nth-child(6){order:2;white-space:nowrap;align-self:flex-start}
-  /* Line 2: wallet · type · category · original · actions */
-  #tx-wrap tr:not(.date-sep) td:nth-child(2){order:3}
-  #tx-wrap tr:not(.date-sep) td:nth-child(3){order:4}
-  #tx-wrap tr:not(.date-sep) td:nth-child(4){order:5}
-  #tx-wrap tr:not(.date-sep) td:nth-child(5){order:6;font-size:11px}
-  #tx-wrap tr:not(.date-sep) td:nth-child(7){order:7;flex:1;justify-content:flex-end}
-  /* Always show buttons on touch */
-  #tx-wrap .btn-edit-tx,#tx-wrap .btnd{opacity:1}
-  /* Date separator stays full width */
-  #tx-wrap tr.date-sep td{display:block;width:100%}
+  /* ── Transactions: mobile 2-line card layout ── */
+  .tx-hdr{display:none}
+  .tx-row{flex-direction:column;align-items:stretch;gap:5px;cursor:default}
+  .tx-row:hover{background:rgba(128,128,128,0.08)}
+  .tx-l1{display:flex;align-items:baseline;gap:8px}
+  .tx-desc{flex:1;min-width:0;font-size:14px;white-space:normal;overflow:visible;word-break:break-word}
+  .tx-orig{font-size:11px;color:var(--color-text-secondary);white-space:nowrap;flex-shrink:0}
+  .tx-amt{font-size:14px;font-weight:600;white-space:nowrap;flex-shrink:0}
+  .tx-l2{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+  .tx-acts{margin-left:auto;display:flex;align-items:center;gap:2px}
+  .tx-acts .btn-edit-tx,.tx-acts .btnd{opacity:1!important}
 }
 .bdv-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);font-size:11px;color:var(--color-text-secondary);cursor:default;user-select:none;flex-shrink:0}
 .bdv-tip-box{display:none;position:absolute;left:0;top:22px;background:#222;border:0.5px solid var(--color-border-secondary);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--color-text-primary);white-space:normal;width:220px;line-height:1.5;z-index:10;pointer-events:none}
