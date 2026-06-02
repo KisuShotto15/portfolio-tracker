@@ -149,12 +149,12 @@ tr.date-sep:first-child td{padding-top:0}
   #tx-wrap table{display:block}
   #tx-wrap thead{display:none}
   #tx-wrap tbody{display:block}
-  #tx-wrap tr:not(.date-sep){display:flex;flex-wrap:wrap;align-items:center;gap:3px 5px;padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary)}
+  #tx-wrap tr:not(.date-sep){display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 5px;padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary)}
   #tx-wrap tr:not(.date-sep):hover td{background:none}
   #tx-wrap tr:not(.date-sep) td{display:inline-flex;align-items:center;padding:0;border:none}
-  /* Line 1: description (grows) + amount */
-  #tx-wrap tr:not(.date-sep) td:nth-child(1){order:1;flex:1;min-width:0;white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important;font-size:14px}
-  #tx-wrap tr:not(.date-sep) td:nth-child(6){order:2;white-space:nowrap}
+  /* Line 1: description (grows) + amount pinned top-right */
+  #tx-wrap tr:not(.date-sep) td:nth-child(1){order:1;flex:1;min-width:0;white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important;font-size:14px;align-self:flex-start}
+  #tx-wrap tr:not(.date-sep) td:nth-child(6){order:2;white-space:nowrap;align-self:flex-start}
   /* Line 2: wallet · type · category · original · actions */
   #tx-wrap tr:not(.date-sep) td:nth-child(2){order:3}
   #tx-wrap tr:not(.date-sep) td:nth-child(3){order:4}
