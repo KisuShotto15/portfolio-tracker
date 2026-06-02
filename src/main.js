@@ -625,17 +625,19 @@ function renderTx(){
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
       var trk=isTrk?'<span class="badge-t">tracker</span>':'';
       var wTag=t.wallet==='Binance'?'tBinance':'tX';
-      return '<div class="tx-row">'
+      return '<div class="tx-row" onclick="selectTxRow(this)">'
         +'<div class="tx-l1">'
           +'<span class="tx-desc" title="'+escHtml(t.desc)+'">'+escHtml(t.desc)+'</span>'
-          +(orig?'<span class="tx-orig">'+orig+'</span>':'')
+          +(orig?'<span class="tx-orig tx-orig-d">'+orig+'</span>':'')
           +'<span class="tx-amt" style="color:'+col+'">'+fmtUSD(t.amountUSD)+'</span>'
+          +'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button>'
         +'</div>'
         +'<div class="tx-l2">'
           +'<span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk
           +'<span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span>'
           +(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'')
-          +'<span class="tx-acts"><button class="btn-edit-tx" title="Edit" onclick="editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="deleteTx('+t.id+')">x</button></span>'
+          +(orig?'<span class="tx-orig tx-orig-m">'+orig+'</span>':'')
+          +'<button class="btn btnd" onclick="event.stopPropagation();deleteTx('+t.id+')">x</button>'
         +'</div>'
       +'</div>';
     }).join('');
@@ -1588,6 +1590,14 @@ window.fetchRate = fetchRate;
 window.addTx = addTx;
 window.deleteTx = deleteTx;
 window.editTx = editTx;
+window.selectTxRow = function(el){
+  document.querySelectorAll('.tx-row.tx-sel').forEach(function(r){ if(r!==el) r.classList.remove('tx-sel'); });
+  el.classList.toggle('tx-sel');
+};
+if(!window._txSelListener){
+  window._txSelListener=true;
+  document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
+}
 window.addTxOrUpdate = addTxOrUpdate;
 window.cancelEditTx = cancelEditTx;
 window.openTxForm = openTxForm;
