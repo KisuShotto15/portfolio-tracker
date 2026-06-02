@@ -636,8 +636,10 @@ function renderTx(){
           +'<span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk
           +'<span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span>'
           +(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'')
-          +(orig?'<span class="tx-orig tx-orig-m">'+orig+'</span>':'')
-          +'<button class="btn btnd" onclick="event.stopPropagation();deleteTx('+t.id+')">x</button>'
+          +'<span class="tx-l2r">'
+            +(orig?'<span class="tx-orig tx-orig-m">'+orig+'</span>':'')
+            +'<button class="btn btnd" onclick="event.stopPropagation();deleteTx('+t.id+')">x</button>'
+          +'</span>'
         +'</div>'
       +'</div>';
     }).join('');
