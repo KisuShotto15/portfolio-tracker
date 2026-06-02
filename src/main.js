@@ -625,7 +625,8 @@ function renderTx(){
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
       var trk=isTrk?'<span class="badge-t">tracker</span>':'';
       var wTag=t.wallet==='Binance'?'tBinance':'tX';
-      return '<div class="tx-row" onclick="selectTxRow(this)">'
+      var txType=isTrk?'tx-tracker':(t.type==='Debit'?'tx-debit':'tx-credit');
+      return '<div class="tx-row '+txType+'" onclick="selectTxRow(this)">'
         +'<div class="tx-body">'
           +'<div class="tx-l1">'
             +'<span class="tx-desc" title="'+escHtml(t.desc)+'">'+escHtml(t.desc)+'</span>'
