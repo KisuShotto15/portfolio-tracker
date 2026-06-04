@@ -162,31 +162,34 @@ tr.date-sep:first-child td{padding-top:0}
   .tx-table{display:block}
   .tx-table thead{display:none}
   .tx-table tbody{display:flex;flex-direction:column;gap:5px;padding:2px 0}
-  .tx-row{display:flex;flex-wrap:wrap;align-items:center;position:relative;cursor:pointer;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3px solid #333;padding:3px 44px 3px 10px}
+  /* Card row */
+  .tx-row{display:flex;flex-wrap:wrap;align-items:center;position:relative;cursor:pointer;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3px solid #333;padding:3px 44px 3px 10px;gap:0}
   .tx-row:hover td{background:transparent!important}
-  .tx-row.tx-sel{padding-top:8px;padding-bottom:8px}
   .tx-row.tx-debit{border-left-color:#E24B4A}
   .tx-row.tx-credit{border-left-color:#5DCAA5}
   .tx-row.tx-tracker{border-left-color:#a78bfa}
+  /* Date separator */
   .date-sep{border:none!important}
-  .date-sep td{display:block;padding:8px 4px 2px!important}
+  .date-sep td{display:block!important;padding:8px 4px 2px!important;background:transparent!important}
   .dsep-inner{border-top:none;margin-top:2px}
-  /* All td reset to flex items */
-  .tx-table td{display:flex;align-items:center;padding:0;border:none;background:transparent!important}
-  /* Line 1 always visible: desc + amt */
-  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:none;padding-right:6px}
+  /* td base reset */
+  .tx-table td{display:block;padding:0;border:none;background:transparent!important}
+  /* Line 1: desc (flex:1) + amt — always visible, fill full row width */
+  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px}
   .td-amt{order:2;flex-shrink:0;font-size:15px;font-weight:700}
-  /* Line 2 hidden until tap */
+  /* Line 2: hidden until tap */
   .td-wallet,.td-cat,.td-orig,.td-type{display:none!important}
-  /* Buttons: absolute right column */
-  .td-act{position:absolute;right:12px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:0}
+  /* Buttons column: absolute right, always centered */
+  .td-act{position:absolute;right:10px;top:0;bottom:0;display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:0}
   .btn-edit-tx,.btnd{opacity:0!important;pointer-events:none;transition:none}
   .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:0!important}
-  /* Expanded state */
-  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip}
-  .tx-row.tx-sel .td-wallet{display:inline-flex!important;padding-right:4px}
-  .tx-row.tx-sel .td-cat{display:inline-flex!important;padding-right:4px}
-  .tx-row.tx-sel .td-orig{display:inline-flex!important;margin-left:auto;font-size:11px;color:var(--color-text-secondary)}
+  /* Expanded: full layout */
+  .tx-row.tx-sel{align-items:flex-start;padding-top:8px;padding-bottom:8px}
+  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip;flex-basis:100%;padding-right:44px}
+  .tx-row.tx-sel .td-amt{flex-basis:100%;font-size:15px;padding-bottom:4px}
+  .tx-row.tx-sel .td-wallet{display:inline-flex!important;align-items:center;order:3;padding-right:4px}
+  .tx-row.tx-sel .td-cat{display:inline-flex!important;align-items:center;order:3;padding-right:4px}
+  .tx-row.tx-sel .td-orig{display:inline-flex!important;align-items:center;order:3;margin-left:auto;font-size:11px;color:var(--color-text-secondary)}
   .tx-row.tx-sel .btn-edit-tx,.tx-row.tx-sel .btnd{opacity:1!important;pointer-events:auto}
 }
 .bdv-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);font-size:11px;color:var(--color-text-secondary);cursor:default;user-select:none;flex-shrink:0}
