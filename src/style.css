@@ -62,24 +62,18 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);font-weight:600;font-size:13px;white-space:nowrap}
 td{padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(128,128,128,0.08)}
-/* Tx card structure (used on all breakpoints, styled differently per breakpoint) */
-.tx-list{width:100%}
-.tx-hdr{display:grid;grid-template-columns:1fr 195px 110px 75px 44px;gap:0 8px;padding:6px 10px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:13px;font-weight:600;color:var(--color-text-secondary);align-items:center}
-.tx-hdr span:nth-child(3),.tx-hdr span:nth-child(4){text-align:right}
-.tx-dsep{display:flex;align-items:center;gap:6px;border-top:1px solid #333;padding:6px 10px 4px}
-.tx-row{display:grid;grid-template-columns:1fr 195px 110px 75px 44px;gap:0 8px;align-items:center;padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary)}
-.tx-row:hover{background:rgba(128,128,128,0.08)}
-.tx-body{display:contents}
-.tx-l1{display:contents}
-.tx-desc{grid-column:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14px}
-.tx-l2{grid-column:2;display:flex;align-items:center;gap:5px}
-.tx-orig-d{grid-column:3;font-size:12px;color:var(--color-text-secondary);white-space:nowrap;text-align:right}
-.tx-amt{grid-column:4;font-weight:500;white-space:nowrap;font-size:14px;text-align:right}
-.tx-btns{grid-column:5;display:flex;align-items:center;gap:2px;justify-content:flex-end}
-.tx-orig-m{display:none}
+/* ── Transactions table (desktop) ── */
+.tx-table{width:100%;border-collapse:collapse}
+.tx-table th{padding:6px 8px;font-size:13px;font-weight:600;color:var(--color-text-secondary);text-align:left;border-bottom:0.5px solid var(--color-border-tertiary);white-space:nowrap}
+.tx-table td{padding:8px;vertical-align:middle}
+.tx-row:hover td{background:rgba(128,128,128,0.08)}
+.td-desc{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.td-orig{font-size:12px;color:var(--color-text-secondary);white-space:nowrap}
+.td-amt{font-weight:500;font-size:14px;white-space:nowrap}
+.td-act{white-space:nowrap}
 .btn-edit-tx,.btnd{opacity:0;transition:opacity .15s}
 .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:1}
+.date-sep td{padding:0;background:transparent!important;border:none}
 .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;white-space:nowrap}
 .tG{background:#0d2a1a;color:#5DCAA5}.tB{background:#091e38;color:#378ADD}
 .tP{background:#1a1538;color:#7F77DD}.tA{background:#271a00;color:#EF9F27}
@@ -164,30 +158,35 @@ tr.date-sep:first-child td{padding-top:0}
   .sum-top .mc .mc-v{font-size:20px}
 
   /* ── Transactions: mobile card layout ── */
-  .tx-hdr{display:none}
-  .tx-list{padding:2px 0}
-  .tx-row{display:flex;flex-direction:row;align-items:center;gap:0;cursor:pointer;background:rgba(255,255,255,0.03);border-radius:8px;border:none;border-left:3px solid #333;margin:0 0 5px;padding:3px 12px 3px 10px}
-  .tx-row:hover{background:rgba(255,255,255,0.03)}
-  .tx-row.tx-sel{padding:10px 12px 10px 10px}
+  .tx-table{display:block}
+  .tx-table thead{display:none}
+  .tx-table tbody{display:flex;flex-direction:column;gap:5px;padding:2px 0}
+  .tx-row{display:flex;flex-wrap:wrap;align-items:center;position:relative;cursor:pointer;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3px solid #333;padding:3px 44px 3px 10px}
+  .tx-row:hover td{background:transparent!important}
+  .tx-row.tx-sel{padding-top:8px;padding-bottom:8px}
   .tx-row.tx-debit{border-left-color:#E24B4A}
   .tx-row.tx-credit{border-left-color:#5DCAA5}
   .tx-row.tx-tracker{border-left-color:#a78bfa}
-  .tx-dsep{padding:10px 4px 4px;border-top:none;margin-top:2px}
-  .tx-body{display:flex;flex-direction:column;flex:1;min-width:0;gap:5px}
-  .tx-l1{display:flex;align-items:center;gap:8px}
-  .tx-desc{grid-column:unset;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
-  .tx-l2{grid-column:unset;display:none;align-items:center;gap:4px;flex-wrap:wrap}
-  .tx-orig-d{grid-column:unset;display:none;text-align:unset}
-  .tx-amt{grid-column:unset;font-size:15px;font-weight:700;white-space:nowrap;flex-shrink:0;text-align:unset}
-  .tx-btns{grid-column:unset;justify-content:unset}
-  .tx-row.tx-sel .tx-desc{white-space:normal;overflow:visible;text-overflow:clip}
-  .tx-row.tx-sel .tx-l2{display:flex}
-  .tx-l2 .tR,.tx-l2 .tG{display:none}
-  .tx-orig-d{display:none}
-  .tx-orig-m{display:inline;font-size:11px;color:var(--color-text-secondary);white-space:nowrap;margin-left:auto;flex-shrink:0}
-  .tx-btns{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding-left:10px;align-self:stretch}
-  .btn-edit-tx,.btnd{opacity:0!important;pointer-events:none;transition:none;flex-shrink:0}
-  .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:0!important;pointer-events:none}
+  .date-sep{border:none!important}
+  .date-sep td{display:block;padding:8px 4px 2px!important}
+  .dsep-inner{border-top:none;margin-top:2px}
+  /* All td reset to flex items */
+  .tx-table td{display:flex;align-items:center;padding:0;border:none;background:transparent!important}
+  /* Line 1 always visible: desc + amt */
+  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:none;padding-right:6px}
+  .td-amt{order:2;flex-shrink:0;font-size:15px;font-weight:700}
+  /* Line 2 hidden until tap */
+  .td-wallet,.td-cat,.td-orig{order:3;display:none}
+  .td-type{display:none!important}
+  /* Buttons: absolute right column */
+  .td-act{position:absolute;right:12px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:0}
+  .btn-edit-tx,.btnd{opacity:0!important;pointer-events:none;transition:none}
+  .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:0!important}
+  /* Expanded state */
+  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip}
+  .tx-row.tx-sel .td-wallet{display:inline-flex;padding-right:4px}
+  .tx-row.tx-sel .td-cat{display:inline-flex;padding-right:4px}
+  .tx-row.tx-sel .td-orig{display:inline-flex;margin-left:auto;font-size:11px;color:var(--color-text-secondary)}
   .tx-row.tx-sel .btn-edit-tx,.tx-row.tx-sel .btnd{opacity:1!important;pointer-events:auto}
 }
 .bdv-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);font-size:11px;color:var(--color-text-secondary);cursor:default;user-select:none;flex-shrink:0}

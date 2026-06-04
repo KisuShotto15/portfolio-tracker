@@ -619,38 +619,27 @@ function renderTx(){
   }
   var rows=groupOrder.map(function(date){
     var dayTotal=groups[date].reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
-    var sep='<div class="tx-dsep"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div>';
+    var sep='<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
     var txRows=groups[date].map(function(t){
       var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
       var trk=isTrk?'<span class="badge-t">tracker</span>':'';
       var wTag=t.wallet==='Binance'?'tBinance':'tX';
       var txType=isTrk?'tx-tracker':(t.type==='Debit'?'tx-debit':'tx-credit');
-      return '<div class="tx-row '+txType+'" onclick="selectTxRow(this)">'
-        +'<div class="tx-body">'
-          +'<div class="tx-l1">'
-            +'<span class="tx-desc" title="'+escHtml(t.desc)+'">'+escHtml(t.desc)+'</span>'
-            +(orig?'<span class="tx-orig tx-orig-d">'+orig+'</span>':'')
-            +'<span class="tx-amt" style="color:'+col+'">'+fmtUSD(t.amountUSD)+'</span>'
-          +'</div>'
-          +'<div class="tx-l2">'
-            +'<span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk
-            +'<span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span>'
-            +(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'')
-            +(orig?'<span class="tx-orig tx-orig-m">'+orig+'</span>':'')
-          +'</div>'
-        +'</div>'
-        +'<div class="tx-btns">'
-          +'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button>'
-          +'<button class="btn btnd" onclick="event.stopPropagation();deleteTx('+t.id+')">x</button>'
-        +'</div>'
-      +'</div>';
+      return '<tr class="tx-row '+txType+'" onclick="selectTxRow(this)">'
+        +'<td class="td-desc" title="'+escHtml(t.desc)+'">'+escHtml(t.desc)+'</td>'
+        +'<td class="td-wallet"><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td>'
+        +'<td class="td-type"><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td>'
+        +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
+        +'<td class="td-orig">'+orig+'</td>'
+        +'<td class="td-amt" style="color:'+col+'">'+fmtUSD(t.amountUSD)+'</td>'
+        +'<td class="td-act"><button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="event.stopPropagation();deleteTx('+t.id+')">x</button></td>'
+      +'</tr>';
     }).join('');
     return sep+txRows;
   }).join('');
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<div class="tx-hdr"><span>Note</span><span>Wallet · Type · Category</span><span>Original</span><span>USD</span><span></span></div>'
-    +'<div class="tx-list">'+rows+'</div>';
+    +'<table class="tx-table"><thead><tr><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
