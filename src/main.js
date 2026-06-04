@@ -649,7 +649,7 @@ function renderTx(){
     return sep+txRows;
   }).join('');
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<div class="tx-hdr"><span>Note</span><span>Wallet</span><span>In/Out</span><span>Category</span><span>Original</span><span>USD</span><span></span></div>'
+    +'<div class="tx-hdr"><span>Note</span><span>Wallet · Type · Category</span><span>Original</span><span>USD</span><span></span></div>'
     +'<div class="tx-list">'+rows+'</div>';
 }
 

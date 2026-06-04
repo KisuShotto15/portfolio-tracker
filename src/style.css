@@ -70,13 +70,13 @@ tr:hover td{background:rgba(128,128,128,0.08)}
 .tx-dsep{display:flex;align-items:center;gap:6px;border-top:1px solid #333;padding:6px 10px 4px}
 .tx-row{display:flex;align-items:center;padding:8px 10px;gap:8px;border-bottom:0.5px solid var(--color-border-tertiary)}
 .tx-row:hover{background:rgba(128,128,128,0.08)}
-.tx-l1{display:flex;align-items:center;flex:1;gap:8px;min-width:0}
-.tx-desc{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14px}
-.tx-orig{font-size:12px;color:var(--color-text-secondary);white-space:nowrap;flex-shrink:0}
-.tx-amt{font-weight:500;white-space:nowrap;font-size:14px;flex-shrink:0}
 .tx-body{display:contents}
-.tx-l2{display:flex;align-items:center;gap:5px;flex-shrink:0}
-.tx-btns{display:flex;align-items:center;gap:2px}
+.tx-l1{display:contents}
+.tx-desc{order:1;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14px}
+.tx-l2{order:2;display:flex;align-items:center;gap:5px;flex-shrink:0}
+.tx-orig-d{order:3;font-size:12px;color:var(--color-text-secondary);white-space:nowrap;flex-shrink:0}
+.tx-amt{order:4;font-weight:500;white-space:nowrap;font-size:14px;flex-shrink:0}
+.tx-btns{order:5;display:flex;align-items:center;gap:2px}
 .tx-orig-m{display:none}
 .btn-edit-tx,.btnd{opacity:0;transition:opacity .15s;flex-shrink:0}
 .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:1}
@@ -175,7 +175,11 @@ tr.date-sep:first-child td{padding-top:0}
   .tx-dsep{padding:10px 4px 4px;border-top:none;margin-top:2px}
   .tx-body{display:flex;flex-direction:column;flex:1;min-width:0;gap:5px}
   .tx-l1{display:flex;align-items:center;gap:8px}
-  .tx-desc{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
+  .tx-desc{order:unset;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
+  .tx-l2{order:unset}
+  .tx-orig-d{order:unset}
+  .tx-amt{order:unset;font-size:15px;font-weight:700;white-space:nowrap;flex-shrink:0}
+  .tx-btns{order:unset}
   .tx-row.tx-sel .tx-desc{white-space:normal;overflow:visible;text-overflow:clip}
   .tx-amt{font-size:15px;font-weight:700;white-space:nowrap;flex-shrink:0}
   .tx-l2{display:none;align-items:center;gap:4px;flex-wrap:wrap}
