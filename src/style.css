@@ -174,22 +174,23 @@ tr.date-sep:first-child td{padding-top:0}
   .dsep-inner{border-top:none;margin-top:2px}
   /* td base reset */
   .tx-table td{display:block;padding:0;border:none;background:transparent!important}
-  /* Line 1: desc (flex:1) + amt — always visible, fill full row width */
-  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px}
-  .td-amt{order:2;flex-shrink:0;font-size:15px;font-weight:700}
-  /* Line 2: hidden until tap */
-  .td-wallet,.td-cat,.td-orig,.td-type{display:none!important}
-  /* Buttons column: absolute right, always centered */
+  /* Line 1: desc + amt always visible */
+  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
+  .td-amt{order:2;flex:0 0 auto;font-size:15px;font-weight:700;text-align:right}
+  /* td-type: invisible flex-break — forces line 2 for tags */
+  .td-type{order:3;flex-basis:100%!important;height:0!important;overflow:hidden;font-size:0;padding:0!important}
+  /* Tags/orig hidden until tap */
+  .td-wallet,.td-cat,.td-orig{display:none!important}
+  /* Buttons: absolute right column */
   .td-act{position:absolute;right:10px;top:0;bottom:0;display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:0}
   .btn-edit-tx,.btnd{opacity:0!important;pointer-events:none;transition:none}
   .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:0!important}
-  /* Expanded: full layout */
+  /* Expanded state */
   .tx-row.tx-sel{align-items:flex-start;padding-top:8px;padding-bottom:8px}
-  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip;padding-right:10px}
-  .td-amt{text-align:right}
-  .tx-row.tx-sel .td-wallet{display:inline-flex!important;align-items:center;order:3;padding-right:4px}
-  .tx-row.tx-sel .td-cat{display:inline-flex!important;align-items:center;order:3;padding-right:4px}
-  .tx-row.tx-sel .td-orig{display:inline-flex!important;align-items:center;order:3;margin-left:auto;font-size:11px;color:var(--color-text-secondary)}
+  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip}
+  .tx-row.tx-sel .td-wallet{display:inline-flex!important;align-items:center;order:4;padding-right:4px;padding-top:4px}
+  .tx-row.tx-sel .td-cat{display:inline-flex!important;align-items:center;order:4;padding-right:4px;padding-top:4px}
+  .tx-row.tx-sel .td-orig{display:inline-flex!important;align-items:center;order:5;margin-left:auto;font-size:11px;color:var(--color-text-secondary);padding-top:4px}
   .tx-row.tx-sel .btn-edit-tx,.tx-row.tx-sel .btnd{opacity:1!important;pointer-events:auto}
 }
 .bdv-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);font-size:11px;color:var(--color-text-secondary);cursor:default;user-select:none;flex-shrink:0}
