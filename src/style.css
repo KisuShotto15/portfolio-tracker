@@ -185,8 +185,8 @@ tr.date-sep:first-child td{padding-top:0}
   .tx-row:hover .btn-edit-tx,.tx-row:hover .btnd{opacity:0!important}
   /* Expanded: full layout */
   .tx-row.tx-sel{align-items:flex-start;padding-top:8px;padding-bottom:8px}
-  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip;flex-basis:100%;padding-right:44px}
-  .tx-row.tx-sel .td-amt{flex-basis:100%;font-size:15px;padding-bottom:4px}
+  .tx-row.tx-sel .td-desc{white-space:normal;overflow:visible;text-overflow:clip;padding-right:10px}
+  .td-amt{text-align:right}
   .tx-row.tx-sel .td-wallet{display:inline-flex!important;align-items:center;order:3;padding-right:4px}
   .tx-row.tx-sel .td-cat{display:inline-flex!important;align-items:center;order:3;padding-right:4px}
   .tx-row.tx-sel .td-orig{display:inline-flex!important;align-items:center;order:3;margin-left:auto;font-size:11px;color:var(--color-text-secondary)}
