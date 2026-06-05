@@ -1198,14 +1198,16 @@ async function recordSnapshot(){
 
 function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
 window.toggleHistPopup=toggleHistPopup;
-function deleteSnapshot(id){
-  if(!confirm('Delete this snapshot?')) return;
+async function deleteSnapshot(id){
+  var ok=await appConfirm('Delete snapshot?','This action cannot be undone.','Delete');
+  if(!ok) return;
   var snap=S.snapshots.find(function(s){ return s.id===id; });
   S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; });
   S.snapshotsUpdatedAt=Date.now();
   if(snap&&snap.txId){
     var linked=S.transactions.find(function(t){ return t.id===snap.txId; });
-    if(linked&&confirm('Also delete linked income transaction?\n'+linked.desc+' ('+fmtUSD(linked.amountUSD)+')')){
+    var delLinked=linked&&await appConfirm('Delete linked transaction?',escHtml(linked.desc)+' <span style="color:#5DCAA5">'+fmtUSD(linked.amountUSD)+'</span>','Delete');
+    if(delLinked){
       if(!S.deletedTxIds) S.deletedTxIds=[];
       S.deletedTxIds.push(snap.txId);
       S.transactions=S.transactions.filter(function(t){ return t.id!==snap.txId; });
