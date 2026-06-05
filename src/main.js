@@ -1101,21 +1101,29 @@ function getTotalBalance(){
   return parseFloat((api+trackerBal+manualBal+zelle).toFixed(2));
 }
 
-function appPrompt(title,infoHtml,defaultVal){
+function appPrompt(title,infoHtml,defaultVal,opts){
   return new Promise(function(resolve){
     var ov=document.createElement('div');
     ov.className='app-modal-overlay open';
+    var cbHtml=opts&&opts.checkboxLabel
+      ?'<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:rgba(255,255,255,0.65);cursor:pointer"><input type="checkbox" id="_amcb"'+(opts.checkboxChecked===false?'':' checked')+' style="accent-color:#9B70F0;width:15px;height:15px;flex-shrink:0">'+opts.checkboxLabel+'</label>'
+      :'';
     ov.innerHTML='<div class="app-modal">'
       +'<h3>'+title+'</h3>'
       +'<div class="modal-info">'+infoHtml+'</div>'
       +'<div class="field" style="margin-bottom:0"><input id="_ami" type="number" step="0.01" style="padding:9px 12px;font-size:15px;width:100%;background:transparent;border:none;color:#fff" value="'+escHtml(String(defaultVal))+'"/></div>'
+      +cbHtml
       +'<div class="modal-actions">'
       +'<button class="btn" id="_amc">Cancel</button>'
-      +'<button class="btn btn-add" id="_amo">OK</button>'
+      +'<button class="btn btn-add" id="_amo">Save</button>'
       +'</div></div>';
     document.body.appendChild(ov);
     var inp=ov.querySelector('#_ami'); inp.focus(); inp.select();
-    function done(v){document.body.removeChild(ov);resolve(v);}
+    function done(v){
+      var cb=ov.querySelector('#_amcb');
+      document.body.removeChild(ov);
+      resolve(v===null?null:{value:v,checked:cb?cb.checked:false});
+    }
     ov.querySelector('#_amc').onclick=function(){done(null);};
     ov.querySelector('#_amo').onclick=function(){done(inp.value);};
     inp.onkeydown=function(e){if(e.key==='Enter')done(inp.value);if(e.key==='Escape')done(null);};
@@ -1146,13 +1154,15 @@ function appConfirm(title,bodyHtml,okLabel){
 }
 async function recordSnapshot(){
   var auto=getTotalBalance();
-  var raw=await appPrompt(
+  var hasPrev=S.snapshots&&S.snapshots.length>0;
+  var res=await appPrompt(
     'Record portfolio snapshot',
     'Auto-sum from wallets: <b style="color:#fff">$'+auto.toFixed(2)+'</b>',
-    auto.toFixed(2)
+    auto.toFixed(2),
+    hasPrev?{checkboxLabel:'Add income transaction',checkboxChecked:true}:null
   );
-  if(raw===null) return;
-  var val=parseFloat(raw);
+  if(res===null) return;
+  var val=parseFloat(res.value);
   if(isNaN(val)||val<0) return;
   if(!S.snapshots) S.snapshots=[];
   var today=localToday();
@@ -1176,13 +1186,7 @@ async function recordSnapshot(){
     var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
     var profit=Math.round(((val-prev.total)+invOut-invIn)*100)/100;
     var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
-    var addTx=await appConfirm(
-      'Add Income Transaction?',
-      'Period: '+fmtD(prev.date)+' → '+fmtD(today)
-      +'<br><br>Profit: <span style="color:#5DCAA5;font-weight:700;font-size:16px">'+fmtUSD(profit)+'</span>',
-      'Add'
-    );
-    if(addTx){
+    if(res.checked){
       var txId=Date.now()+1;
       S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
       S.transactionsUpdatedAt=Date.now();
