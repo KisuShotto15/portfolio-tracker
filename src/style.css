@@ -175,8 +175,8 @@ tr.date-sep:first-child td{padding-top:0}
   /* td base reset */
   .tx-table td{display:block;padding:0;border:none;background:transparent!important}
   /* Line 1: desc + amt always visible */
-  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:24px}
-  .td-amt{order:2;flex:0 0 auto;font-size:15px;font-weight:700;text-align:right;padding-left:12px}
+  .td-desc{order:1;flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .td-amt{order:2;flex:0 0 auto;font-size:15px;font-weight:700;text-align:right;margin-left:20px}
   /* td-type: invisible flex-break — forces line 2 for tags */
   .td-type{order:3;flex-basis:100%!important;height:0!important;overflow:hidden;font-size:0;padding:0!important}
   /* Tags/orig hidden until tap */
