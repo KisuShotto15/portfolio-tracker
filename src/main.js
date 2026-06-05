@@ -1101,15 +1101,71 @@ function getTotalBalance(){
   return parseFloat((api+trackerBal+manualBal+zelle).toFixed(2));
 }
 
-function recordSnapshot(){
+function appPrompt(title,infoHtml,defaultVal){
+  return new Promise(function(resolve){
+    var ov=document.createElement('div');
+    ov.className='app-modal-overlay open';
+    ov.innerHTML='<div class="app-modal">'
+      +'<h3>'+title+'</h3>'
+      +'<div class="modal-info">'+infoHtml+'</div>'
+      +'<div class="field" style="margin-bottom:0"><input id="_ami" type="number" step="0.01" style="padding:9px 12px;font-size:15px;width:100%;background:transparent;border:none;color:#fff" value="'+escHtml(String(defaultVal))+'"/></div>'
+      +'<div class="modal-actions">'
+      +'<button class="btn" id="_amc">Cancel</button>'
+      +'<button class="btn btn-add" id="_amo">OK</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    var inp=ov.querySelector('#_ami'); inp.focus(); inp.select();
+    function done(v){document.body.removeChild(ov);resolve(v);}
+    ov.querySelector('#_amc').onclick=function(){done(null);};
+    ov.querySelector('#_amo').onclick=function(){done(inp.value);};
+    inp.onkeydown=function(e){if(e.key==='Enter')done(inp.value);if(e.key==='Escape')done(null);};
+  });
+}
+function appConfirm(title,bodyHtml,okLabel){
+  return new Promise(function(resolve){
+    var ov=document.createElement('div');
+    ov.className='app-modal-overlay open';
+    ov.innerHTML='<div class="app-modal">'
+      +'<h3>'+title+'</h3>'
+      +'<div class="modal-info">'+bodyHtml+'</div>'
+      +'<div class="modal-actions">'
+      +'<button class="btn" id="_amc">Cancel</button>'
+      +'<button class="btn btn-add" id="_amo">'+(okLabel||'Confirm')+'</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#_amo').focus();
+    function done(v){document.body.removeChild(ov);resolve(v);}
+    ov.querySelector('#_amc').onclick=function(){done(false);};
+    ov.querySelector('#_amo').onclick=function(){done(true);};
+    function onKey(e){
+      if(e.key==='Escape'){document.removeEventListener('keydown',onKey);done(false);}
+      else if(e.key==='Enter'){document.removeEventListener('keydown',onKey);done(true);}
+    }
+    document.addEventListener('keydown',onKey);
+  });
+}
+async function recordSnapshot(){
   var auto=getTotalBalance();
-  var msg='Record portfolio snapshot\n\nAuto-sum from wallets: $'+auto.toFixed(2)+'\n\nEnter total (or leave to use auto-sum):';
-  var val=parseFloat(prompt(msg,auto.toFixed(2)));
+  var raw=await appPrompt(
+    'Record portfolio snapshot',
+    'Auto-sum from wallets: <b style="color:#fff">$'+auto.toFixed(2)+'</b>',
+    auto.toFixed(2)
+  );
+  if(raw===null) return;
+  var val=parseFloat(raw);
   if(isNaN(val)||val<0) return;
   if(!S.snapshots) S.snapshots=[];
   var today=localToday();
   var existing=S.snapshots.findIndex(function(s){ return s.date===today; });
-  if(existing>=0){ if(!confirm('A snapshot for today already exists ($'+S.snapshots[existing].total+'). Replace it?')) return; S.snapshots.splice(existing,1); }
+  if(existing>=0){
+    var ok=await appConfirm(
+      'Replace snapshot?',
+      'A snapshot for today already exists (<b style="color:#fff">$'+S.snapshots[existing].total+'</b>). Replace it?',
+      'Replace'
+    );
+    if(!ok) return;
+    S.snapshots.splice(existing,1);
+  }
   S.snapshots.push({id:Date.now(),date:today,total:val});
   S.snapshotsUpdatedAt=Date.now();
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
@@ -1119,9 +1175,15 @@ function recordSnapshot(){
     var invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
     var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
     var profit=Math.round(((val-prev.total)+invOut-invIn)*100)/100;
-    if(confirm('Period profit: '+fmtUSD(profit)+'\n('+prev.date+' → '+today+')\n\nAdd as Income transaction in Binance?')){
+    var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
+    var addTx=await appConfirm(
+      'Add Income Transaction?',
+      'Period: '+fmtD(prev.date)+' → '+fmtD(today)
+      +'<br><br>Profit: <span style="color:#5DCAA5;font-weight:700;font-size:16px">'+fmtUSD(profit)+'</span>',
+      'Add'
+    );
+    if(addTx){
       var txId=Date.now()+1;
-      var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
       S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
       S.transactionsUpdatedAt=Date.now();
       S.snapshots[S.snapshots.length-1].txId=txId;
