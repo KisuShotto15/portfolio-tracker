@@ -1121,7 +1121,8 @@ function recordSnapshot(){
     var profit=Math.round(((val-prev.total)+invOut-invIn)*100)/100;
     if(confirm('Period profit: '+fmtUSD(profit)+'\n('+prev.date+' → '+today+')\n\nAdd as Income transaction in Binance?')){
       var txId=Date.now()+1;
-      S.transactions.push({id:txId,date:today,desc:'USD Profit '+prev.date+' → '+today,type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
+      var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
+      S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
       S.transactionsUpdatedAt=Date.now();
       S.snapshots[S.snapshots.length-1].txId=txId;
     }
