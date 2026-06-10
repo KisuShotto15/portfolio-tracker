@@ -77,20 +77,19 @@
       <div class="span8">
         <div class="nw-hero">
           <div class="nw-hero-top">
-            <div>
-              <div class="nw-lbl">Net Worth</div>
-              <div class="nw-val" id="nw-hero-val">—</div>
-              <div class="nw-meta" id="nw-hero-meta"></div>
-            </div>
+            <span class="nw-lbl">Net Worth</span>
             <div style="display:flex;align-items:center;gap:6px">
               <button class="btn btns" onclick="recordSnapshot()">+ Snapshot</button>
               <div id="equity-hist"></div>
             </div>
           </div>
+          <div class="nw-val" id="nw-hero-val">—</div>
+          <div class="nw-meta" id="nw-hero-meta"></div>
           <div class="nw-hero-chart">
             <div id="equity-wrap"></div>
-            <div style="position:relative;height:215px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
+            <div style="position:relative;height:250px"><canvas id="chart-equity"></canvas></div>
           </div>
+          <div id="health-bar-m"></div>
         </div>
       </div>
       <div class="span4 dash-side">
@@ -133,6 +132,21 @@
   </div>
 
   <div id="page-transactions" class="page">
+    <!-- Mobile header -->
+    <div class="tx-mob-hdr">
+      <span class="dash-eyebrow" style="font-size:13px;letter-spacing:.06em">Transactions</span>
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:12px;color:var(--txt3)">BCV</span>
+        <span class="rval" id="rate-display-m">-</span>
+      </div>
+    </div>
+    <!-- Mobile type tabs -->
+    <div class="tx-type-tabs" id="tx-type-tabs">
+      <button class="ttt active" onclick="setTxTab(this,'')">All</button>
+      <button class="ttt" onclick="setTxTab(this,'Debit')">Debit</button>
+      <button class="ttt" onclick="setTxTab(this,'Credit')">Credit</button>
+    </div>
+    <!-- Desktop rate bar -->
     <div class="rbar">
       <span style="color:var(--color-text-secondary)">BCV Rate</span>
       <span class="rval" id="rate-display">-</span>
@@ -140,15 +154,16 @@
       <button class="btn btns" style="margin-left:4px;padding:2px 7px" onclick="fetchRate(true)">&#8635;</button>
     </div>
     <div class="frow">
-      <input type="search" id="tf-search" placeholder="Search transactions..." style="min-width:180px"/>
-      <select id="tf-type" onchange="renderTx()"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
-      <div class="frow-break"></div>
-      <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
-      <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
-      <input type="month" id="tf-month" onchange="renderTx()"/>
-      <div class="frow-break"></div>
+      <input type="search" id="tf-search" placeholder="Search..." style="min-width:140px" oninput="renderTx()"/>
+      <button class="tx-filter-toggle" onclick="toggleTxFilters()">Filters <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6l5 5 5-5"/></svg></button>
       <button id="btn-undo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Undo" onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button id="btn-redo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Redo" onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <select id="tf-type" onchange="renderTx()" style="display:none"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
+      <div id="tx-filters-extra">
+        <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
+        <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
+        <input type="month" id="tf-month" onchange="renderTx()"/>
+      </div>
     </div>
     <div id="tx-wrap"></div>
   </div>
@@ -165,8 +180,9 @@
   </div>
 
   <div id="page-wallets" class="page">
-    <div class="dash-head">
+    <div class="dash-head" style="display:flex;align-items:center;justify-content:space-between">
       <span class="dash-eyebrow">Wallets</span>
+      <button onclick="refreshAllWallets()" id="refresh-all-btn" style="background:none;border:none;color:var(--txt3);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;padding:0">&#8635; Refresh all</button>
     </div>
     <div id="w-grid" class="wgrid"></div>
     <div class="fc">
@@ -483,5 +499,31 @@
   </div>
 </div>
 <button class="fab-add" id="fab-add" onclick="openTxForm()">+</button>
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="nb active" onclick="showPage('summary',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></span>
+    <span class="nb-label">Dashboard</span>
+  </button>
+  <button class="nb" onclick="showPage('transactions',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v12M2 11l3 3 3-3"/><path d="M11 14V2M8 5l3-3 3 3"/></svg></span>
+    <span class="nb-label">Trans.</span>
+  </button>
+  <button class="nb" onclick="showPage('budget',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 8L8 2A6 6 0 0 1 14 8Z" fill="currentColor" stroke="none" opacity="0.4"/><line x1="8" y1="8" x2="8" y2="2"/><line x1="8" y1="8" x2="14" y2="8"/></svg></span>
+    <span class="nb-label">Budget</span>
+  </button>
+  <button class="nb" onclick="showPage('wallets',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M1 7h14"/><path d="M11 10.5h2"/></svg></span>
+    <span class="nb-label">Wallets</span>
+  </button>
+  <button class="nb" onclick="showPage('holdings',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="2" x2="4" y2="4"/><rect x="2" y="4" width="4" height="5" rx="0.5"/><line x1="4" y1="9" x2="4" y2="11"/><line x1="11" y1="1" x2="11" y2="3"/><rect x="9" y="3" width="4" height="7" rx="0.5"/><line x1="11" y1="10" x2="11" y2="12"/></svg></span>
+    <span class="nb-label">Holdings</span>
+  </button>
+  <button class="nb" onclick="showPage('tools',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><rect x="4" y="3" width="8" height="3" rx="0.5"/><circle cx="5" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="8" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="11" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg></span>
+    <span class="nb-label">Tools</span>
+  </button>
+</nav>
 </body>
 </html>

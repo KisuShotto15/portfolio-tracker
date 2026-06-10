@@ -242,7 +242,7 @@ function showManualRate(){
   b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; save(); updateRateUI(); inp.remove(); b.remove(); } };
   bar.appendChild(inp); bar.appendChild(b);
 }
-function updateRateUI(){ if(!S.rate) return; document.getElementById('rate-display').textContent=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD'; document.getElementById('rate-date').textContent=S.rateDate||''; }
+function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; document.getElementById('rate-date').textContent=S.rateDate||''; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
 
 async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
@@ -580,10 +580,10 @@ function updateTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
-function deleteManualWallet(id){ S.manualWallets=S.manualWallets.filter(function(w){ return w.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
-function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var v=prompt('Rename "'+w.name+'" to:',w.name); if(!v||!v.trim()||v.trim()===w.name) return; w.name=v.trim(); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
+async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
+async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w.name=r.value.trim(); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
-function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var v=parseFloat(prompt('New balance for '+w.name+':',w.balance)); if(isNaN(v)) return; w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('New balance',escHtml(w.name),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
 window.editManualWalletBal=editManualWalletBal;
 
 function emptyState(title, sub){
@@ -596,6 +596,24 @@ function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB','Eating Out':'tA',Support:'tA',Investments:'tA',Savings:'tG',
   Services:'tP','Help others':'tA',Emergency:'tR',Zelle:'tZ',Other:'tX'}; return m[cat]||'tX'; }
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
+
+var CAT_META={
+  'Income':       {bg:'#0f4d35', svg:'<polyline points="2 11 6 7 9 9.5 14 4"/><polyline points="10 4 14 4 14 8"/>'},
+  'Groceries':    {bg:'#0f3d2a', svg:'<path d="M1 2h2l3 8.5h7.5l2-5.5H5.5"/><circle cx="8" cy="13.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="13.5" r="1.3" fill="currentColor" stroke="none"/>'},
+  'Transport':    {bg:'#0f2a5a', svg:'<rect x="1.5" y="4.5" width="13" height="7" rx="1.5"/><line x1="1.5" y1="7.5" x2="14.5" y2="7.5"/><rect x="3" y="5" width="2.5" height="2" rx="0.5"/><rect x="10.5" y="5" width="2.5" height="2" rx="0.5"/><circle cx="5" cy="12.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="12.5" r="1.2" fill="currentColor" stroke="none"/>'},
+  'Health':       {bg:'#4a1060', svg:'<path d="M6 2h4v4h4v4h-4v4h-4v-4h-4v-4h4z"/>'},
+  'Discretionary':{bg:'#3a0f70', svg:'<path d="M2 9L8 3h5v5L7 14z"/><circle cx="11" cy="5.5" r="1.3" fill="currentColor" stroke="none"/>'},
+  'Investments':  {bg:'#6b3000', svg:'<rect x="1" y="10" width="4" height="5" rx="0.5"/><rect x="6" y="6" width="4" height="9" rx="0.5"/><rect x="11" y="2" width="4" height="13" rx="0.5"/>'},
+  'Eating Out':   {bg:'#7a2800', svg:'<path d="M5 2v5a2 2 0 0 0 4 0V2"/><line x1="7" y1="7" x2="7" y2="14"/><line x1="12" y1="2" x2="12" y2="14"/>'},
+  'Home':         {bg:'#0f254a', svg:'<path d="M2 8l6-6 6 6"/><path d="M4.5 7.5v6h3v-3h1v3h3v-6"/>'},
+  'Business':     {bg:'#0f4a4a', svg:'<rect x="1.5" y="6" width="13" height="8" rx="1.5"/><path d="M5 6V4.5A1.5 1.5 0 0 1 6.5 3h3A1.5 1.5 0 0 1 11 4.5V6"/><line x1="1.5" y1="10" x2="14.5" y2="10"/>'},
+  'Support':      {bg:'#5a1515', svg:'<path d="M8 12.5C6 11 2 8.5 2 5.5A3 3 0 0 1 8 4 3 3 0 0 1 14 5.5C14 8.5 10 11 8 12.5z"/>'},
+  'Savings':      {bg:'#0f3060', svg:'<rect x="1.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="7" cy="8" r="2.5"/><line x1="7" y1="8" x2="8.8" y2="6.5"/><line x1="12.5" y1="5.5" x2="14.5" y2="5.5"/><line x1="12.5" y1="10.5" x2="14.5" y2="10.5"/>'},
+};
+function catIcon(cat){
+  var m=CAT_META[cat]||{bg:'#252535',svg:''};
+  return '<span class="cat-ico" style="background:'+m.bg+'"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg></span>';
+}
 
 function renderTx(){
   var wrap=document.getElementById('tx-wrap');
@@ -619,27 +637,38 @@ function renderTx(){
   }
   var rows=groupOrder.map(function(date){
     var dayTotal=groups[date].reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
-    var sep='<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
+    var sep='<tr class="date-sep"><td colspan="8"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
     var txRows=groups[date].map(function(t){
       var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
       var trk=isTrk?'<span class="badge-t">tracker</span>':'';
       var wTag=t.wallet==='Binance'?'tBinance':'tX';
       var txType=isTrk?'tx-tracker':(t.type==='Debit'?'tx-debit':'tx-credit');
+      var sub=escHtml(t.wallet||'')+(t.category?' · '+escHtml(t.category):'');
+      var origM=orig?'<span class="td-orig-m">'+orig+'</span>':'';
+      var mCol=isTrk?'var(--accent)':(t.type==='Credit'?'#5DCAA5':'var(--txt)');
       return '<tr class="tx-row '+txType+'" onclick="selectTxRow(this)">'
-        +'<td class="td-desc" title="'+escHtml(t.desc)+'">'+escHtml(t.desc)+'</td>'
+        +'<td class="td-icon">'+catIcon(t.category)+'</td>'
+        +'<td class="td-desc" title="'+escHtml(t.desc)+'">'
+        +  '<span class="td-desc-txt">'+escHtml(t.desc)+'</span>'
+        +  '<span class="td-sub">'+sub+'</span>'
+        +'</td>'
         +'<td class="td-wallet"><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td>'
         +'<td class="td-type"><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td>'
         +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
         +'<td class="td-orig">'+orig+'</td>'
-        +'<td class="td-amt" style="color:'+col+'">'+fmtUSD(t.amountUSD)+'</td>'
-        +'<td class="td-act"><button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn btnd" onclick="event.stopPropagation();deleteTx('+t.id+')">x</button></td>'
+        +'<td class="td-amt">'
+        +  '<span class="td-amt-val td-amt-mob" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
+        +  '<span class="td-amt-val td-amt-desk" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
+        +  origM
+        +'</td>'
+        +'<td class="td-act"><button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
       +'</tr>';
     }).join('');
     return sep+txRows;
   }).join('');
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<table class="tx-table"><thead><tr><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
@@ -830,7 +859,74 @@ function renderHealthScore(){
         +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
       +'</div>'
     +'</div>';
+
+  // mobile compact bar
+  var barEl=document.getElementById('health-bar-m');
+  if(barEl){
+    var aAlerts=getActiveAlerts();
+    var aDot=aAlerts.length===0?'#1D9E75':'#EF9F27';
+    var aTxt=aAlerts.length===0?'Todo en orden':aAlerts.length+' alerta'+(aAlerts.length>1?'s':'');
+    var chevSvg='<svg class="hbm-chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 4 6 8 10 4"/></svg>';
+    var healthDrop='<div id="health-drop-m" class="hbm-drop">'
+      +'<div class="hbm-drop-inner">'
+        +'<div class="hbm-drop-score" style="color:'+color+'">'+total+'<span class="hbm-drop-lbl">'+label+'</span></div>'
+        +'<div class="hbm-items">'
+          +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
+        +'</div>'
+      +'</div>'
+    +'</div>';
+    var alertItems=aAlerts.map(function(a){
+      var dot=a.sev==='crit'?'#E24B4A':'#EF9F27';
+      var clickAttr=a.onClick?' onclick="'+a.onClick+'"':'';
+      return '<div class="hbm-alert-item"'+clickAttr+'>'
+        +'<span class="hbm-dot" style="background:'+dot+';margin-top:3px;flex-shrink:0"></span>'
+        +'<div><div class="hbm-alert-msg">'+a.msg+'</div><div class="hbm-alert-action">'+a.action+'</div></div>'
+      +'</div>';
+    }).join('');
+    var alertDrop=aAlerts.length>0?'<div id="alerts-drop-m" class="hbm-drop"><div class="hbm-alerts-list">'+alertItems+'</div></div>':'';
+    var alertPill=aAlerts.length>0
+      ?'<button class="hbm-pill" onclick="toggleAlertsDrop()">'
+          +'<span class="hbm-dot" style="background:'+aDot+'"></span>'
+          +'<span class="hbm-txt">'+aTxt+'</span>'
+          +chevSvg
+        +'</button>'
+      :'<span class="hbm-status"><span class="hbm-dot" style="background:'+aDot+'"></span>'+aTxt+'</span>';
+    barEl.innerHTML='<div class="hbm-row">'
+      +'<button class="hbm-pill" onclick="toggleHealthDrop()">'
+        +'<span class="hbm-dot" style="background:'+color+'"></span>'
+        +'<span class="hbm-txt">Salud: <b style="color:'+color+'">'+total+'</b></span>'
+        +chevSvg
+      +'</button>'
+      +alertPill
+    +'</div>'
+    +healthDrop+alertDrop;
+  }
 }
+
+function _closeHbmDrop(id,chevIdx){
+  var d=document.getElementById(id);
+  if(d&&d.classList.contains('open')){
+    d.classList.remove('open');
+    var chevs=document.querySelectorAll('#health-bar-m .hbm-chev');
+    if(chevs[chevIdx]) chevs[chevIdx].style.transform='';
+  }
+}
+window.toggleHealthDrop=function(){
+  _closeHbmDrop('alerts-drop-m',1);
+  var d=document.getElementById('health-drop-m');
+  if(!d) return;
+  var open=d.classList.toggle('open');
+  var chev=document.querySelectorAll('#health-bar-m .hbm-chev')[0];
+  if(chev) chev.style.transform=open?'rotate(180deg)':'';
+};
+window.toggleAlertsDrop=function(){
+  _closeHbmDrop('health-drop-m',0);
+  var d=document.getElementById('alerts-drop-m');
+  if(!d) return;
+  var open=d.classList.toggle('open');
+  var chev=document.querySelectorAll('#health-bar-m .hbm-chev')[1];
+  if(chev) chev.style.transform=open?'rotate(180deg)':'';
+};
 
 // ── Alerts ─────────────────────────────────────────────────────────────────
 function getActiveAlerts(){
@@ -1030,9 +1126,9 @@ function renderMonthlyChart(){
   var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
-  document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#4ED9A4;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E45858;display:inline-block"></span>Outflows</span>';
+  document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:14px"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#209473;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#721414;display:inline-block"></span>Outflows</span></span>';
   if(mChart){ mChart.destroy(); mChart=null; }
-  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#4ED9A4',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#E45858',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:15}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:15},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
+  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#209473',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#721414',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:15}}},y:{display:false}}}});
 }
 
 function renderCatChart(month){
@@ -1088,9 +1184,9 @@ function renderEquityChart(){
     +'<div style="font-size:13px">'+latestSnap+'</div>';
   if(eChart){ eChart.destroy(); eChart=null; }
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
-    {label:'Tracked',data:vals,borderColor:'#4ED9A4',backgroundColor:'rgba(78,217,164,0.15)',borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHitRadius:20,pointBackgroundColor:'#4ED9A4',tension:0.3,fill:true},
+    {label:'Tracked',data:vals,borderColor:'#4ED9A4',backgroundColor:function(ctx){var c=ctx.chart,a=c.chartArea;if(!a)return 'rgba(78,217,164,0.2)';var g=c.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(78,217,164,0.4)');g.addColorStop(1,'rgba(78,217,164,0)');return g;},borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHitRadius:20,pointBackgroundColor:'#4ED9A4',tension:0.3,fill:true},
     {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:14}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:14},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false}}}});}
 
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
@@ -1110,7 +1206,7 @@ function appPrompt(title,infoHtml,defaultVal,opts){
     ov.innerHTML='<div class="app-modal">'
       +'<h3>'+title+'</h3>'
       +'<div class="modal-info">'+infoHtml+'</div>'
-      +'<div class="field" style="margin-bottom:0"><input id="_ami" type="number" step="0.01" style="padding:9px 12px;font-size:15px;width:100%;background:transparent;border:none;color:#fff" value="'+escHtml(String(defaultVal))+'"/></div>'
+      +'<div class="field" style="margin-bottom:0"><input id="_ami" class="modal-inp" type="'+(opts&&opts.inputType||'number')+'" step="0.01" value="'+escHtml(String(defaultVal))+'"/></div>'
       +cbHtml
       +'<div class="modal-actions">'
       +'<button class="btn" id="_amc">Cancel</button>'
@@ -1407,6 +1503,21 @@ function calcTrackerBal(name){
   return (mw?mw.balance:0)+txBal;
 }
 
+window.refreshAllWallets=async function(){
+  var btn=document.getElementById('refresh-all-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Refreshing...'; }
+  var fns=[
+    S.binanceBalance!==null?fetchBinanceBalance().then(function(){save();}).catch(function(){}):Promise.resolve(),
+    S.bibiBinanceBalance!==null?fetchBibiBinanceBalance().then(function(){save();}).catch(function(){}):Promise.resolve(),
+    S.bybitBalance!==null?fetchBybitBalance().catch(function(){}):Promise.resolve(),
+    S.okxBalance!==null?fetchOKXBalance().catch(function(){}):Promise.resolve(),
+    fetchTrezorBalance().catch(function(){})
+  ];
+  await Promise.allSettled(fns);
+  save(); renderWallets(); renderSummary();
+  if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
+};
+
 function renderWallets(){
   var grid=document.getElementById('w-grid'); var cards=[];
   var apiTotal=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
@@ -1434,25 +1545,25 @@ function renderWallets(){
   var icR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
   function dot(col){return '<span style="width:7px;height:7px;border-radius:99px;background:'+col+';flex-shrink:0;display:inline-block"></span>';}
   function wvRow(dotCol,name,meta,bal,acts){
-    return '<div class="wv-row">'+dot(dotCol)+'<div><div class="nm">'+name+'</div>'+(meta?'<div class="meta">'+meta+'</div>':'')+'</div><span class="spacer"></span><span class="acts">'+acts+'</span><span class="bal">'+bal+'</span></div>';
+    return '<div class="wv-row" onclick="selectWvRow(this)"><div class="wv-info"><div class="nm">'+dot(dotCol)+name+'</div>'+(meta?'<div class="meta">'+meta+'</div>':'')+'</div><span class="spacer"></span><div class="wv-bal-col"><span class="bal">'+bal+'</span>'+(acts?'<span class="acts" onclick="event.stopPropagation()">'+acts+'</span>':'')+'</div></div>';
   }
-  function apiRow(name,connected,bal,upd,fn){
-    if(connected) return wvRow(bal!==null?'#4ED9A4':'#E45858', name, upd?'Updated '+upd:'', bal!==null?fmtUSD(bal):'—', '<button class="wico" onclick="'+fn+'">'+icR+'</button>');
-    return '<div class="wv-row">'+dot('#555')+'<div><div class="nm">'+name+'</div><div class="meta">Not connected</div></div><span class="spacer"></span><button class="btn btns btnp" onclick="showPage(\'settings\',null)" style="font-size:11px;padding:4px 10px">Connect</button></div>';
+  function apiRow(name,connected,bal,upd){
+    if(connected) return wvRow(bal!==null?'#4ED9A4':'#E45858', name, upd?'Updated '+upd:'', bal!==null?fmtUSD(bal):'', '');
+    return '<div class="wv-row"><div class="wv-info"><div class="nm">'+dot('#555')+name+'</div><div class="meta">Not connected</div></div><span class="spacer"></span><button class="btn btns btnp" onclick="showPage(\'settings\',null)" style="font-size:11px;padding:4px 10px">Connect</button></div>';
   }
 
   // ── left column: Exchanges ────────────────────────────────────────────
   var exRows=''
-    +apiRow('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,"fetchBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
-    +apiRow('Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,"fetchBibiBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
-    +apiRow('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,"fetchBybitBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
-    +apiRow('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,"fetchOKXBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
-    +apiRow('Trezor · BSC USDT',true,S.trezorBalance,S.trezorUpdated,"fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(e){alert(e.message);})");
+    +apiRow('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated)
+    +apiRow('Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated)
+    +apiRow('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated)
+    +apiRow('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated)
+    +apiRow('Trezor · BSC USDT',true,S.trezorBalance,S.trezorUpdated);
 
   // ── right column: Trackers + Manual ──────────────────────────────────
   var trRows=trackerNames.map(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){return w.name===name;});
-    var meta=name==='Zelle'?'From transactions · +5%: '+fmtUSD(total*1.05):'Calculated from transactions';
+    var meta=name==='Zelle'?'+5%: '+fmtUSD(total*1.05):'Calculated from transactions';
     var acts=mw?'<button class="wico" onclick="renameManualWallet('+mw.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>':'';
     return wvRow('#EF9F27', escHtml(name)+' <span class="badge-t">tracker</span>', meta, fmtUSD(total), acts);
   }).join('');
@@ -1468,10 +1579,9 @@ function renderWallets(){
       +'<div class="wv-legend">'+wvLeg+'</div>'
     +'</div>'
     +'<div class="wv-cols">'
-      +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Exchanges · API</span><span class="wv-grp-sum">'+fmtUSD(apiTotal)+'</span></div>'+exRows+'</div>'
+      +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Exchanges</span><span class="wv-grp-sum">'+fmtUSD(apiTotal)+'</span></div>'+exRows+'</div>'
       +'<div>'
-        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Trackers</span><span class="wv-grp-sum">'+fmtUSD(trackerTotal)+'</span></div>'+trRows+'</div>'
-        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Manual</span><span class="wv-grp-sum">'+fmtUSD(manualNormal)+'</span></div>'+mnRows+'<div class="wv-add" onclick="(function(){var m=document.querySelector(\'.main\');if(m)m.scrollTop+=600;})()">+ Add wallet</div></div>'
+        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Trackers</span><span class="wv-grp-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div>'+trRows+mnRows+'<div class="wv-add" onclick="(function(){var m=document.querySelector(\'.main\');if(m)m.scrollTop+=600;})()">+ Add wallet</div></div>'
       +'</div>'
     +'</div>';
 }
@@ -1563,8 +1673,8 @@ function showPage(id,btn,arg){
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('active'); });
   document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.nb[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
   if(btn) btn.classList.add('active');
-  else { var nb=document.querySelector('.nb[onclick*="\''+id+'\'"]'); if(nb) nb.classList.add('active'); }
   window.location.hash = id;
   var fab=document.getElementById('fab-add');
   if(fab) fab.style.display=(id==='transactions'?'flex':'none');
@@ -1684,6 +1794,9 @@ function toggleSidebar(){
 }
 window.toggleSidebar = toggleSidebar;
 window.showPage = showPage;
+function setTxTab(btn,val){ document.getElementById('tf-type').value=val; document.querySelectorAll('.ttt').forEach(function(b){b.classList.remove('active');}); btn.classList.add('active'); renderTx(); }
+function toggleTxFilters(){ document.getElementById('tx-filters-extra').classList.toggle('open'); }
+window.setTxTab=setTxTab; window.toggleTxFilters=toggleTxFilters;
 window.fetchRate = fetchRate;
 window.addTx = addTx;
 window.deleteTx = deleteTx;
@@ -1695,6 +1808,14 @@ window.selectTxRow = function(el){
 if(!window._txSelListener){
   window._txSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
+}
+window.selectWvRow = function(el){
+  document.querySelectorAll('.wv-row.wv-exp').forEach(function(r){ if(r!==el) r.classList.remove('wv-exp'); });
+  el.classList.toggle('wv-exp');
+};
+if(!window._wvSelListener){
+  window._wvSelListener=true;
+  document.addEventListener('click',function(e){ if(!e.target.closest('.wv-row')) document.querySelectorAll('.wv-exp').forEach(function(r){ r.classList.remove('wv-exp'); }); });
 }
 window.addTxOrUpdate = addTxOrUpdate;
 window.cancelEditTx = cancelEditTx;
