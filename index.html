@@ -185,15 +185,24 @@
       <button onclick="refreshAllWallets()" id="refresh-all-btn" style="background:none;border:none;color:var(--txt3);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;padding:0">&#8635; Refresh all</button>
     </div>
     <div id="w-grid" class="wgrid"></div>
-    <div class="fc">
-      <h3>Add manual wallet</h3>
-      <p class="hint">Tracker: balance auto-calculado desde transactions. Manual: tú fijas el balance con el lápiz.</p>
-      <div class="fr" style="max-width:560px">
-        <input type="text" id="wm-name" placeholder="Name"/>
-        <input type="number" id="wm-bal" placeholder="Balance USD" step="0.01"/>
-        <select id="wm-type"><option value="tracker">Tracker</option><option value="normal">Manual balance</option></select>
-        <button class="btn btnp" onclick="saveManualWallet()">Save</button>
-      </div>
+  </div>
+
+  <div class="tx-overlay" id="wv-overlay" onclick="closeWalletForm()"></div>
+  <div class="tx-form-panel" id="wv-form-panel">
+    <div class="tx-panel-header">
+      <h3>Add wallet</h3>
+      <button class="btn btns" onclick="closeWalletForm()" style="padding:4px 10px">&#x2715; Close</button>
+    </div>
+    <div class="field"><span class="field-lbl">Name</span><input type="text" id="wm-name" placeholder="Wallet name"/></div>
+    <div class="field" id="wm-bal-field"><span class="field-lbl">Balance USD</span><input type="number" id="wm-bal" placeholder="0.00" step="0.01"/></div>
+    <div class="field"><span class="field-lbl">Type</span>
+      <select id="wm-type" onchange="toggleWmBalField()">
+        <option value="normal">Manual balance</option>
+        <option value="tracker">Tracker — auto from transactions</option>
+      </select>
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:18px">
+      <button class="btn btnp" style="min-width:140px" onclick="saveManualWallet()">Save</button>
     </div>
   </div>
 
@@ -498,7 +507,7 @@
     <span id="ves-hint" style="display:none;font-size:12px;color:var(--color-text-secondary)">approx <span id="usd-preview">-</span> USD</span>
   </div>
 </div>
-<button class="fab-add" id="fab-add" onclick="openTxForm()">+</button>
+<button class="fab-add" id="fab-add" onclick="document.getElementById('page-wallets').classList.contains('active')?openWalletForm():openTxForm()">+</button>
 <nav class="bottom-nav" id="bottom-nav">
   <button class="nb active" onclick="showPage('summary',this)">
     <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></span>

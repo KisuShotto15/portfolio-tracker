@@ -558,6 +558,25 @@ function closeTxForm(){
   document.getElementById('tx-overlay').classList.remove('open');
   document.getElementById('fab-add').style.display='flex';
 }
+function openWalletForm(){
+  document.getElementById('wv-form-panel').classList.add('open');
+  document.getElementById('wv-overlay').classList.add('open');
+  document.getElementById('fab-add').style.display='none';
+  setTimeout(function(){ var d=document.getElementById('wm-name'); if(d) d.focus(); },120);
+}
+function closeWalletForm(){
+  document.getElementById('wv-form-panel').classList.remove('open');
+  document.getElementById('wv-overlay').classList.remove('open');
+  document.getElementById('fab-add').style.display='flex';
+  document.getElementById('wm-name').value='';
+  document.getElementById('wm-bal').value='';
+  document.getElementById('wm-type').value='tracker';
+  toggleWmBalField();
+}
+function toggleWmBalField(){
+  var f=document.getElementById('wm-bal-field');
+  if(f) f.style.display=document.getElementById('wm-type').value==='normal'?'flex':'none';
+}
 function addTxOrUpdate(){
   if(editingTxId) updateTx(); else addTx();
 }
@@ -1487,12 +1506,12 @@ function renderBudget(){
 
 function saveManualWallet(){
   var name=document.getElementById('wm-name').value.trim(); var bal=parseFloat(document.getElementById('wm-bal').value)||0; var type=document.getElementById('wm-type').value;
-  if(!name){ alert('Name required'); return; }
+  if(!name){ return; }
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker'};
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   S.manualWalletsUpdatedAt=Date.now();
-  document.getElementById('wm-name').value=''; document.getElementById('wm-bal').value='';
+  closeWalletForm();
   save(); renderWallets(); populateWalletSelects();
 }
 
@@ -1581,7 +1600,7 @@ function renderWallets(){
     +'<div class="wv-cols">'
       +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Exchanges</span><span class="wv-grp-sum">'+fmtUSD(apiTotal)+'</span></div>'+exRows+'</div>'
       +'<div>'
-        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Trackers</span><span class="wv-grp-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div>'+trRows+mnRows+'<div class="wv-add" onclick="(function(){var m=document.querySelector(\'.main\');if(m)m.scrollTop+=600;})()">+ Add wallet</div></div>'
+        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Trackers</span><span class="wv-grp-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div>'+trRows+mnRows+'</div>'
       +'</div>'
     +'</div>';
 }
@@ -1677,7 +1696,7 @@ function showPage(id,btn,arg){
   if(btn) btn.classList.add('active');
   window.location.hash = id;
   var fab=document.getElementById('fab-add');
-  if(fab) fab.style.display=(id==='transactions'?'flex':'none');
+  if(fab) fab.style.display=(id==='transactions'||id==='wallets'?'flex':'none');
   if(id==='summary') renderSummary();
   else if(id==='transactions') renderTx();
   else if(id==='budget') renderBudget();
@@ -1821,6 +1840,9 @@ window.addTxOrUpdate = addTxOrUpdate;
 window.cancelEditTx = cancelEditTx;
 window.openTxForm = openTxForm;
 window.closeTxForm = closeTxForm;
+window.openWalletForm = openWalletForm;
+window.closeWalletForm = closeWalletForm;
+window.toggleWmBalField = toggleWmBalField;
 window.doUndo = doUndo;
 window.doRedo = doRedo;
 window.exportCSV = exportCSV;
@@ -2025,7 +2047,7 @@ async function init(){
   document.getElementById('tx-date').value=today;
   document.getElementById('tf-month').value=today.slice(0,7);
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
-  populateWalletSelects(); updateRateUI();
+  populateWalletSelects(); updateRateUI(); toggleWmBalField();
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
