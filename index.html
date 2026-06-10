@@ -18,20 +18,20 @@
 </head>
 <body>
 <button class="hamburger" onclick="toggleSidebar()">
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="4" x2="15" y2="4"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="12" x2="15" y2="12"/></svg>
+  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="4" x2="15" y2="4"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="12" x2="15" y2="12"/></svg>
 </button>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 <div class="app">
 <nav class="sb">
   <div class="sb-logo">
-    <a href="https://kisushotto.com" class="hub-back" title="Hub"><img src="/KS.png" alt="KS" style="width:32px;height:32px;border-radius:8px;object-fit:cover"/></a>
+    <a href="https://kisushotto.com" class="hub-back" title="Hub"><img src="/KS.png" alt="KS" style="width:40px;height:40px;border-radius:10px;object-fit:cover"/></a>
   </div>
   <div class="sb-sync">
     <span class="sync-dot" id="sync-dot" style="background:#888"></span>
     <span id="sync-label" class="sync-label-text">Synced</span>
   </div>
   <button id="pwa-install-btn" onclick="installPWA()" title="Install app" style="display:none;align-items:center;gap:6px;background:rgba(155,112,240,0.15);border:1px solid rgba(155,112,240,0.3);color:#9B70F0;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;width:calc(100% - 2rem);margin:0 1rem">
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
     Install App
   </button>
   <button class="nb active" data-tooltip="Dashboard" onclick="showPage('summary',this)">
@@ -89,7 +89,7 @@
           </div>
           <div class="nw-hero-chart">
             <div id="equity-wrap"></div>
-            <div style="position:relative;height:172px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
+            <div style="position:relative;height:215px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
           </div>
         </div>
       </div>
@@ -97,8 +97,6 @@
         <div class="cw" id="health-wrap"></div>
         <div class="cw" id="goal-wrap"></div>
       </div>
-
-      <div class="dash-divider"></div>
 
       <!-- Section 2 — KPI stats + alerts (full-width, 4-col uniform row) -->
       <div class="span12 kpi-row">
@@ -109,15 +107,13 @@
       <!-- Monthly breakdown kept rendered (data integrity), hidden from view -->
       <div class="dash-hidden"><div id="sum-cards"></div></div>
 
-      <div class="dash-divider"></div>
-
       <!-- Section 3 — Cash Flow + Snapshot P&L -->
       <div class="span8">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <span class="cleg" style="margin:0">Cash Flow · 6 Months</span>
           <div class="cleg" id="mc-leg" style="margin:0"></div>
         </div>
-        <div style="position:relative;height:210px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
+        <div style="position:relative;height:262px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
       </div>
       <div class="span4">
         <div class="cw" id="snap-pnl-wrap"></div>
@@ -162,7 +158,7 @@
     <div class="fc" style="margin-top:12px">
       <div class="cleg">Spending by category</div>
       <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:.875rem">
-        <div style="position:relative;height:180px;width:180px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
+        <div style="position:relative;height:225px;width:225px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
         <div id="cat-leg" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px"></div>
       </div>
     </div>
