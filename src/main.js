@@ -817,17 +817,18 @@ function renderHealthScore(){
 
   function item(name,pts){
     var pct=pts/25;
-    var c=pct>=0.8?'#1D9E75':pct>=0.5?'#A3CB48':pct>=0.3?'#EF9F27':'#E24B4A';
-    return '<div class="hb-item"><div class="hb-name">'+name+'</div><div class="hb-bar"><div class="hb-fill" style="width:'+(pct*100)+'%;background:'+c+'"></div></div><div class="hb-pts">'+pts+'/25</div></div>';
+    return '<div class="hb-item"><div class="hb-name">'+name+'</div><div class="hb-bar"><div class="hb-fill" style="width:'+(pct*100)+'%"></div></div></div>';
   }
-  el.innerHTML='<div class="cleg" style="margin-bottom:.25rem">Salud Financiera</div>'
-    +'<div class="health-score" style="color:'+color+'">'+total+'</div>'
-    +'<div class="health-label">'+label+'</div>'
-    +'<div class="health-breakdown">'
-      +item('Growth',growthPts)
-      +item('Diversification',divPts)
-      +item('Savings',savPts)
-      +item('Emergency',emgPts)
+  var RR=42, CIRC=2*Math.PI*RR, dash=(total/100)*CIRC;
+  el.innerHTML='<div class="cleg">Salud Financiera</div>'
+    +'<div class="health-ring-wrap">'
+      +'<div class="health-ring"><svg width="100%" height="100%" viewBox="0 0 100 100">'
+        +'<circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"></circle>'
+        +'<circle cx="50" cy="50" r="42" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+dash+' '+CIRC+'" transform="rotate(-90 50 50)"></circle>'
+        +'</svg><div class="health-ring-val"><b style="color:'+color+'">'+total+'</b><span>'+label+'</span></div></div>'
+      +'<div class="health-breakdown">'
+        +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
+      +'</div>'
     +'</div>';
 }
 
@@ -943,7 +944,7 @@ function renderSnapshotPnL(){
   var olderPopup=olderAll.slice(0,3).map(makePnlRow).join('');
   var hasMore=olderAll.length>0;
   var histIcon=hasMore?'<div class="hist-wrap"><button class="hist-btn" onclick="showPage(\'history\',null,\'pnl\')" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Last '+Math.min(3,olderAll.length)+' periods</div><div class="pnl-list">'+olderPopup+'</div>'+(olderAll.length>3?'<div style="text-align:center;margin-top:.5rem;font-size:11px;color:#9B70F0">View all '+olderAll.length+' →</div>':'')+'</div></div>':'';
-  var hdr='<div style="position:relative;text-align:center;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)">'+histIcon+'</div>':'')+'</div>';
+  var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'pnl\')">'+HIST_ICON+' History</button>':'')+'</div>';
   var latestP=pnls[pnls.length-1];
   var lc=latestP.profit>0?'#1D9E75':latestP.profit<0?'#E24B4A':'#888';
   var lsign=latestP.profit>0?'+':'';
@@ -973,20 +974,18 @@ function renderGoal(){
     +'<input type="number" id="goal-input" value="'+(goal||'')+'" placeholder="e.g. 100000" style="flex:1;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:6px 10px;color:#fff;font-size:14px"/>'
     +'<button class="btn btns" onclick="saveGoal()" style="padding:6px 14px">Set</button>'
     +'</div>';
-  var progBar=goal>0
-    ?'<div style="margin-top:.875rem">'
-      +'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);margin-bottom:6px"><span style="font-weight:500;color:var(--color-text-primary)">'+fmtUSD(current)+'</span><span>'+fmtUSD(goal)+'</span></div>'
-      +'<div style="background:rgba(255,255,255,0.07);border-radius:999px;height:10px;overflow:hidden">'
-      +'<div style="background:linear-gradient(90deg,#9B70F0,#7B5FD0);height:100%;width:'+pct.toFixed(1)+'%;border-radius:999px;transition:width .4s ease"></div></div>'
-      +'<div style="text-align:center;margin-top:10px">'
-      +'<div style="font-size:18px;font-weight:700;color:#9B70F0">'+pct.toFixed(1)+'%</div>'
-      +(months?'<div class="goal-eta" style="margin-top:2px">~'+months+' mo · '+fmtUSD(contrib)+'/mo</div>':'')
-      +'</div></div>'
-    :'';
-  el.innerHTML='<div style="position:relative;text-align:center;margin-bottom:'+(goal>0?'.25rem':'.75rem')+'">'
-    +'<span class="cleg" style="margin:0">Financial Goal</span>'
-    +(goal>0?'<div style="position:absolute;right:0;top:50%;transform:translateY(-50%)"><button class="goal-edit-btn" title="Edit goal" onclick="document.getElementById(\'goal-input-row\').style.display=document.getElementById(\'goal-input-row\').style.display===\'none\'?\'flex\':\'none\'">'+PENCIL+'</button></div>':'')
-    +'</div>'+inputRow+progBar;
+  if(goal>0){
+    el.innerHTML='<div class="goal-head">'
+      +'<span class="cleg" style="margin:0">Goal · '+fmtUSD(goal)+'</span>'
+      +'<span class="goal-pct">'+pct.toFixed(1)+'%</span>'
+      +'<button class="goal-edit-btn" title="Edit goal" onclick="document.getElementById(\'goal-input-row\').style.display=document.getElementById(\'goal-input-row\').style.display===\'none\'?\'flex\':\'none\'">'+PENCIL+'</button>'
+      +'</div>'
+      +inputRow
+      +'<div class="goal-bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'
+      +'<div class="goal-meta"><span>'+fmtUSD(current)+'</span><span>'+(months?'~'+months+' mo · '+fmtUSD(contrib)+'/mo':'')+'</span></div>';
+  } else {
+    el.innerHTML='<div class="cleg">Financial Goal</div>'+inputRow;
+  }
 }
 
 function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; save(); renderSummary(); } }
@@ -1031,9 +1030,9 @@ function renderMonthlyChart(){
   var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
-  document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#34D399;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#F87171;display:inline-block"></span>Outflows</span>';
+  document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#4ED9A4;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E45858;display:inline-block"></span>Outflows</span>';
   if(mChart){ mChart.destroy(); mChart=null; }
-  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#34D399',borderRadius:3},{label:'Outflows',data:cD,backgroundColor:'#F87171',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
+  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#4ED9A4',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#E45858',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:12}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:12},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});
 }
 
 function renderCatChart(month){
@@ -1089,8 +1088,8 @@ function renderEquityChart(){
     +'<div style="font-size:13px">'+latestSnap+'</div>';
   if(eChart){ eChart.destroy(); eChart=null; }
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
-    {label:'Tracked',data:vals,borderColor:'#5DCAA5',backgroundColor:'rgba(93,202,165,0.06)',borderWidth:2,pointRadius:4,pointHitRadius:20,pointBackgroundColor:'#5DCAA5',tension:0.3,fill:true},
-    {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[4,3]}
+    {label:'Tracked',data:vals,borderColor:'#4ED9A4',backgroundColor:'rgba(78,217,164,0.15)',borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHitRadius:20,pointBackgroundColor:'#4ED9A4',tension:0.3,fill:true},
+    {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]}
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#555',font:{size:11},callback:function(v){ return '$'+(v>=1000?(v/1000).toFixed(1)+'k':v); }}}}}});}
 
 function getTotalBalance(){
@@ -1416,29 +1415,65 @@ function renderWallets(){
   var trackerTotal=trackerNames.reduce(function(s,n){ return s+calcTrackerBal(n); },0);
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var grand=apiTotal+trackerTotal+manualNormal;
-  cards.push('<div class="wcard"><div class="wcard-name" style="color:#5DCAA5;font-weight:500">Total</div><div class="wcard-bal g">'+fmtUSD(grand)+'</div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">All wallets combined</div></div>');
-  function apiCard(name,connected,bal,upd,fn){
-    if(connected) return '<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:'+(bal!==null?'#1D9E75':'#E24B4A')+'"></span>'+name+'</div><div class="wcard-bal-row"><div class="wcard-bal-side"></div><div class="wcard-bal b">'+(bal!==null?'$'+bal.toFixed(2):'-')+'</div><div class="wcard-bal-side"><button class="btn btns" style="padding:4px 6px;height:auto" onclick="'+fn+'">&#8635;</button></div></div><div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">'+(upd?'Updated '+upd:'')+'</div></div>';
-    return '<div class="wcard" style="border-style:dashed"><div class="wcard-name">'+name+'</div><div style="font-size:13px;color:var(--color-text-secondary);margin:5px 0">Not connected</div><button class="btn btns btnp" onclick="showPage(\'settings\',null)">Connect</button></div>';
+  // ── allocation bar data ──────────────────────────────────────────────
+  var wvA=[
+    {nm:'Binance',v:S.binanceBalance||0,col:'#9B70F0'},
+    {nm:'Bybit',v:S.bybitBalance||0,col:'#4ED9A4'},
+    {nm:'Trezor',v:S.trezorBalance||0,col:'#60A5FA'},
+    {nm:'Bibi Binance',v:S.bibiBinanceBalance||0,col:'#FB923C'},
+    {nm:'OKX',v:S.okxBalance||0,col:'#FBBF24'},
+    {nm:'Zelle',v:calcTrackerBal('Zelle'),col:'#A78BFA'},
+    {nm:'Cash',v:manualNormal,col:'#6B7280'}
+  ].filter(function(a){return a.v>0;});
+  var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
+  var wvLeg=wvA.map(function(a){return '<span class="key"><span style="width:8px;height:8px;border-radius:99px;background:'+a.col+';display:inline-block;flex-shrink:0"></span>'+a.nm+' <span style="font-family:var(--font-num);color:var(--txt3)">'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</span></span>';}).join('');
+
+  // ── icon helpers ─────────────────────────────────────────────────────
+  var icP='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  var icX='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  var icR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
+  function dot(col){return '<span style="width:7px;height:7px;border-radius:99px;background:'+col+';flex-shrink:0;display:inline-block"></span>';}
+  function wvRow(dotCol,name,meta,bal,acts){
+    return '<div class="wv-row">'+dot(dotCol)+'<div><div class="nm">'+name+'</div>'+(meta?'<div class="meta">'+meta+'</div>':'')+'</div><span class="spacer"></span><span class="acts">'+acts+'</span><span class="bal">'+bal+'</span></div>';
   }
-  cards.push(apiCard('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'fetchBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
-  cards.push(apiCard('Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'fetchBibiBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
-  cards.push(apiCard('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'fetchBybitBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
-  cards.push(apiCard('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'fetchOKXBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
-  cards.push(apiCard('Trezor (BSC USDT)',true,S.trezorBalance,S.trezorUpdated,'fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(e){alert(e.message);})'));
-  var icoPen='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-  var icoX='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  trackerNames.forEach(function(name){
-    var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){ return w.name===name; });
-    var actions=mw?'<div style="display:flex;gap:4px"><button class="wico" onclick="renameManualWallet('+mw.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icoX+'</button></div>':'';
-    var plus5=name==='Zelle'?'<div style="font-size:12px;color:var(--color-text-secondary)">+5%: '+fmtUSD(total*1.05)+'</div>':'';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(name)+' <span class="badge-t">tracker</span></div><div class="wcard-bal-row"><div class="wcard-bal-side"></div><div class="wcard-bal" style="color:#a78bfa">'+fmtUSD(total)+'</div><div class="wcard-bal-side">'+plus5+actions+'</div></div><div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;white-space:nowrap">Calculated from transactions</div></div>');
-  });
-  S.manualWallets.filter(function(w){ return !w.trackerOnly; }).forEach(function(w){
-    var actions='<div style="display:flex;gap:4px"><button class="wico" onclick="editManualWalletBal('+w.id+')">'+icoPen+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icoX+'</button></div>';
-    cards.push('<div class="wcard"><div class="wcard-name"><span class="wstatus" style="background:#EF9F27"></span>'+escHtml(w.name)+' <span style="font-size:10px;color:var(--color-text-secondary)">(manual)</span></div><div class="wcard-bal-row"><div class="wcard-bal-side"></div><div class="wcard-bal '+(w.balance<0?'r':'b')+'">'+fmtUSD(w.balance)+'</div><div class="wcard-bal-side">'+actions+'</div></div></div>');
-  });
-  grid.innerHTML=cards.join('');
+  function apiRow(name,connected,bal,upd,fn){
+    if(connected) return wvRow(bal!==null?'#4ED9A4':'#E45858', name, upd?'Updated '+upd:'', bal!==null?fmtUSD(bal):'—', '<button class="wico" onclick="'+fn+'">'+icR+'</button>');
+    return '<div class="wv-row">'+dot('#555')+'<div><div class="nm">'+name+'</div><div class="meta">Not connected</div></div><span class="spacer"></span><button class="btn btns btnp" onclick="showPage(\'settings\',null)" style="font-size:11px;padding:4px 10px">Connect</button></div>';
+  }
+
+  // ── left column: Exchanges ────────────────────────────────────────────
+  var exRows=''
+    +apiRow('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,"fetchBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
+    +apiRow('Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,"fetchBibiBinanceBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
+    +apiRow('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,"fetchBybitBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
+    +apiRow('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,"fetchOKXBalance().then(function(){save();renderWallets();renderSummary();}).catch(function(e){alert(e.message);})")
+    +apiRow('Trezor · BSC USDT',true,S.trezorBalance,S.trezorUpdated,"fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(e){alert(e.message);})");
+
+  // ── right column: Trackers + Manual ──────────────────────────────────
+  var trRows=trackerNames.map(function(name){
+    var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){return w.name===name;});
+    var meta=name==='Zelle'?'From transactions · +5%: '+fmtUSD(total*1.05):'Calculated from transactions';
+    var acts=mw?'<button class="wico" onclick="renameManualWallet('+mw.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>':'';
+    return wvRow('#EF9F27', escHtml(name)+' <span class="badge-t">tracker</span>', meta, fmtUSD(total), acts);
+  }).join('');
+  var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
+    var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
+    return wvRow('#EF9F27', escHtml(w.name), 'Manual balance', fmtUSD(w.balance), acts);
+  }).join('');
+
+  grid.innerHTML=
+    '<div class="wv-hero">'
+      +'<div class="wv-hero-top"><div><div class="wv-total-lbl">Total · All Wallets</div><div class="wv-total">'+fmtUSD(grand)+'</div></div></div>'
+      +'<div class="wv-alloc">'+wvBar+'</div>'
+      +'<div class="wv-legend">'+wvLeg+'</div>'
+    +'</div>'
+    +'<div class="wv-cols">'
+      +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Exchanges · API</span><span class="wv-grp-sum">'+fmtUSD(apiTotal)+'</span></div>'+exRows+'</div>'
+      +'<div>'
+        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Trackers</span><span class="wv-grp-sum">'+fmtUSD(trackerTotal)+'</span></div>'+trRows+'</div>'
+        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Manual</span><span class="wv-grp-sum">'+fmtUSD(manualNormal)+'</span></div>'+mnRows+'<div class="wv-add" onclick="(function(){var m=document.querySelector(\'.main\');if(m)m.scrollTop+=600;})()">+ Add wallet</div></div>'
+      +'</div>'
+    +'</div>';
 }
 
 

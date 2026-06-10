@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Portfolio">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/src/style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
@@ -65,41 +66,62 @@
 <main class="main">
 
   <div id="page-summary" class="page active">
-    <!-- Header row: title + month filter -->
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.07em">Dashboard</span>
-      <select id="sum-month" onchange="renderSummary()" style="padding:5px 14px;border:0.5px solid rgba(255,255,255,0.1);border-radius:20px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px;cursor:pointer"></select>
+    <!-- Header: title + month filter -->
+    <div class="dash-head">
+      <span class="dash-eyebrow">Dashboard</span>
+      <select id="sum-month" onchange="renderSummary()"></select>
     </div>
-    <!-- KPI Strip -->
-    <div id="kpi-strip"></div>
-    <!-- Monthly breakdown cards -->
-    <div id="sum-cards"></div>
-    <!-- Health Score + Alerts -->
-    <div class="dash-row-2" style="margin-bottom:0">
-      <div class="cw" id="health-wrap"></div>
-      <div class="cw" id="alerts-wrap"></div>
-    </div>
-    <!-- Snapshot P&L + Goal -->
-    <div class="dash-row-2" style="margin-bottom:0">
-      <div class="cw" id="snap-pnl-wrap"></div>
-      <div class="cw" id="goal-wrap"></div>
-    </div>
-    <!-- Equity curve (full width) -->
-    <div class="cw">
-      <div class="cleg" style="display:flex;align-items:center;justify-content:space-between">
-        <span>Equity curve</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <button class="btn btns" style="padding:3px 10px;font-size:12px" onclick="recordSnapshot()">+ Record snapshot</button>
-          <div id="equity-hist"></div>
+
+    <div class="dash-grid">
+      <!-- Section 1 — Net Worth hero (fused equity) + Salud / Goal -->
+      <div class="span8">
+        <div class="nw-hero">
+          <div class="nw-hero-top">
+            <div>
+              <div class="nw-lbl">Net Worth</div>
+              <div class="nw-val" id="nw-hero-val">—</div>
+              <div class="nw-meta" id="nw-hero-meta"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button class="btn btns" onclick="recordSnapshot()">+ Snapshot</button>
+              <div id="equity-hist"></div>
+            </div>
+          </div>
+          <div class="nw-hero-chart">
+            <div id="equity-wrap"></div>
+            <div style="position:relative;height:172px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
+          </div>
         </div>
       </div>
-      <div id="equity-wrap"></div>
-      <div style="position:relative;height:200px;overflow:hidden"><canvas id="chart-equity"></canvas></div>
-    </div>
-    <!-- Monthly bars (full width) -->
-    <div class="cw">
-      <div class="cleg" id="mc-leg"></div>
-      <div style="position:relative;height:220px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
+      <div class="span4 dash-side">
+        <div class="cw" id="health-wrap"></div>
+        <div class="cw" id="goal-wrap"></div>
+      </div>
+
+      <div class="dash-divider"></div>
+
+      <!-- Section 2 — KPI stats + alerts (full-width, 4-col uniform row) -->
+      <div class="span12 kpi-row">
+        <div id="kpi-strip"></div>
+        <div class="cw" id="alerts-wrap"></div>
+      </div>
+
+      <!-- Monthly breakdown kept rendered (data integrity), hidden from view -->
+      <div class="dash-hidden"><div id="sum-cards"></div></div>
+
+      <div class="dash-divider"></div>
+
+      <!-- Section 3 — Cash Flow + Snapshot P&L -->
+      <div class="span8">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <span class="cleg" style="margin:0">Cash Flow · 6 Months</span>
+          <div class="cleg" id="mc-leg" style="margin:0"></div>
+        </div>
+        <div style="position:relative;height:210px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="span4">
+        <div class="cw" id="snap-pnl-wrap"></div>
+      </div>
     </div>
   </div>
 
@@ -147,6 +169,9 @@
   </div>
 
   <div id="page-wallets" class="page">
+    <div class="dash-head">
+      <span class="dash-eyebrow">Wallets</span>
+    </div>
     <div id="w-grid" class="wgrid"></div>
     <div class="fc">
       <h3>Add manual wallet</h3>
@@ -404,6 +429,40 @@
 </main>
 </div>
 <script type="module" src="/src/main.js"></script>
+<script>
+/* Mirror the Net Worth KPI (and its delta) into the dashboard hero.
+   Additive only — does not touch main.js. */
+(function(){
+  function sync(){
+    var strip=document.getElementById('kpi-strip'); if(!strip) return;
+    var first=strip.querySelector('.kpi-card'); if(!first) return;
+    var hv=document.getElementById('nw-hero-val'), hm=document.getElementById('nw-hero-meta');
+    var val=first.querySelector('.kpi-val'), sub=first.querySelector('.kpi-sub');
+    if(hv&&val) hv.textContent=val.textContent;
+    if(hm&&sub) hm.innerHTML=sub.innerHTML;
+  }
+  function attach(){
+    var strip=document.getElementById('kpi-strip');
+    if(!strip){ return setTimeout(attach,60); }
+    new MutationObserver(sync2).observe(strip,{childList:true,subtree:true,characterData:true});
+    sync2();
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',attach); else attach();
+  /* Chart.js sometimes skips its first paint if created before layout settles.
+     Nudge all responsive charts to re-measure once everything is laid out. */
+  function nudgeCharts(){
+    if(!window.Chart) return;
+    ['chart-equity','chart-monthly','chart-cat'].forEach(function(id){
+      var el=document.getElementById(id); if(!el) return;
+      var c=window.Chart.getChart(el); if(c){ try{ c.resize(); c.render(); }catch(e){} }
+    });
+  }
+  var nudgeT;
+  function scheduleNudge(){ clearTimeout(nudgeT); nudgeT=setTimeout(nudgeCharts, 60); setTimeout(nudgeCharts, 350); }
+  function sync2(){ sync(); scheduleNudge(); }
+  window.addEventListener('load', function(){ scheduleNudge(); });
+})();
+</script>
 <div class="tx-overlay" id="tx-overlay" onclick="closeTxForm()"></div>
 <div class="tx-form-panel" id="tx-form-panel">
   <div class="tx-panel-header">
