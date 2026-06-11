@@ -1055,24 +1055,10 @@ function renderSnapshotPnL(){
       +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div>'
       +'</div>';
   }
-  var olderAll=pnls.slice(0,-1).reverse();
-  var olderPopup=olderAll.slice(0,3).map(makePnlRow).join('');
-  var hasMore=olderAll.length>0;
-  var histIcon=hasMore?'<div class="hist-wrap"><button class="hist-btn" onclick="showPage(\'history\',null,\'pnl\')" title="History">'+HIST_ICON+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Last '+Math.min(3,olderAll.length)+' periods</div><div class="pnl-list">'+olderPopup+'</div>'+(olderAll.length>3?'<div style="text-align:center;margin-top:.5rem;font-size:11px;color:#9B70F0">View all '+olderAll.length+' →</div>':'')+'</div></div>':'';
+  var last3=pnls.slice(-3).reverse();
+  var hasMore=pnls.length>3;
   var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'pnl\')">'+HIST_ICON+' History</button>':'')+'</div>';
-  var latestP=pnls[pnls.length-1];
-  var lc=latestP.profit>0?'#1D9E75':latestP.profit<0?'#E24B4A':'#888';
-  var lsign=latestP.profit>0?'+':'';
-  var ladj=latestP.invOut>0||latestP.invIn>0?'<div style="margin-top:5px"><span class="pnl-adj">'+(latestP.invOut>0?'Invested '+fmtUSD(latestP.invOut):'')+(latestP.invIn>0?(latestP.invOut>0?' · ':'')+' Returned '+fmtUSD(latestP.invIn):'')+'</span></div>':'';
-  var latestHtml='<div class="pnl-row">'
-    +'<div>'
-      +'<div class="pnl-period">'+fmtSnapDate(latestP.from)+' → '+fmtSnapDate(latestP.to)+'</div>'
-      +'<div class="pnl-range">'+fmtUSD(latestP.snap1)+' → '+fmtUSD(latestP.snap2)+'</div>'
-      +ladj
-    +'</div>'
-    +'<div class="pnl-profit" style="color:'+lc+'">'+lsign+fmtUSD(latestP.profit)+'</div>'
-    +'</div>';
-  el.innerHTML=hdr+latestHtml;
+  el.innerHTML=hdr+last3.map(makePnlRow).join('');
 }
 
 function renderGoal(){
