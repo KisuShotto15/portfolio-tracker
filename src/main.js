@@ -602,13 +602,11 @@ function closeTxForm(){
 function openWalletForm(){
   document.getElementById('wv-form-panel').classList.add('open');
   document.getElementById('wv-overlay').classList.add('open');
-  document.getElementById('fab-add').style.display='none';
   setTimeout(function(){ var d=document.getElementById('wm-name'); if(d) d.focus(); },120);
 }
 function closeWalletForm(){
   document.getElementById('wv-form-panel').classList.remove('open');
   document.getElementById('wv-overlay').classList.remove('open');
-  document.getElementById('fab-add').style.display='flex';
   document.getElementById('wm-name').value='';
   document.getElementById('wm-bal').value='';
   document.getElementById('wm-type').value='tracker';
@@ -1725,7 +1723,7 @@ function showPage(id,btn,arg){
   if(btn) btn.classList.add('active');
   window.location.hash = id;
   var fab=document.getElementById('fab-add');
-  if(fab) fab.style.display=(id==='transactions'||id==='wallets'?'flex':'none');
+  if(fab) fab.style.display=(id==='transactions'?'flex':'none');
   if(id==='summary') renderSummary();
   else if(id==='transactions') renderTx();
   else if(id==='budget') renderBudget();
