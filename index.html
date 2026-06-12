@@ -160,7 +160,7 @@
       <button id="btn-redo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Redo" onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <select id="tf-type" onchange="renderTx()" style="display:none"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div id="tx-filters-extra">
-        <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
+        <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Remesa</option></select>
         <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
         <input type="month" id="tf-month" onchange="renderTx()"/>
       </div>
@@ -170,13 +170,6 @@
 
   <div id="page-budget" class="page">
     <div id="bud-wrap"></div>
-    <div class="fc" style="margin-top:12px">
-      <div class="cleg">Spending by category</div>
-      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:.875rem">
-        <div style="position:relative;height:225px;width:225px;flex-shrink:0"><canvas id="chart-cat"></canvas></div>
-        <div id="cat-leg" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px"></div>
-      </div>
-    </div>
   </div>
 
   <div id="page-wallets" class="page">
@@ -207,32 +200,36 @@
   </div>
 
   <div id="page-holdings" class="page">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.07em">Holdings</span>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span id="wh-updated" style="font-size:11px;color:var(--color-text-secondary)"></span>
+    <div class="dash-head">
+      <span class="dash-eyebrow">Holdings</span>
+      <div class="hld-head-right">
+        <span class="hld-updated" id="wh-updated"></span>
         <button class="btn btns" onclick="refreshWalletHoldings()">&#8635; Refresh</button>
       </div>
     </div>
-    <div class="fc">
-      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none" onclick="toggleOwCard()">
-        <h3 style="margin:0">Wallets</h3>
-        <span id="ow-chev" style="color:rgba(255,255,255,0.28)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-      </div>
-      <div id="ow-body" style="display:none">
-        <div id="ow-list" style="margin-top:10px"></div>
-        <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap;align-items:center">
-          <input type="text" id="ow-label" placeholder="Label" style="padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px;width:100px"/>
-          <select id="ow-chain" style="padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px"><option value="evm">EVM</option><option value="btc">Bitcoin</option></select>
-          <input type="text" id="ow-addr" placeholder="Address / xpub / zpub" style="padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:12px;font-family:monospace;flex:1;min-width:180px"/>
+    <div id="wh-wrap"></div>
+    <div class="hld-wallets" id="hld-wallets">
+      <button class="hld-wallets-head" onclick="toggleOwCard()">
+        <span class="cleg" id="ow-count" style="margin:0">Wallets</span>
+        <svg class="bdg-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hld-wallets-body" id="ow-body">
+        <div id="ow-list"></div>
+        <div class="hld-add">
+          <input type="text" id="ow-label" placeholder="Label"/>
+          <select id="ow-chain"><option value="evm">EVM</option><option value="btc">Bitcoin</option></select>
+          <input type="text" id="ow-addr" placeholder="Address / xpub / zpub" style="flex:1;min-width:160px;font-family:var(--font-num)"/>
           <button class="btn btnp btns" onclick="saveOnchainWallet()">Add</button>
         </div>
       </div>
     </div>
-    <div id="wh-wrap"></div>
   </div>
 
   <div id="page-tools" class="page">
+
+    <div class="tool-head">
+      <span class="dash-eyebrow">Tools</span>
+    </div>
 
     <div id="tc-profit" class="tool-card" style="padding-bottom:.6rem">
       <div class="tool-title" style="margin-bottom:.75rem">
@@ -262,22 +259,10 @@
       </div>
     </div>
 
-    <div id="tc-p2p" class="tool-card">
+    <div id="tc-p2p" class="tool-card" style="padding-bottom:.6rem">
       <div class="tool-title" style="margin-bottom:.75rem">
         <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">P2P Spread</h2>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Sell USDT → buy USD at lower rate → reconvert via BDV→Bpay. Shows raw P2P spread and effective net gain after fees.</span></span>
-          <div class="hist-wrap">
-            <button class="hist-btn" onclick="toggleP2PSettings(this)" title="Settings"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-            <div class="hist-popup" id="p2p-settings-popup" style="min-width:200px">
-              <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.625rem">Comisión</div>
-              <div class="field">
-                <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Fee %</span>
-                <input type="number" id="p2p-comm" placeholder="3.6" step="0.1" min="0" value="3.6" autocomplete="off" oninput="saveP2PComm();calcSpread()" style="font-size:13px"/>
-              </div>
-            </div>
-          </div>
-        </div>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Sell USDT → buy USD at lower rate → reconvert via BDV→Bpay. Shows raw P2P spread and effective net gain after fees.</span></span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
         <div class="field">
@@ -289,8 +274,34 @@
           <input type="number" id="p2p-buy" placeholder="0.00" step="0.01" oninput="calcSpread()"/>
         </div>
       </div>
+      <div style="display:flex;justify-content:center;margin-bottom:.375rem">
+        <div class="field" style="width:44%;min-width:120px">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Fee %</span>
+          <input type="number" id="p2p-comm" placeholder="3.6" step="0.1" min="0" value="3.6" autocomplete="off" oninput="saveP2PComm();calcSpread()"/>
+        </div>
+      </div>
       <div id="p2p-result" style="max-width:90%;margin:0 auto">
         <div id="p2p-cards" style="display:grid;grid-template-columns:1fr;gap:8px;max-width:260px;margin:0 auto"></div>
+      </div>
+    </div>
+
+    <div id="tc-bcvemily" class="tool-card">
+      <div class="tool-title" style="margin-bottom:.75rem">
+        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BCV to Emily USD</h2>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Converts USD to Bs at the BCV rate, then buys USDT 10% below market price.</span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD</span>
+          <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
+          <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
+        </div>
+      </div>
+      <div id="be-result" style="max-width:90%;margin:0 auto">
+        <div id="be-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:520px"></div>
       </div>
     </div>
 
@@ -301,7 +312,7 @@
       </div>
       <div class="field-row" style="margin-bottom:.875rem">
         <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BDV Balance ($)</span>
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Balance</span>
           <input type="number" id="bdv-input" placeholder="0.00" step="0.01" oninput="calcBDV()"/>
         </div>
       </div>
@@ -317,7 +328,7 @@
       </div>
       <div class="field-row" style="margin-bottom:.875rem">
         <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BDV Balance ($)</span>
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Balance</span>
           <input type="number" id="wally-input" placeholder="0.00" step="0.01" oninput="calcWally()"/>
         </div>
       </div>
@@ -333,32 +344,12 @@
       </div>
       <div class="field-row" style="margin-bottom:.875rem">
         <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BDV Balance ($)</span>
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Balance</span>
           <input type="number" id="zinli-input" placeholder="0.00" step="0.01" oninput="calcZinli()"/>
         </div>
       </div>
       <div id="zinli-result">
         <div id="zinli-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
-      </div>
-    </div>
-
-    <div id="tc-bcvemily" class="tool-card">
-      <div class="tool-title" style="margin-bottom:.75rem">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BCV to Emily USD</h2>
-        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Convierte dólares a Bs via tasa BCV, luego compra USDT a 10% por debajo del precio de mercado.</span></span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
-        <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD</span>
-          <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
-        </div>
-        <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
-          <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
-        </div>
-      </div>
-      <div id="be-result" style="max-width:90%;margin:0 auto">
-        <div id="be-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:520px"></div>
       </div>
     </div>
 
@@ -497,7 +488,7 @@
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select></div>
+    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Remesa</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES to USD</option></select></div>
     <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
   </div>

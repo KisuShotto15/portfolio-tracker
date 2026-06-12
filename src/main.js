@@ -12,7 +12,7 @@ var VERCEL_SECRET = 'ptk-2025-kisu';
 var AUTOFILL_RULES = [
   { keywords:['income','salario','cobro','pago','freelance','consulting','dividendo','ganancia','utilidad'],                                                                                                       type:'Credit', category:'Income' },
   { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto','bodega','mercado','automercado','central','polleria','panaderia','carneceria','charcuteria','verduras','frutas','lacteos','huevos','harina','arroz','pasta','embutidos','licoreria'], type:'Debit', category:'Groceries', currency:'VES' },
-  { keywords:['remesa'],                                                                                                                                                                                           type:'Credit', wallet:'Zelle' },
+  { keywords:['remesa','emily'],                                                                                                                                                                             type:'Credit', wallet:'Zelle', category:'Remesa' },
   { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv','netuno','simpletv','directv','condominio','alquiler','agua','gas','plomero','electricista','pintura','mantenimiento','ferreteria','homemax','reparacion'], type:'Debit', category:'Home', currency:'VES' },
   { keywords:['enviado','transferencia','familia','apoyo','ayuda','envio','giro'],                                                                                                                                 type:'Debit',  category:'Support' },
   { keywords:['uber','taxi','metro','buseta','gasolina','vamos','yummy','ridery','busvero','mototaxi','encomienda','mudanza','estacionamiento','peaje'],                                                            type:'Debit',  category:'Transport', currency:'USD' },
@@ -357,74 +357,114 @@ function renderWalletHoldings(){
   var upd=document.getElementById('wh-updated');
   if(!wrap) return;
   if(upd&&S.walletHoldingsUpdated) upd.textContent='Updated '+S.walletHoldingsUpdated;
+  renderOnchainWallets();
   var MIN_USD=1;
   var data=(S.walletHoldings||[]).filter(function(h){ return h.balanceUsd>=MIN_USD; });
   var wallets=S.onchainWallets||[];
   if(!wallets.length){ wrap.innerHTML=''; return; }
   if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Click Refresh to load live balances'); return; }
-  var netLabel={'eth':'ETH','arbitrum':'ARB','base':'BASE','bsc':'BSC','bitcoin':'BTC'};
+  var netLabel={'eth':'Ethereum','arbitrum':'Arbitrum','base':'Base','bsc':'BNB Chain','bitcoin':'Bitcoin'};
   var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#5BA4F5','bsc':'#EF9F27','bitcoin':'#F7931A'};
-  var grouped={};
-  data.forEach(function(h){ if(!grouped[h.walletLabel]) grouped[h.walletLabel]=[]; grouped[h.walletLabel].push(h); });
-  var grandTotal=data.reduce(function(s,h){ return s+h.balanceUsd; },0);
-  var html='';
-  if(wallets.length>1){
-    html='<div class="mc" style="margin-bottom:1rem"><div class="mc-l">Total Value</div><div class="mc-v" style="font-size:24px;font-weight:600">'+fmtUSD(grandTotal)+'</div></div>';
-  }
-  var CHEV_DOWN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-  var CHEV_RIGHT='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
-  Object.keys(grouped).forEach(function(label){
-    var items=grouped[label];
-    var wTotal=items.reduce(function(s,h){ return s+h.balanceUsd; },0);
-    var collapsed=_whCollapsed[label]!==false;
-    var rows=items.map(function(h){
-      var net=netLabel[h.network]||h.network; var nc=netColor[h.network]||'#888';
-      return '<tr>'
-        +'<td style="font-weight:500">'+h.symbol+'</td>'
-        +'<td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:'+nc+'18;color:'+nc+';font-weight:600;letter-spacing:.04em">'+net+'</span></td>'
-        +'<td style="text-align:right;font-variant-numeric:tabular-nums">'+h.balance.toLocaleString('en-US',{maximumFractionDigits:6})+'</td>'
-        +'<td style="text-align:right;color:var(--color-text-secondary);font-size:13px">'+fmtUSD(h.price)+'</td>'
-        +'<td style="text-align:right;font-weight:500">'+fmtUSD(h.balanceUsd)+'</td>'
-        +'</tr>';
-    }).join('');
-    html+='<div class="fc" style="margin-bottom:1rem">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none" onclick="toggleWhCard(\''+escHtml(label)+'\')">'
-      +'<div style="display:flex;align-items:center;gap:7px"><h3 style="margin:0">'+escHtml(label)+'</h3><span style="color:rgba(255,255,255,0.28)">'+(collapsed?CHEV_RIGHT:CHEV_DOWN)+'</span></div>'
-      +'<span style="font-size:20px;font-weight:600">'+fmtUSD(wTotal)+'</span>'
-      +'</div>'
-      +(collapsed?'':'<div style="margin-top:1rem"><table><thead><tr><th>Asset</th><th>Network</th><th style="text-align:right">Balance</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th></tr></thead><tbody>'+rows+'</tbody></table></div>')
-      +'</div>';
+  var TOKEN_COLOR={BTC:'#F7931A',ETH:'#627EEA',WETH:'#627EEA',USDC:'#2775CA',USDT:'#26A17B',DAI:'#F5AC37',ARB:'#9CA3AF',BNB:'#F0B90B',MATIC:'#8247E5',OP:'#FF0420',SOL:'#14F195'};
+  var TOKEN_NAME={BTC:'Bitcoin',ETH:'Ethereum',WETH:'Wrapped Ether',USDC:'USD Coin',USDT:'Tether',DAI:'Dai',ARB:'Arbitrum',BNB:'BNB',MATIC:'Polygon',OP:'Optimism',SOL:'Solana'};
+  var STABLE={USDC:1,USDT:1,DAI:1,BUSD:1,TUSD:1,USDP:1,FRAX:1,'USDC.e':1};
+  function tokenColor(sym){ return TOKEN_COLOR[sym]||('hsl('+(Math.abs(hldHash(sym))%360)+' 42% 62%)'); }
+
+  // aggregate by symbol across wallets
+  var bySym={};
+  data.forEach(function(h){
+    var k=h.symbol;
+    if(!bySym[k]) bySym[k]={symbol:k,balance:0,balanceUsd:0,nets:{}};
+    bySym[k].balance+=h.balance; bySym[k].balanceUsd+=h.balanceUsd; bySym[k].nets[h.network]=1;
   });
+  var assets=Object.keys(bySym).map(function(k){ return bySym[k]; }).sort(function(a,b){ return b.balanceUsd-a.balanceUsd; });
+  var grand=assets.reduce(function(s,a){ return s+a.balanceUsd; },0);
+  var largest=assets[0];
+  var stableUsd=assets.filter(function(a){ return STABLE[a.symbol]; }).reduce(function(s,a){ return s+a.balanceUsd; },0);
+  var allNets={}; data.forEach(function(h){ allNets[h.network]=1; });
+  var netCount=Object.keys(allNets).length;
+
+  var html='';
+  // ── top band: total hero + allocation donut ──
+  html+='<div class="hld-top">'
+    +'<div class="hld-hero">'
+      +'<div class="hld-hero-lbl">Total Value</div>'
+      +'<div class="hld-hero-val">'+fmtUSD(grand)+'</div>'
+      +'<div class="hld-hero-meta">'+assets.length+' assets · '+wallets.length+' wallets · '+netCount+' networks</div>'
+      +'<div class="hld-stats">'
+        +'<div class="hld-stat"><span class="hld-stat-l">Largest</span><span class="hld-stat-v">'+largest.symbol+' <span class="hld-stat-x">'+(grand>0?Math.round(largest.balanceUsd/grand*100):0)+'%</span></span></div>'
+        +'<div class="hld-stat"><span class="hld-stat-l">Stablecoins</span><span class="hld-stat-v">'+fmtShortUSD(stableUsd)+' <span class="hld-stat-x">'+(grand>0?Math.round(stableUsd/grand*100):0)+'%</span></span></div>'
+        +'<div class="hld-stat"><span class="hld-stat-l">Networks</span><span class="hld-stat-v">'+netCount+'</span></div>'
+      +'</div>'
+    +'</div>'
+    +'<div class="hld-donut-card">'
+      +'<span class="cleg" style="margin:0">Allocation by asset</span>'
+      +'<div class="hld-donut-wrap">'
+        +'<div class="hld-donut"><canvas id="hld-donut"></canvas><div class="hld-donut-center"><b>'+assets.length+'</b><span>assets</span></div></div>'
+        +'<div class="hld-legend">'+assets.slice(0,6).map(function(a){ return '<div class="hld-leg-item"><i style="background:'+tokenColor(a.symbol)+'"></i><span class="hld-leg-name">'+(TOKEN_NAME[a.symbol]||a.symbol)+'</span><span class="hld-leg-val">'+(grand>0?(a.balanceUsd/grand*100).toFixed(1):0)+'%</span></div>'; }).join('')+'</div>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+
+  // ── assets list (clean rows, aggregated) ──
+  html+='<div class="hld-list-head"><span class="cleg" style="margin:0">Assets</span><span class="hld-list-meta">Aggregated across wallets</span></div>';
+  html+='<div class="hld-list">';
+  assets.forEach(function(a){
+    var col=tokenColor(a.symbol);
+    var pct=grand>0?(a.balanceUsd/grand*100):0;
+    var chains=Object.keys(a.nets).map(function(nk){ return '<span class="hld-net" style="--nc:'+(netColor[nk]||'#888')+'">'+(netLabel[nk]||nk)+'</span>'; }).join('');
+    var chipFont=a.symbol.length>3?';font-size:11px':'';
+    html+='<div class="hld-row">'
+      +'<div class="hld-rmain">'
+        +'<span class="hld-chip" style="--tc:'+col+chipFont+'">'+escHtml(a.symbol.slice(0,4))+'</span>'
+        +'<div class="hld-id"><span class="hld-sym">'+escHtml(TOKEN_NAME[a.symbol]||a.symbol)+'</span><div class="hld-chains">'+chains+'</div></div>'
+        +'<div class="hld-fig"><span class="hld-usd">'+fmtUSD(a.balanceUsd)+'</span><span class="hld-sub">'+fmtBal(a.balance)+' '+escHtml(a.symbol)+' · '+pct.toFixed(1)+'%</span></div>'
+      +'</div>'
+      +'<div class="hld-bar"><i style="width:'+pct.toFixed(1)+'%;background:'+col+'"></i></div>'
+    +'</div>';
+  });
+  html+='</div>';
+
   wrap.innerHTML=html;
+  drawHoldingsDonut(assets, tokenColor);
 }
-function toggleWhCard(label){ _whCollapsed[label]=!_whCollapsed[label]; renderWalletHoldings(); }
+var whDonutChart=null;
+function drawHoldingsDonut(assets, tokenColor){
+  var el=document.getElementById('hld-donut'); if(!el||!window.Chart) return;
+  if(whDonutChart){ whDonutChart.destroy(); whDonutChart=null; }
+  whDonutChart=new Chart(el,{type:'doughnut',data:{labels:assets.map(function(a){ return a.symbol; }),datasets:[{data:assets.map(function(a){ return parseFloat(a.balanceUsd.toFixed(2)); }),backgroundColor:assets.map(function(a){ return tokenColor(a.symbol); }),borderWidth:0,spacing:2}]},options:{cutout:'72%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},animation:false,responsive:true,maintainAspectRatio:false}});
+}
+function hldHash(s){ var h=0; s=String(s); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return h; }
+function fmtShortUSD(v){ return '$'+Math.round(v).toLocaleString('en-US'); }
+function fmtBal(b){ return b.toLocaleString('en-US',{maximumFractionDigits:6}); }
+function toggleWhCard(){}
 window.toggleWhCard=toggleWhCard;
 function toggleOwCard(){
-  var body=document.getElementById('ow-body'); var chev=document.getElementById('ow-chev');
-  var open=body.style.display!=='none';
-  body.style.display=open?'none':'block';
-  chev.innerHTML=open
-    ?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
-    :'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  var card=document.getElementById('hld-wallets'); if(card) card.classList.toggle('open');
 }
 window.toggleOwCard=toggleOwCard;
 
 function renderOnchainWallets(){
   var wrap=document.getElementById('ow-list');
-  if(!wrap) return;
+  var cnt=document.getElementById('ow-count');
   var wallets=S.onchainWallets||[];
-  if(!wallets.length){ wrap.innerHTML='<p style="font-size:13px;color:var(--color-text-secondary);padding:2px 0">No wallets added yet.</p>'; return; }
+  if(cnt) cnt.textContent='Wallets · '+wallets.length;
+  if(!wrap) return;
+  if(!wallets.length){ wrap.innerHTML='<p style="font-size:13px;color:var(--txt3);padding:6px 2px">No wallets added yet.</p>'; return; }
   var chainColor={'evm':'#378ADD','btc':'#F7931A'};
   var chainLabel={'evm':'EVM','btc':'BTC'};
+  var totals={}; (S.walletHoldings||[]).forEach(function(h){ totals[h.walletLabel]=(totals[h.walletLabel]||0)+h.balanceUsd; });
   wrap.innerHTML=wallets.map(function(w){
     var c=w.chain||'evm'; var cc=chainColor[c]||'#888'; var cl=chainLabel[c]||c.toUpperCase();
-    var addr=w.address.length>20?w.address.slice(0,10)+'…'+w.address.slice(-6):w.address;
-    return '<div class="ow-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
-      +'<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:'+cc+'18;color:'+cc+';font-weight:600;letter-spacing:.04em;flex-shrink:0">'+cl+'</span>'
-      +'<span style="font-weight:500;flex-shrink:0;font-size:14px">'+escHtml(w.label)+'</span>'
-      +'<span style="font-size:11px;color:var(--color-text-secondary);font-family:monospace;flex:1">'+addr+'</span>'
-      +'<button class="btn btns" onclick="copyAddr(\''+w.address+'\')" title="Copy full address" style="padding:2px 8px;opacity:0.55;font-size:13px">⎘</button>'
-      +'<button class="btn btnd" onclick="deleteOnchainWallet('+w.id+')">&#x2715;</button>'
+    var addr=w.address.length>20?w.address.slice(0,8)+'…'+w.address.slice(-5):w.address;
+    var tot=totals[w.label]||0;
+    return '<div class="hld-wrow">'
+      +'<span class="hld-wbadge" style="--nc:'+cc+'">'+cl+'</span>'
+      +'<span class="hld-wlabel">'+escHtml(w.label)+'</span>'
+      +'<span class="hld-waddr">'+addr+'</span>'
+      +(tot>0?'<span class="hld-wval">'+fmtUSD(tot)+'</span>':'')
+      +'<button class="hld-wbtn" onclick="copyAddr(\''+w.address+'\')" title="Copy address">⎘</button>'
+      +'<button class="hld-wbtn del" onclick="deleteOnchainWallet('+w.id+')" title="Remove">✕</button>'
       +'</div>';
   }).join('');
 }
@@ -628,6 +668,7 @@ var CAT_META={
   'Business':     {bg:'#0f4a4a', svg:'<rect x="1.5" y="6" width="13" height="8" rx="1.5"/><path d="M5 6V4.5A1.5 1.5 0 0 1 6.5 3h3A1.5 1.5 0 0 1 11 4.5V6"/><line x1="1.5" y1="10" x2="14.5" y2="10"/>'},
   'Support':      {bg:'#5a1515', svg:'<path d="M8 12.5C6 11 2 8.5 2 5.5A3 3 0 0 1 8 4 3 3 0 0 1 14 5.5C14 8.5 10 11 8 12.5z"/>'},
   'Savings':      {bg:'#0f3060', svg:'<rect x="1.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="7" cy="8" r="2.5"/><line x1="7" y1="8" x2="8.8" y2="6.5"/><line x1="12.5" y1="5.5" x2="14.5" y2="5.5"/><line x1="12.5" y1="10.5" x2="14.5" y2="10.5"/>'},
+  'Remesa':       {bg:'#1a3a5c', svg:'<line x1="2" y1="8" x2="11" y2="8"/><polyline points="8 5 11 8 8 11"/><path d="M11 3h2a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-2"/>'},
 };
 function catIcon(cat){
   var m=CAT_META[cat]||{bg:'#252535',svg:''};
@@ -1148,9 +1189,9 @@ function renderCatChart(month){
     if(leg) leg.innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>';
     return;
   }
-  if(leg) leg.innerHTML=cats.map(function(c,i){ return '<div style="display:flex;align-items:center;gap:6px;font-size:13px"><span style="width:9px;height:9px;border-radius:2px;background:'+colors[i]+';flex-shrink:0"></span><span style="color:var(--color-text-secondary);flex:1">'+c+'</span><span style="font-weight:500">$'+vals[i].toLocaleString('en-US',{minimumFractionDigits:2})+'</span><span style="color:var(--color-text-secondary);font-size:11px;min-width:30px;text-align:right">'+(total>0?Math.round(vals[i]/total*100):0)+'%</span></div>'; }).join('');
+  if(leg) leg.innerHTML=cats.map(function(c,i){ return '<div class="bdg-leg-item"><i style="background:'+colors[i]+'"></i><span class="bdg-leg-name">'+c+'</span><span class="bdg-leg-val">$'+Math.round(vals[i]).toLocaleString('en-US')+'</span></div>'; }).join('');
   if(cChart){ cChart.destroy(); cChart=null; }
-  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'65%'}});
+  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,spacing:2,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'72%'}});
 }
 
 function renderEquityChart(){
@@ -1372,46 +1413,45 @@ function renderBudget(){
   var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
 
-  function kpi(label,val,color){
-    return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div></div>';
-  }
+  var monthLabel=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'';
+  var remColor=remaining>=0?'#4ED9A4':'#E24B4A';
+  function bstat(l,v,col){ return '<div class="bdg-stat"><span class="bdg-stat-l">'+l+'</span><span class="bdg-stat-v"'+(col?' style="color:'+col+'"':'')+'>'+v+'</span></div>'; }
 
   var html='';
 
-  // Header row
-  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-    +'<div style="font-size:18px;font-weight:600;letter-spacing:-0.3px">Budget</div>'
-    +'<select onchange="window._budMonthSel(this.value)" style="padding:5px 14px;border:0.5px solid rgba(255,255,255,0.1);border-radius:20px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px;cursor:pointer;color-scheme:dark">'
+  // Header
+  html+='<div class="dash-head">'
+    +'<span class="dash-eyebrow">Budget</span>'
+    +'<select onchange="window._budMonthSel(this.value)">'
     +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+m+'</option>'; }).join('')
     +'</select>'
     +'</div>';
 
-  // KPI strip
-  html+='<div class="kpi-strip kpi-strip-4" style="margin-bottom:1.1rem">'
-    +kpi('Income',fmtUSD(income),'#5DCAA5')
-    +kpi('Spent',fmtUSD(spent),pct>90?'#E24B4A':pct>70?'#EF9F27':'#fff')
-    +kpi('Savings Rate',savRate+'%',savRate>=20?'#9B70F0':savRate>=10?'#EF9F27':'#E24B4A')
-    +kpi('Remaining',fmtUSD(Math.abs(remaining)),remaining>=0?'#5DCAA5':'#E24B4A')
-    +'</div>';
+  // Top band — hero + donut
+  html+='<div class="bdg-top">'
+    +'<div class="bdg-hero">'
+      +'<div class="bdg-hero-lbl">Remaining'+(monthLabel?' · '+monthLabel:'')+'</div>'
+      +'<div class="bdg-hero-val" style="color:'+remColor+'">'+fmtUSD(Math.abs(remaining))+(remaining<0?' over':'')+'</div>'
+      +'<div class="bdg-pb"><div class="bdg-pf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
+      +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '+fmtUSD(S.budgetTotal)+'</span><span class="bdg-pct">'+pct+'%</span></div>'
+      +'<div class="bdg-stats">'
+        +bstat('Income',fmtUSD(income),'#5DCAA5')
+        +bstat('Spent',fmtUSD(spent),'')
+        +bstat('Savings rate',savRate+'%','#9B70F0')
+      +'</div>'
+    +'</div>'
+    +'<div class="bdg-donut-card">'
+      +'<span class="cleg" style="margin:0">Spending by category</span>'
+      +'<div class="bdg-donut-wrap">'
+        +'<div class="bdg-donut"><canvas id="chart-cat"></canvas><div class="bdg-donut-center"><b>$'+Math.round(spent).toLocaleString('en-US')+'</b><span>spent</span></div></div>'
+        +'<div class="bdg-legend" id="cat-leg"></div>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
 
-  // Total budget bar
-  html+='<div class="fc" style="margin-bottom:1.1rem">'
-    +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">'
-    +'<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em">Monthly Budget</span>'
-    +'<span style="font-size:13px;font-weight:500"><span style="color:'+bc+'">'+pct+'%</span>'
-    +'<span style="color:rgba(255,255,255,0.3)">&nbsp;·&nbsp;</span>'
-    +'<span style="color:rgba(255,255,255,0.55)">'+fmtUSD(spent)+' of '+fmtUSD(S.budgetTotal)+'</span></span>'
-    +'</div>'
-    +'<div class="pb" style="height:12px;border-radius:6px">'
-    +'<div class="pf" style="width:'+pct+'%;background:'+bc+';height:100%;border-radius:6px"></div>'
-    +'</div>'
-    +'<div style="margin-top:8px;font-size:12px;color:'+(remaining>=0?'#5DCAA5':'#E24B4A')+'">'
-    +(remaining>=0?fmtUSD(remaining)+' remaining':fmtUSD(Math.abs(remaining))+' over budget')
-    +'</div>'
-    +'</div>';
-
-  // Category card grid
-  html+='<div class="budget-cat-grid" style="margin-bottom:1.1rem">';
+  // Categories grid
+  html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span><span class="bdg-cat-meta">'+BUDGET_CATS.length+' tracked</span></div>';
+  html+='<div class="bdg-cats">';
   BUDGET_CATS.forEach(function(cat){
     var s=catNetSpend(month, [cat]);
     var catLim=(S.categoryBudgets||{})[cat]||0;
@@ -1419,30 +1459,23 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    html+='<div class="budget-cat-card" style="border-left-color:'+cc+'">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-      +'<span class="tag '+tagCat(cat)+'">'+cat+'</span>'
-      +'<span style="font-size:11px;color:rgba(255,255,255,0.35)">'+cp+'%</span>'
-      +'</div>'
-      +'<div style="font-size:22px;font-weight:700;margin-bottom:10px;letter-spacing:-0.5px;color:'+cc+'">'+fmtUSD(s)+'</div>'
-      +'<div class="pb" style="height:8px;border-radius:4px">'
-      +'<div class="pf" style="width:'+cp+'%;background:'+barC+';height:100%;border-radius:4px"></div>'
-      +'</div>'
-      +'<div style="margin-top:7px;font-size:11px;color:rgba(255,255,255,0.28)">'
-      +(catLim>0?'of '+fmtUSD(catLim)+' limit':'no limit set')
-      +'</div>'
+    html+='<div class="bdg-cat">'
+      +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span><span class="bdg-cat-pct">'+cp+'%</span></div>'
+      +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
+      +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
+      +'<div class="bdg-cat-lim">'+(catLim>0?'of '+fmtUSD(catLim)+' limit':'no limit set')+'</div>'
       +'</div>';
   });
   html+='</div>';
 
-  // Configure limits toggle
-  html+='<div class="fc">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none" onclick="window._budLimitsToggle()">'
-    +'<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em">Configure Limits</span>'
-    +'<span style="font-size:12px;color:rgba(255,255,255,0.35)">'+(_budLimitsOpen?'▲':'▼')+'</span>'
-    +'</div>';
+  // Configure limits accordion
+  html+='<div class="bdg-limits'+(_budLimitsOpen?' open':'')+'">'
+    +'<button class="bdg-limits-head" onclick="window._budLimitsToggle()">'
+    +'<span class="cleg" style="margin:0">Configure limits</span>'
+    +'<svg class="bdg-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    +'</button>';
   if(_budLimitsOpen){
-    html+='<div style="margin-top:1rem">'
+    html+='<div class="bdg-limits-body">'
       +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Monthly Total</div>'
       +'<div class="fr" style="max-width:280px;margin-bottom:1.25rem">'
       +'<input type="number" id="bud-total" value="'+S.budgetTotal+'" placeholder="Total USD" step="1"/>'
@@ -1542,52 +1575,61 @@ function renderWallets(){
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
   ].filter(function(a){return a.v>0;});
   var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
-  var wvLeg=wvA.map(function(a){return '<span class="key"><span style="width:8px;height:8px;border-radius:99px;background:'+a.col+';display:inline-block;flex-shrink:0"></span>'+a.nm+' <span style="font-family:var(--font-num);color:var(--txt3)">'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</span></span>';}).join('');
+  var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i>'+a.nm+' <b>'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</b></span>';}).join('');
 
   // ── icon helpers ─────────────────────────────────────────────────────
-  var icP='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-  var icX='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  var icR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
-  function dot(col){return '<span style="width:7px;height:7px;border-radius:99px;background:'+col+';flex-shrink:0;display:inline-block"></span>';}
-  function wvRow(dotCol,name,meta,bal,acts){
-    return '<div class="wv-row" onclick="selectWvRow(this)"><div class="wv-info"><div class="nm">'+dot(dotCol)+name+'</div>'+(meta?'<div class="meta">'+meta+'</div>':'')+'</div><span class="spacer"></span><div class="wv-bal-col"><span class="bal">'+bal+'</span>'+(acts?'<span class="acts" onclick="event.stopPropagation()">'+acts+'</span>':'')+'</div></div>';
+  var icP='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  var icX='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  function balHtml(v){ return '<span class="wm-bal">'+fmtUSD(v)+'</span>'; }
+  function wmRow(color,mono,statusClass,name,meta,right,acts){
+    var st=statusClass?'<i class="wm-status '+statusClass+'"></i>':'';
+    return '<div class="wm-row"><span class="wm-chip" style="--c:'+color+'">'+mono+st+'</span>'
+      +'<div class="wm-rid"><span class="wm-name">'+name+'</span>'+(meta?'<span class="wm-meta">'+meta+'</span>':'')+'</div>'
+      +right+(acts?'<span class="wm-acts" onclick="event.stopPropagation()">'+acts+'</span>':'')+'</div>';
   }
-  function apiRow(name,connected,bal,upd){
-    if(connected) return wvRow(bal!==null?'#4ED9A4':'#E45858', name, upd?'Updated '+upd:'', bal!==null?fmtUSD(bal):'', '');
-    return '<div class="wv-row"><div class="wv-info"><div class="nm">'+dot('#555')+name+'</div><div class="meta">Not connected</div></div><span class="spacer"></span><button class="btn btns btnp" onclick="showPage(\'settings\',null)" style="font-size:11px;padding:4px 10px">Connect</button></div>';
+  function apiRow(color,mono,name,connected,balv,upd,metaExtra){
+    if(connected){
+      var meta=(metaExtra?metaExtra:'')+(metaExtra&&upd?' · ':'')+(upd?'Updated '+upd:'');
+      return wmRow(color,mono,balv!==null?'on':'off',name,meta||'Connected',balv!==null?balHtml(balv):'<span class="wm-bal" style="color:var(--txt3)">—</span>','');
+    }
+    return wmRow(color,mono,'off',name,'Not connected','<button class="btn btns btnp wm-connect" onclick="showPage(\'settings\',null)">Connect</button>','');
   }
 
-  // ── left column: Exchanges ────────────────────────────────────────────
+  // ── Exchanges ─────────────────────────────────────────────────────────
   var exRows=''
-    +apiRow('Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated)
-    +apiRow('Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated)
-    +apiRow('Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated)
-    +apiRow('OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated)
-    +apiRow('Trezor · BSC USDT',true,S.trezorBalance,S.trezorUpdated);
+    +apiRow('#9B70F0','B','Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'')
+    +apiRow('#FB923C','B','Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'')
+    +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'')
+    +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'')
+    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT');
 
-  // ── right column: Trackers + Manual ──────────────────────────────────
+  // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){return w.name===name;});
     var meta=name==='Zelle'?'+5%: '+fmtUSD(total*1.05):'Calculated from transactions';
     var acts=mw?'<button class="wico" onclick="renameManualWallet('+mw.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>':'';
-    return wvRow('#EF9F27', escHtml(name)+' <span class="badge-t">tracker</span>', meta, fmtUSD(total), acts);
+    return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name)+' <span class="wm-badge">tracker</span>',meta,balHtml(total),acts);
   }).join('');
   var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
-    return wvRow('#EF9F27', escHtml(w.name), 'Manual balance', fmtUSD(w.balance), acts);
+    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),'Manual balance',balHtml(w.balance),acts);
   }).join('');
 
+  var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
+  var walletCount=5+trackerNames.length+manualNormalCount;
+  var notConn=[S.binanceBalance,S.bibiBinanceBalance,S.bybitBalance,S.okxBalance].filter(function(b){return b===null;}).length;
+
   grid.innerHTML=
-    '<div class="wv-hero">'
-      +'<div class="wv-hero-top"><div><div class="wv-total-lbl">Total · All Wallets</div><div class="wv-total">'+fmtUSD(grand)+'</div></div></div>'
-      +'<div class="wv-alloc">'+wvBar+'</div>'
-      +'<div class="wv-legend">'+wvLeg+'</div>'
+    '<div class="wm-hero">'
+      +'<div class="wm-hero-lbl">Total · All Wallets</div>'
+      +'<div class="wm-hero-val">'+fmtUSD(grand)+'</div>'
+      +'<div class="wm-hero-meta">'+walletCount+' wallets'+(notConn>0?' · '+notConn+' not connected':'')+'</div>'
+      +'<div class="wm-alloc">'+wvBar+'</div>'
+      +'<div class="wm-legend">'+wvLeg+'</div>'
     +'</div>'
-    +'<div class="wv-cols">'
-      +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Exchanges</span><span class="wv-grp-sum">'+fmtUSD(apiTotal)+'</span></div>'+exRows+'</div>'
-      +'<div>'
-        +'<div class="wv-grp"><div class="wv-grp-head"><span class="wv-grp-title">Trackers</span><span class="wv-grp-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div>'+trRows+mnRows+'</div>'
-      +'</div>'
+    +'<div class="wm-cols">'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers &amp; Manual</span><span class="wm-group-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div><div class="wm-rows">'+trRows+mnRows+'</div><button class="wm-add" onclick="openWalletForm()">+ Add wallet</button></div>'
     +'</div>';
 }
 
@@ -1869,16 +1911,12 @@ window.handleCSV = handleCSV;
 window.save = save;
 
 function renderCalcCards(cardsId, resultId, cards, small){
-  var pad   = small ? '.28rem .4rem' : '.75rem .625rem';
-  var vSize = small ? '13px' : '18px';
-  var lSize = small ? '9px'  : '11px';
-  var sSize = small ? '8px'  : '10px';
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
-    var color = c.green ? 'var(--color-accent)' : c.red ? '#E24B4A' : 'var(--color-text-primary)';
-    return '<div class="fc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:9px;padding:'+pad+';text-align:center">'
-      +'<div style="font-size:'+lSize+';color:var(--color-text-secondary);margin-bottom:2px">'+c.label+'</div>'
-      +'<div class="bdv-val" style="font-size:'+vSize+';font-weight:500;color:'+color+'">'+c.value+'</div>'
-      +'<div style="font-size:'+sSize+';color:var(--color-text-secondary);margin-top:2px">'+c.sub+'</div>'
+    var cls = c.green ? ' g' : c.red ? ' r' : '';
+    return '<div class="tcalc-card'+(small?' tcalc-sm':'')+'">'
+      +'<div class="tcalc-lbl">'+c.label+'</div>'
+      +'<div class="tcalc-val'+cls+'">'+c.value+'</div>'
+      +'<div class="tcalc-sub">'+c.sub+'</div>'
       +'</div>';
   }).join('');
   document.getElementById(resultId).style.display = 'block';
@@ -1887,28 +1925,22 @@ function renderCalcCards(cardsId, resultId, cards, small){
 var TOOLS = [
   { id:'profit',   label:'Profit Calc'    },
   { id:'p2p',      label:'P2P Spread'     },
+  { id:'bcvemily', label:'BCV→Emily USD' },
   { id:'bdvbpay',  label:'BDV→Bpay'      },
   { id:'bdvwally', label:'BDV→Wally'     },
   { id:'bdvzinli', label:'BDV→Zinli'     },
-  { id:'bcvemily', label:'BCV→Emily USD' },
 ];
 
 function renderToolToggles(){
   if(!S.hiddenTools) S.hiddenTools={};
   var wrap=document.getElementById('tools-toggles');
   if(!wrap) return;
-  var green='#22c55e';
   wrap.innerHTML='<div class="fc">'
-    +'<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem">Manage Tools</div>'
-    +'<div style="display:flex;gap:16px;flex-wrap:wrap">'
+    +'<div class="cleg" style="margin-bottom:14px">Manage tools</div>'
+    +'<div class="tool-toggle-row">'
     +TOOLS.map(function(t){
-      var hidden=!!S.hiddenTools[t.id];
-      var boxBg=hidden?'transparent':green;
-      var boxBorder=hidden?'rgba(255,255,255,0.22)':green;
-      return '<div onclick="toggleTool(\''+t.id+'\')" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;user-select:none">'
-        +'<span style="font-size:10px;color:rgba(255,255,255,'+(hidden?'0.4':'0.75')+');text-transform:uppercase;letter-spacing:.05em">'+t.label+'</span>'
-        +'<div style="width:20px;height:20px;border:1.5px solid '+boxBorder+';border-radius:4px;background:'+boxBg+'"></div>'
-        +'</div>';
+      var on=!S.hiddenTools[t.id];
+      return '<button class="tool-toggle'+(on?' on':'')+'" onclick="toggleTool(\''+t.id+'\')">'+t.label+'</button>';
     }).join('')
     +'</div>'
     +'</div>';
@@ -1940,9 +1972,9 @@ function calcProfit(){
 
   var isPos = profit >= 0;
   renderCalcCards('pc-cards','pc-result',[
-    { label:'USDT recibidos',  value: usdt > 0 ? usdt.toFixed(2)+' USDT' : '—', sub: '—' },
-    { label:'Bpay Recharge',   value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2)+' después de Bpay' },
-    { label:'Profit neto',     value:(isPos?'+':'')+'$'+profit.toFixed(2), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
+    { label:'Received', value: usdt > 0 ? usdt.toFixed(2) : '—', sub:'in USDT' },
+    { label:'Recharge', value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2)+' after fee' },
+    { label:'Profit',   value:(isPos?'+':'')+'$'+profit.toFixed(2), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
   ], true);
 }
 window.calcProfit = calcProfit;
@@ -1965,7 +1997,7 @@ function calcSpread(){
   var netPct   = sellRate && buyRate ? ((sellRate / buyRate) * (1 - comm / 100) - 1) * 100 : 0;
   var pct = function(n){ return (n>=0?'+':'')+n.toFixed(2)+'%'; };
   renderCalcCards('p2p-cards','p2p-result',[
-    { label:'P2P Spread', value:pct(netPct), sub: sellRate&&buyRate ? sellRate+' → '+buyRate : '—', green:netPct>0, red:netPct<0 },
+    { label:'Spread', value:pct(netPct), sub: sellRate&&buyRate ? sellRate+' → '+buyRate : '—', green:netPct>0, red:netPct<0 },
   ]);
 }
 window.calcSpread = calcSpread;
@@ -1977,9 +2009,9 @@ function calcBDV(){
   var lost     = bank - received;
   var lostPct  = bank > 0 ? (lost / bank) * 100 : 0;
   renderCalcCards('bdv-cards','bdv-result',[
-    { label:'Bpay recharge', value:'$'+charge.toFixed(2),   sub:'charged on card' },
-    { label:'You receive',   value:'$'+received.toFixed(2), sub:'after Bpay fee', green:true },
-    { label:'Total lost',    value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of balance', red:true },
+    { label:'Recharge', value:'$'+charge.toFixed(2),   sub:'on card' },
+    { label:'Received', value:'$'+received.toFixed(2), sub:'after fee', green:true },
+    { label:'Lost',     value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of total', red:true },
   ]);
 }
 window.calcBDV = calcBDV;
@@ -1996,9 +2028,9 @@ function calcWalletUpfront(bank, walletFeeRate, resultId, cardsId){
   var lost       = bank - received;
   var lostPct    = bank > 0 ? (lost / bank) * 100 : 0;
   renderCalcCards(cardsId, resultId, [
-    { label:'You Recharge', value:'$'+received.toFixed(2), sub:'deposited to wallet', green:true },
-    { label:'Wallet fee',   value:'$'+walletFee.toFixed(2),sub:'charged upfront' },
-    { label:'Total lost',   value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of balance', red:true },
+    { label:'Received', value:'$'+received.toFixed(2), sub:'to wallet', green:true },
+    { label:'Fee',      value:'$'+walletFee.toFixed(2),sub:'upfront' },
+    { label:'Lost',     value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of total', red:true },
   ]);
 }
 
@@ -2012,8 +2044,8 @@ function calcBCVEmily(){
   var usdtOut       = (totalBs > 0 && effectiveRate > 0) ? totalBs / effectiveRate : 0;
 
   renderCalcCards('be-cards','be-result',[
-    { label:'Total Bs',       value: totalBs > 0 ? totalBs.toFixed(2)+' Bs' : '—', sub: bcvRate ? usd+'$ × '+bcvRate+' Bs' : 'Tasa BCV no disponible' },
-    { label:'USDT recibidos', value: usdtOut > 0 ? usdtOut.toFixed(2)+' USDT' : '—', sub: effectiveRate > 0 ? 'tasa efectiva: '+effectiveRate.toFixed(2) : '—', green: usdtOut > 0 },
+    { label:'Total Bs', value: totalBs > 0 ? totalBs.toFixed(2)+' Bs' : '—', sub: bcvRate ? usd+'$ × '+bcvRate : 'BCV rate N/A' },
+    { label:'Received', value: usdtOut > 0 ? usdtOut.toFixed(2)+' USDT' : '—', sub: effectiveRate > 0 ? 'rate '+effectiveRate.toFixed(2) : '—', green: usdtOut > 0 },
   ]);
 }
 window.calcBCVEmily = calcBCVEmily;
