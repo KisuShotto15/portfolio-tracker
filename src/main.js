@@ -63,6 +63,7 @@ function setSyncStatus(state, msg){
   var colors={synced:'#5DCAA5', syncing:'#EF9F27', offline:'#888', error:'#E24B4A'};
   if(dot){ dot.style.background=colors[state]||'#888'; dot.classList.toggle('is-syncing',state==='syncing'); }
   if(lbl) lbl.textContent=msg||state;
+  var sw=document.querySelector('.sb-sync'); if(sw) sw.title=msg||state;
 }
 
 function saveLocal(){ try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
@@ -221,7 +222,7 @@ async function forcePush(){
 function snapshot(){ undoStack.push(JSON.stringify(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
 function doUndo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function doRedo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.style.opacity=undoStack.length?'1':'0.35'; if(r) r.style.opacity=redoStack.length?'1':'0.35'; }
+function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
 
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return true; return w?w.trackerOnly===true:false; }
@@ -497,7 +498,7 @@ async function refreshWalletHoldings(){
   var btn=document.querySelector('[onclick="refreshWalletHoldings()"]');
   var wrap=document.getElementById('wh-wrap');
   if(btn){ btn.disabled=true; btn.textContent='Loading...'; }
-  if(wrap) wrap.innerHTML='<div class="empty">Loading...</div>';
+  if(wrap) wrap.innerHTML='<div class="empty"><span class="spin"></span>Loading…</div>';
   try{ await fetchWalletHoldings(); renderWalletHoldings(); }
   catch(e){ console.error('fetchWalletHoldings:',e); if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+(e.message||e.toString())+'</div>'; }
   finally{ if(btn){ btn.disabled=false; btn.textContent='↺ Refresh'; } }
@@ -1732,8 +1733,8 @@ function showPage(id,btn,arg){
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools') renderToolToggles();
   else if(id==='history') renderHistory(arg||'snapshots');
-  document.querySelector('.sb').classList.remove('open');
-  document.getElementById('overlay').classList.remove('open');
+  var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
+  var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
 }
 window._historyView='snapshots';
@@ -1834,9 +1835,8 @@ window.deleteSnapshotFromHistory=deleteSnapshotFromHistory;
 
 // Expose functions needed by inline HTML event handlers
 function toggleSidebar(){
-  var sb=document.querySelector('.sb');
-  sb.classList.toggle('open');
-  document.getElementById('overlay').classList.toggle('open');
+  var sb=document.querySelector('.sb'); if(sb) sb.classList.toggle('open');
+  var ov=document.getElementById('overlay'); if(ov) ov.classList.toggle('open');
   document.body.classList.toggle('nav-open');
 }
 window.toggleSidebar = toggleSidebar;

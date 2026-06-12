@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-192-v2.png">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta name="theme-color" content="#9B70F0">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,10 +17,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
-<button class="hamburger" onclick="toggleSidebar()">
-  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="4" x2="15" y2="4"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="12" x2="15" y2="12"/></svg>
-</button>
-<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 <div class="app">
 <nav class="sb">
   <div class="sb-logo">
@@ -28,37 +24,37 @@
   </div>
   <div class="sb-sync">
     <span class="sync-dot" id="sync-dot" style="background:#888"></span>
-    <span id="sync-label" class="sync-label-text">Synced</span>
+    <span id="sync-label" class="sync-label-text" aria-live="polite">Synced</span>
   </div>
   <button id="pwa-install-btn" onclick="installPWA()" title="Install app" style="display:none;align-items:center;gap:6px;background:rgba(155,112,240,0.15);border:1px solid rgba(155,112,240,0.3);color:#9B70F0;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;width:calc(100% - 2rem);margin:0 1rem">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4 7l4 4 4-4"/><path d="M2 13h12"/></svg>
     Install App
   </button>
-  <button class="nb active" data-tooltip="Dashboard" onclick="showPage('summary',this)">
+  <button class="nb active" data-tooltip="Dashboard" aria-label="Dashboard" onclick="showPage('summary',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
     <span class="nb-label">Dashboard</span>
   </button>
-  <button class="nb" data-tooltip="Transactions" onclick="showPage('transactions',this)">
+  <button class="nb" data-tooltip="Transactions" aria-label="Transactions" onclick="showPage('transactions',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v12M2 11l3 3 3-3"/><path d="M11 14V2M8 5l3-3 3 3"/></svg>
     <span class="nb-label">Transactions</span>
   </button>
-  <button class="nb" data-tooltip="Budget" onclick="showPage('budget',this)">
+  <button class="nb" data-tooltip="Budget" aria-label="Budget" onclick="showPage('budget',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 8L8 2A6 6 0 0 1 14 8Z" fill="currentColor" stroke="none" opacity="0.4"/><line x1="8" y1="8" x2="8" y2="2"/><line x1="8" y1="8" x2="14" y2="8"/></svg>
     <span class="nb-label">Budget</span>
   </button>
-  <button class="nb" data-tooltip="Wallets" onclick="showPage('wallets',this)">
+  <button class="nb" data-tooltip="Wallets" aria-label="Wallets" onclick="showPage('wallets',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="14" height="9" rx="1.5"/><path d="M1 7h14"/><path d="M11 10.5h2"/></svg>
     <span class="nb-label">Wallets</span>
   </button>
-  <button class="nb" data-tooltip="Holdings" onclick="showPage('holdings',this)">
+  <button class="nb" data-tooltip="Holdings" aria-label="Holdings" onclick="showPage('holdings',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="2" x2="4" y2="4"/><rect x="2" y="4" width="4" height="5" rx="0.5"/><line x1="4" y1="9" x2="4" y2="11"/><line x1="11" y1="1" x2="11" y2="3"/><rect x="9" y="3" width="4" height="7" rx="0.5"/><line x1="11" y1="10" x2="11" y2="12"/></svg>
     <span class="nb-label">Holdings</span>
   </button>
-  <button class="nb" data-tooltip="Tools" onclick="showPage('tools',this)">
+  <button class="nb" data-tooltip="Tools" aria-label="Tools" onclick="showPage('tools',this)">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><rect x="4" y="3" width="8" height="3" rx="0.5"/><circle cx="5" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="8" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="11" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
     <span class="nb-label">Tools</span>
   </button>
-  <button class="nb" data-tooltip="Settings" style="margin-top:auto" onclick="showPage('settings',this)">
+  <button class="nb" data-tooltip="Settings" aria-label="Settings" style="margin-top:auto" onclick="showPage('settings',this)">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
     <span class="nb-label">Settings</span>
   </button>
@@ -69,7 +65,7 @@
     <!-- Header: title + month filter -->
     <div class="dash-head">
       <span class="dash-eyebrow">Dashboard</span>
-      <select id="sum-month" onchange="renderSummary()"></select>
+      <select id="sum-month" aria-label="Select month" onchange="renderSummary()"></select>
     </div>
 
     <div class="dash-grid">
@@ -79,7 +75,7 @@
           <div class="nw-hero-top">
             <span class="nw-lbl">Net Worth</span>
             <div style="display:flex;align-items:center;gap:6px">
-              <button class="btn btns" onclick="recordSnapshot()">+ Snapshot</button>
+              <button class="btn btns btn-accent" onclick="recordSnapshot()">+ Snapshot</button>
               <div id="equity-hist"></div>
             </div>
           </div>
@@ -126,7 +122,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         Back
       </button>
-      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.07em" id="history-title">History</span>
+      <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.07em" id="history-title">History</span>
     </div>
     <div id="history-wrap"></div>
   </div>
@@ -151,13 +147,13 @@
       <span style="color:var(--color-text-secondary)">BCV Rate</span>
       <span class="rval" id="rate-display">-</span>
       <span class="rsub" id="rate-date"></span>
-      <button class="btn btns" style="margin-left:4px;padding:2px 7px" onclick="fetchRate(true)">&#8635;</button>
+      <button class="btn btns" style="margin-left:4px;padding:6px 10px" onclick="fetchRate(true)" aria-label="Refresh rate">&#8635;</button>
     </div>
     <div class="frow">
-      <input type="search" id="tf-search" placeholder="Search..." style="min-width:140px" oninput="renderTx()"/>
+      <input type="search" id="tf-search" placeholder="Search..." aria-label="Search transactions" style="min-width:140px" oninput="renderTx()"/>
       <button class="tx-filter-toggle" onclick="toggleTxFilters()">Filters <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6l5 5 5-5"/></svg></button>
-      <button id="btn-undo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Undo" onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-      <button id="btn-redo" class="btn btns" style="opacity:0.35;padding:5px 8px" title="Redo" onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <button id="btn-undo" class="btn btns" style="padding:5px 8px" title="Undo" aria-label="Undo" disabled onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="btn-redo" class="btn btns" style="padding:5px 8px" title="Redo" aria-label="Redo" disabled onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <select id="tf-type" onchange="renderTx()" style="display:none"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div id="tx-filters-extra">
         <select id="tf-cat" onchange="renderTx()"><option value="">All categories</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Remesa</option></select>
@@ -175,7 +171,7 @@
   <div id="page-wallets" class="page">
     <div class="dash-head" style="display:flex;align-items:center;justify-content:space-between">
       <span class="dash-eyebrow">Wallets</span>
-      <button onclick="refreshAllWallets()" id="refresh-all-btn" style="background:none;border:none;color:var(--txt3);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;padding:0">&#8635; Refresh all</button>
+      <button onclick="refreshAllWallets()" id="refresh-all-btn" class="btn btns" style="min-width:122px;justify-content:center">&#8635; Refresh all</button>
     </div>
     <div id="w-grid" class="wgrid"></div>
   </div>
@@ -204,7 +200,7 @@
       <span class="dash-eyebrow">Holdings</span>
       <div class="hld-head-right">
         <span class="hld-updated" id="wh-updated"></span>
-        <button class="btn btns" onclick="refreshWalletHoldings()">&#8635; Refresh</button>
+        <button class="btn btns" style="min-width:108px;justify-content:center" onclick="refreshWalletHoldings()">&#8635; Refresh</button>
       </div>
     </div>
     <div id="wh-wrap"></div>
@@ -233,10 +229,10 @@
 
     <div id="tc-profit" class="tool-card" style="padding-bottom:.6rem">
       <div class="tool-title" style="margin-bottom:.75rem">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">Profit Calculator</h2>
+        <h2 style="margin:0">Profit Calculator</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Profit from selling USDT after card commission (buy side) and Bpay 3.6% fee (sell side).</span></span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Sell</span>
           <input type="number" id="pc-sell" placeholder="0.00" step="0.001" oninput="calcProfit()"/>
@@ -254,17 +250,17 @@
           <input type="number" id="pc-card" placeholder="0.00" step="0.1" oninput="calcProfit()"/>
         </div>
       </div>
-      <div id="pc-result" style="max-width:90%;margin:0 auto">
+      <div id="pc-result" style="max-width:520px;margin:0 auto">
         <div id="pc-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
       </div>
     </div>
 
     <div id="tc-p2p" class="tool-card" style="padding-bottom:.6rem">
       <div class="tool-title" style="margin-bottom:.75rem">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">P2P Spread</h2>
+        <h2 style="margin:0">P2P Spread</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Sell USDT → buy USD at lower rate → reconvert via BDV→Bpay. Shows raw P2P spread and effective net gain after fees.</span></span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Sell</span>
           <input type="number" id="p2p-sell" placeholder="0.00" step="0.01" oninput="calcSpread()"/>
@@ -280,17 +276,17 @@
           <input type="number" id="p2p-comm" placeholder="3.6" step="0.1" min="0" value="3.6" autocomplete="off" oninput="saveP2PComm();calcSpread()"/>
         </div>
       </div>
-      <div id="p2p-result" style="max-width:90%;margin:0 auto">
+      <div id="p2p-result" style="max-width:520px;margin:0 auto">
         <div id="p2p-cards" style="display:grid;grid-template-columns:1fr;gap:8px;max-width:260px;margin:0 auto"></div>
       </div>
     </div>
 
     <div id="tc-bcvemily" class="tool-card">
       <div class="tool-title" style="margin-bottom:.75rem">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BCV to Emily USD</h2>
+        <h2 style="margin:0">BCV to Emily USD</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Converts USD to Bs at the BCV rate, then buys USDT 10% below market price.</span></span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:90%;margin-left:auto;margin-right:auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD</span>
           <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
@@ -300,14 +296,14 @@
           <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily()"/>
         </div>
       </div>
-      <div id="be-result" style="max-width:90%;margin:0 auto">
+      <div id="be-result" style="max-width:520px;margin:0 auto">
         <div id="be-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:520px"></div>
       </div>
     </div>
 
     <div id="tc-bdvbpay" class="tool-card">
       <div class="tool-title">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Bpay</h2>
+        <h2 style="margin:0">BDV to Bpay</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Bpay keeps 3.6% of the recharge</span></span>
       </div>
       <div class="field-row" style="margin-bottom:.875rem">
@@ -323,7 +319,7 @@
 
     <div id="tc-bdvwally" class="tool-card">
       <div class="tool-title">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Wally</h2>
+        <h2 style="margin:0">BDV to Wally</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Wally fee: 3.5% + 7% ITBMS on commission = 3.745% charged upfront</span></span>
       </div>
       <div class="field-row" style="margin-bottom:.875rem">
@@ -339,7 +335,7 @@
 
     <div id="tc-bdvzinli" class="tool-card">
       <div class="tool-title">
-        <h2 style="margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.01em">BDV to Zinli</h2>
+        <h2 style="margin:0">BDV to Zinli</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Zinli fee: 3.75% charged upfront</span></span>
       </div>
       <div class="field-row" style="margin-bottom:.875rem">
@@ -362,8 +358,8 @@
       <h3>Binance API</h3>
       <p class="hint">Keys stored locally in browser. Requests go directly to Binance using your VPN.</p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-        <input id="bn-key" type="password" placeholder="API Key" oninput="S.binanceKey=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
-        <input id="bn-secret" type="password" placeholder="API Secret" oninput="S.binanceSecret=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
+        <input id="bn-key" type="password" placeholder="API Key" oninput="S.binanceKey=this.value;save()" style="width:100%">
+        <input id="bn-secret" type="password" placeholder="API Secret" oninput="S.binanceSecret=this.value;save()" style="width:100%">
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn btnp" onclick="testBinance()">Test connection</button>
@@ -375,8 +371,8 @@
       <h3>Bibi Binance API</h3>
       <p class="hint">Separate Binance keys for partner's wallet. Stored locally.</p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-        <input id="bbn-key" type="password" placeholder="API Key" oninput="S.bibiBinanceKey=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
-        <input id="bbn-secret" type="password" placeholder="API Secret" oninput="S.bibiBinanceSecret=this.value;save()" style="padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:100%;box-sizing:border-box">
+        <input id="bbn-key" type="password" placeholder="API Key" oninput="S.bibiBinanceKey=this.value;save()" style="width:100%">
+        <input id="bbn-secret" type="password" placeholder="API Secret" oninput="S.bibiBinanceSecret=this.value;save()" style="width:100%">
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn btnp" onclick="testBibiBinance()">Test connection</button>
@@ -523,6 +519,10 @@
   <button class="nb" onclick="showPage('tools',this)">
     <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><rect x="4" y="3" width="8" height="3" rx="0.5"/><circle cx="5" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="8" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="11" cy="9" r="0.8" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg></span>
     <span class="nb-label">Tools</span>
+  </button>
+  <button class="nb" onclick="showPage('settings',this)">
+    <span class="bnav-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+    <span class="nb-label">Settings</span>
   </button>
 </nav>
 </body>
