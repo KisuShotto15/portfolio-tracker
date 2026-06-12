@@ -519,7 +519,7 @@ input::placeholder{color:var(--txt3)}
   }
   .bottom-nav .nb{
     flex:1;height:100%;width:auto;border-radius:0;background:none;
-    flex-direction:column;gap:2px;padding:8px 0 6px;
+    flex-direction:column;gap:4px;padding:6px 0;justify-content:center;
   }
   .bottom-nav .nb-label{
     position:static;transform:none;opacity:1;
@@ -529,7 +529,12 @@ input::placeholder{color:var(--txt3)}
   .bottom-nav .nb:hover{background:none}
   .bottom-nav .nb.active{background:none;color:var(--accent)}
   .bottom-nav .nb svg{width:16px;height:16px}
-  .bnav-ico{display:flex;align-items:center;justify-content:center}
+  .bottom-nav .bnav-ico{
+    width:46px;height:28px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .2s;
+  }
+  .bottom-nav .nb.active .bnav-ico{background:var(--accent-soft)}
 
   /* Wallets — 2 columnas, balance debajo del label */
   .wv-cols{gap:12px}
