@@ -89,6 +89,7 @@ input,select,textarea,button{font-family:inherit}
 
 /* Page header (title + control) */
 .page > div:first-child > select,
+.dash-head select,
 #sum-month{
   padding:9px 18px;border:1px solid var(--line);border-radius:999px;
   background:var(--surface);color:var(--txt);font-size:16px;font-weight:500;cursor:pointer;
