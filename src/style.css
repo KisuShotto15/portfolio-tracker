@@ -293,7 +293,7 @@ input,select,textarea,button{font-family:inherit}
 .badge-t{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:2.5px 7.5px;margin-left:6px}
 
 /* ───────────────── Wallets 2-column layout ───────────────── */
-.wgrid{display:block!important;container-type:inline-size}
+.wgrid{display:block!important}
 .wcard{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:22px 25px;display:flex;flex-direction:column;gap:5px}
 .wcard[style*="dashed"]{background:none;border-style:dashed!important;border-color:var(--line)!important;align-items:flex-start;justify-content:center}
 .wcard-name{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;color:var(--txt2)}
@@ -339,7 +339,7 @@ input,select,textarea,button{font-family:inherit}
 
 /* Budget redesign */
 .bdg-top{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;margin-bottom:34px}
-.bdg-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:28px 32px;display:flex;flex-direction:column}
+.bdg-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:28px 32px;display:flex;flex-direction:column;min-width:0}
 .bdg-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
 .bdg-hero-val{font-family:var(--font-num);font-size:56px;font-weight:500;letter-spacing:-.03em;margin:8px 0 22px;line-height:1}
 .bdg-pb{height:12px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
@@ -352,7 +352,7 @@ input,select,textarea,button{font-family:inherit}
 .bdg-stat:last-child{border-right:none}
 .bdg-stat-l{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
 .bdg-stat-v{font-family:var(--font-num);font-size:23px;font-weight:500;letter-spacing:-.01em}
-.bdg-donut-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 26px;display:flex;flex-direction:column}
+.bdg-donut-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 26px;display:flex;flex-direction:column;min-width:0}
 .bdg-donut-wrap{display:flex;align-items:center;gap:20px;margin-top:auto;padding-top:14px}
 .bdg-donut{position:relative;width:148px;height:148px;flex-shrink:0}
 .bdg-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
@@ -366,7 +366,7 @@ input,select,textarea,button{font-family:inherit}
 .bdg-cat-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px}
 .bdg-cat-meta{font-size:13px;color:var(--txt3)}
 .bdg-cats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px}
-.bdg-cat{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:17px 19px;transition:border-color .15s}
+.bdg-cat{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:17px 19px;transition:border-color .15s;min-width:0}
 .bdg-cat:hover{border-color:var(--line)}
 .bdg-cat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
 .bdg-cat-name{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:500;color:var(--txt2)}
@@ -387,7 +387,7 @@ input,select,textarea,button{font-family:inherit}
 .hld-head-right{display:flex;align-items:center;gap:14px}
 .hld-updated{font-size:13px;color:var(--txt3);font-family:var(--font-num)}
 .hld-top{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;margin-bottom:34px}
-.hld-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:28px 32px;display:flex;flex-direction:column}
+.hld-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:28px 32px;display:flex;flex-direction:column;min-width:0}
 .hld-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
 .hld-hero-val{font-family:var(--font-num);font-size:56px;font-weight:500;letter-spacing:-.03em;margin:8px 0 10px;line-height:1}
 .hld-hero-meta{font-size:14px;color:var(--txt2);font-family:var(--font-num)}
@@ -397,7 +397,7 @@ input,select,textarea,button{font-family:inherit}
 .hld-stat-l{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
 .hld-stat-v{font-family:var(--font-num);font-size:23px;font-weight:500;letter-spacing:-.01em}
 .hld-stat-x{color:var(--txt3);font-size:15px}
-.hld-donut-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 26px;display:flex;flex-direction:column}
+.hld-donut-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 26px;display:flex;flex-direction:column;min-width:0}
 .hld-donut-wrap{display:flex;align-items:center;gap:20px;margin-top:auto;padding-top:14px}
 .hld-donut{position:relative;width:148px;height:148px;flex-shrink:0}
 .hld-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
@@ -475,14 +475,6 @@ input,select,textarea,button{font-family:inherit}
 .wm-row:hover .wm-acts{opacity:1;pointer-events:auto}
 .wm-add{width:calc(100% - 32px);margin:8px 16px 4px;background:none;border:1px dashed var(--line);color:var(--txt3);font-size:14px;font-weight:500;padding:11px 0;border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .wm-add:hover{color:var(--txt2);border-color:rgba(255,255,255,.2)}
-@container (max-width:620px){
-  .wm-cols{grid-template-columns:1fr;gap:15px}
-  .wm-hero{padding:22px 22px}
-  .wm-hero-val{font-size:38px}
-  .wm-row{padding:11px 14px;gap:12px}
-  .wm-group-head{padding:12px 14px 10px}
-  .wm-acts{opacity:1;pointer-events:auto}
-}
 
 /* ───────────────── Forms / fields ───────────────── */
 .fc h3{font-size:16px;font-weight:600;margin:0 0 7px;letter-spacing:-.01em}
@@ -727,6 +719,22 @@ input::placeholder{color:var(--txt3)}
   .bottom-nav .nb.active .bnav-ico{background:var(--accent-soft)}
   .bottom-nav .nb:hover .nb-label,
   .bottom-nav .nb.active .nb-label{transform:none}
+
+  /* Wallets mobile layout */
+  .wm-cols{grid-template-columns:1fr;gap:15px}
+  .wm-hero{padding:22px 22px}
+  .wm-hero-val{font-size:38px}
+  .wm-row{padding:11px 14px;gap:12px}
+  .wm-group-head{padding:12px 14px 10px}
+  .wm-acts{opacity:1;pointer-events:auto}
+
+  /* Budget + Holdings hero font */
+  .bdg-hero-val{font-size:38px}
+  .bdg-hero{padding:20px 22px}
+  .bdg-donut-card{padding:18px 20px}
+  .hld-hero-val{font-size:38px}
+  .hld-hero{padding:20px 22px}
+  .hld-donut-card{padding:18px 20px}
 
   /* Wallets — 2 columnas, balance debajo del label */
   .wv-cols{gap:12px}
