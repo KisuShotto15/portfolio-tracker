@@ -586,10 +586,10 @@ input::placeholder{color:var(--txt3)}
   position:fixed;left:50%;bottom:0;transform:translateX(-50%) translateY(110%);
   width:min(850px,94vw);background:var(--surface);border:1px solid var(--line);
   border-radius:20px 20px 0 0;padding:27px 32px 38px;z-index:60;
-  transition:transform .28s cubic-bezier(.32,.72,0,1);box-shadow:0 -12px 40px rgba(0,0,0,.45);
+  transition:transform .28s cubic-bezier(.32,.72,0,1);
   will-change:transform;
 }
-.tx-form-panel.open{transform:translateX(-50%) translateY(0)}
+.tx-form-panel.open{transform:translateX(-50%) translateY(0);box-shadow:0 -8px 24px rgba(0,0,0,.4)}
 .tx-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
 .app-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:160;align-items:center;justify-content:center}
 .app-modal-overlay.open{display:flex}
