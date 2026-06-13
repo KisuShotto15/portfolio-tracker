@@ -388,6 +388,7 @@ input,select,textarea,button{font-family:inherit}
 /* Holdings redesign */
 .hld-head-right{display:flex;align-items:center;gap:14px}
 .hld-updated{font-size:13px;color:var(--txt3);font-family:var(--font-num)}
+.hld-updated::before{content:'Updated ';font-family:var(--font-ui)}
 .hld-top{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;margin-bottom:34px}
 .hld-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:28px 32px;display:flex;flex-direction:column;min-width:0}
 .hld-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
@@ -764,9 +765,10 @@ input::placeholder{color:var(--txt3)}
   /* Wallets mobile layout */
   .wm-cols{grid-template-columns:1fr;gap:15px}
   /* Holdings header mobile: Updated centered between title and Refresh */
-  #page-holdings .dash-head{justify-content:space-between}
+  #page-holdings .dash-head{justify-content:space-between;align-items:center}
   .hld-head-right{display:contents}
-  .hld-updated{font-size:10px;text-align:center}
+  .hld-updated{font-size:10px;text-align:center;line-height:1.5}
+  .hld-updated::before{content:'Updated';display:block;font-family:var(--font-ui);font-size:9px;letter-spacing:.05em;text-transform:uppercase}
   .wm-hero{padding:22px 22px;overflow:hidden}
   .wm-hero-val{font-size:32px}
   .wm-row{padding:11px 14px;gap:12px}

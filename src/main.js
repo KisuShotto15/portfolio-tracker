@@ -154,7 +154,7 @@ async function pushToCloud(){
     syncFailed=false;
     setSyncStatus('synced','Synced');
     var cs=document.getElementById('cloud-status');
-    if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US');
+    if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true;
     setSyncStatus('offline','⚠ Cambios sin sincronizar');
@@ -211,7 +211,7 @@ async function forcePull(){
   var ok=await pullFromCloud();
   if(ok){
     populateWalletSelects(); updateRateUI(); sortTx(); renderTx(); renderSummary(); renderWallets();
-    if(cs) cs.textContent='Pulled from cloud at '+new Date().toLocaleTimeString('en-US');
+    if(cs) cs.textContent='Pulled from cloud at '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   } else {
     if(cs) cs.textContent='No cloud data found.';
   }
@@ -258,7 +258,7 @@ async function fetchBinanceBalance(){
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
   S.binanceBalance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
-  S.binanceUpdated=new Date().toLocaleTimeString('en-US'); S.binanceFetchedAt=Date.now(); save(); return S.binanceBalance;
+  S.binanceUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); S.binanceFetchedAt=Date.now(); save(); return S.binanceBalance;
 }
 async function testBinance(){
   var st=document.getElementById('bn-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
@@ -284,7 +284,7 @@ async function fetchBibiBinanceBalance(){
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
   S.bibiBinanceBalance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
-  S.bibiBinanceUpdated=new Date().toLocaleTimeString('en-US'); S.bibiBinanceFetchedAt=Date.now(); save(); return S.bibiBinanceBalance;
+  S.bibiBinanceUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); S.bibiBinanceFetchedAt=Date.now(); save(); return S.bibiBinanceBalance;
 }
 async function testBibiBinance(){
   var st=document.getElementById('bbn-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
@@ -304,7 +304,7 @@ async function fetchBybitBalance(){
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var list=(d.result&&d.result.list)||[]; var total=0;
   list.forEach(function(acc){ var usdt=acc.coin&&acc.coin.find(function(c){ return c.coin==='USDT'; }); if(usdt) total+=parseFloat(usdt.walletBalance||0); });
-  S.bybitBalance=parseFloat(total.toFixed(2)); S.bybitUpdated=new Date().toLocaleTimeString('en-US'); save(); return S.bybitBalance;
+  S.bybitBalance=parseFloat(total.toFixed(2)); S.bybitUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return S.bybitBalance;
 }
 async function testBybit(){
   var st=document.getElementById('bb-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
@@ -318,7 +318,7 @@ async function fetchOKXBalance(){
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var details=(d.data&&d.data[0]&&d.data[0].details)||[];
   var usdt=details.find(function(c){ return c.ccy==='USDT'; });
-  S.okxBalance=parseFloat(parseFloat((usdt&&usdt.cashBal)||0).toFixed(2)); S.okxUpdated=new Date().toLocaleTimeString('en-US'); save(); return S.okxBalance;
+  S.okxBalance=parseFloat(parseFloat((usdt&&usdt.cashBal)||0).toFixed(2)); S.okxUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return S.okxBalance;
 }
 async function testOKX(){
   var st=document.getElementById('okx-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
@@ -341,26 +341,26 @@ async function fetchTrezorBalance(){
   if(json.error) throw new Error(json.error.message);
   var balance = parseInt(json.result, 16) / 1e18;
   S.trezorBalance = parseFloat(balance.toFixed(2));
-  S.trezorUpdated = new Date().toLocaleTimeString('en-US');
+  S.trezorUpdated = new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   save(); return S.trezorBalance;
 }
 
 async function fetchWalletHoldings(){
   var wallets = S.onchainWallets||[];
-  if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US'); save(); return []; }
+  if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
   var r=await fetch(ANKR_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({wallets:wallets})});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Proxy error '+r.status); }
   var data=await r.json();
   if(data.error) throw new Error(data.error);
   S.walletHoldings=Array.isArray(data)?data:[];
-  S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US');
+  S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   save(); return S.walletHoldings;
 }
 function renderWalletHoldings(){
   var wrap=document.getElementById('wh-wrap');
   var upd=document.getElementById('wh-updated');
   if(!wrap) return;
-  if(upd&&S.walletHoldingsUpdated) upd.textContent='Updated '+S.walletHoldingsUpdated;
+  if(upd&&S.walletHoldingsUpdated) upd.textContent=S.walletHoldingsUpdated;
   renderOnchainWallets();
   var MIN_USD=1;
   var data=(S.walletHoldings||[]).filter(function(h){ return h.balanceUsd>=MIN_USD; });
