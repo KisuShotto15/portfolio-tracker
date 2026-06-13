@@ -1640,11 +1640,11 @@ function renderWallets(){
 
   // ── Exchanges ─────────────────────────────────────────────────────────
   var exRows=''
-    +apiRow('#9B70F0','B','Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png')
-    +apiRow('#FB923C','B','Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'','/logo-binance.png')
-    +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'','/logo-bybit.png')
-    +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'','/logo-okx.png')
-    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT','/logo-trezor.png');
+    +apiRow('#9B70F0','B','Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png?v=2')
+    +apiRow('#FB923C','B','Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'','/logo-binance.png?v=2')
+    +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'','/logo-bybit.png?v=2')
+    +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'','/logo-okx.png?v=2')
+    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT','/logo-trezor.png?v=2');
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){
