@@ -654,6 +654,7 @@ input::placeholder{color:var(--txt3)}
 
 /* ───────────────── Bottom nav (mobile only) ───────────────── */
 .bottom-nav{display:none}
+#mob-settings-btn{display:none}
 
 /* ───────────────── Responsive ───────────────── */
 @media(max-width:1024px){
@@ -737,28 +738,24 @@ input::placeholder{color:var(--txt3)}
   }
   .bottom-nav .nb{
     flex:1;height:100%;width:auto;border-radius:0;background:none;
-    flex-direction:column;gap:4px;padding:6px 0;justify-content:center;
+    flex-direction:column;gap:0;padding:0;justify-content:center;align-items:center;
   }
-  .bottom-nav .nb-label{
-    position:static;transform:none;opacity:1;
-    background:none;border:none;box-shadow:none;padding:0;
-    font-size:11px;font-weight:500;line-height:1;
-    max-width:100%;overflow:hidden;text-overflow:ellipsis;
-    transition:color .15s;
-  }
-  .bottom-nav .nb:hover .nb-label,
-  .bottom-nav .nb.active .nb-label{transform:none}
+  .bottom-nav .nb-label{display:none}
   .bottom-nav .nb:hover{background:none}
   .bottom-nav .nb.active{background:none;color:var(--accent)}
-  .bottom-nav .nb svg{width:16px;height:16px}
+  .bottom-nav .nb svg{width:20px;height:20px}
   .bottom-nav .bnav-ico{
-    width:46px;height:28px;border-radius:10px;
+    width:48px;height:40px;border-radius:12px;
     display:flex;align-items:center;justify-content:center;
     transition:background .2s;
   }
   .bottom-nav .nb.active .bnav-ico{background:var(--accent-soft)}
-  .bottom-nav .nb:hover .nb-label,
-  .bottom-nav .nb.active .nb-label{transform:none}
+  #mob-settings-btn{
+    display:flex;position:fixed;top:14px;right:18px;z-index:65;
+    background:none;border:none;color:var(--txt3);cursor:pointer;
+    padding:7px;border-radius:10px;transition:color .15s,background .15s;
+  }
+  #mob-settings-btn.active{color:var(--accent);background:var(--accent-soft)}
 
   /* Wallets mobile layout */
   .wm-cols{grid-template-columns:1fr;gap:15px}

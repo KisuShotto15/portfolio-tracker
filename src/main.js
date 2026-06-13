@@ -1778,9 +1778,9 @@ function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.nb,#mob-settings-btn').forEach(function(b){ b.classList.remove('active'); });
   document.getElementById('page-'+id).classList.add('active');
-  document.querySelectorAll('.nb[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
+  document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
   if(btn) btn.classList.add('active');
   window.location.hash = id;
   var fab=document.getElementById('fab-add');
