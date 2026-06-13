@@ -654,7 +654,7 @@ input::placeholder{color:var(--txt3)}
 
 /* ───────────────── Bottom nav (mobile only) ───────────────── */
 .bottom-nav{display:none}
-#mob-settings-btn{display:none}
+#mob-settings-link{display:none}
 
 /* ───────────────── Responsive ───────────────── */
 @media(max-width:1024px){
@@ -750,10 +750,14 @@ input::placeholder{color:var(--txt3)}
     transition:background .2s;
   }
   .bottom-nav .nb.active .bnav-ico{background:var(--accent-soft)}
+  #mob-settings-link{
+    display:flex;justify-content:center;padding:28px 0 8px;
+  }
   #mob-settings-btn{
-    display:flex;position:fixed;top:14px;right:18px;z-index:65;
+    display:flex;align-items:center;gap:7px;
     background:none;border:none;color:var(--txt3);cursor:pointer;
-    padding:7px;border-radius:10px;transition:color .15s,background .15s;
+    padding:8px 16px;border-radius:10px;font-size:14px;font-weight:500;
+    transition:color .15s,background .15s;
   }
   #mob-settings-btn.active{color:var(--accent);background:var(--accent-soft)}
 
