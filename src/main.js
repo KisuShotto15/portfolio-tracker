@@ -645,6 +645,8 @@ async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ r
 async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w.name=r.value.trim(); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
 async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('New balance',escHtml(w.name),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
+async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Override balance',escHtml(w.name),cur); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balanceOverride=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
+window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
 
 function emptyState(title, sub){
@@ -896,7 +898,7 @@ function getWalletShares(){
   shares['Trezor']=S.trezorBalance||0;
   shares['Zelle']=calcTrackerBal('Zelle');
   S.manualWallets.forEach(function(w){
-    var bal=w.trackerOnly?calcTrackerBal(w.name):w.balance;
+    var bal=w.trackerOnly?(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)):w.balance;
     shares[w.name]=bal;
   });
   return shares;
@@ -1279,7 +1281,7 @@ function renderEquityChart(){
 
 function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
-  var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+calcTrackerBal(w.name); },0);
+  var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
   var manualBal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var zelle=calcTrackerBal('Zelle');
   return parseFloat((api+trackerBal+manualBal+zelle).toFixed(2));
@@ -1649,10 +1651,16 @@ function renderWallets(){
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){
-    var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){return w.name===name;});
-    var meta=name==='Zelle'?'+5%: '+fmtUSD(total*1.05):'Calculated from transactions';
-    var acts=mw?'<button class="wico" onclick="renameManualWallet('+mw.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>':'';
-    var tlogo=name==='Zelle'?'/logo-zelle.png?v=1':null;
+    var mw=S.manualWallets.find(function(w){return w.name===name;});
+    var total=mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(name);
+    var isZelle=name==='Zelle';
+    var meta=isZelle?'+5%: '+fmtUSD(total*1.05):(mw&&mw.balanceOverride!=null?'Manual override':'Calculated from transactions');
+    var acts='';
+    if(mw){
+      if(!isZelle) acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
+      acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
+    }
+    var tlogo=isZelle?'/logo-zelle.png?v=1':null;
     return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name)+' <span class="wm-badge">tracker</span>',meta,balHtml(total),acts,tlogo);
   }).join('');
   var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
