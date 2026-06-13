@@ -1663,7 +1663,8 @@ function renderWallets(){
       if(!isZelle) acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
-    var tlogo=isZelle?'/logo-zelle.png?v=1':null;
+    var TRACKER_LOGOS={'Zelle':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1'};
+    var tlogo=TRACKER_LOGOS[name]||null;
     return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
   }).join('');
   var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
