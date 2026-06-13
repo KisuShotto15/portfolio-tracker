@@ -1623,27 +1623,28 @@ function renderWallets(){
   var icP='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
   var icX='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   function balHtml(v){ return '<span class="wm-bal">'+fmtUSD(v)+'</span>'; }
-  function wmRow(color,mono,statusClass,name,meta,right,acts){
+  function wmRow(color,mono,statusClass,name,meta,right,acts,logo){
     var st=statusClass?'<i class="wm-status '+statusClass+'"></i>':'';
-    return '<div class="wm-row"><span class="wm-chip" style="--c:'+color+'">'+mono+st+'</span>'
+    var chipInner=logo?'<img class="wm-logo" src="'+logo+'" alt="">':mono;
+    return '<div class="wm-row"><span class="wm-chip'+(logo?' has-logo':'')+'" style="--c:'+color+'">'+chipInner+st+'</span>'
       +'<div class="wm-rid"><span class="wm-name">'+name+'</span>'+(meta?'<span class="wm-meta">'+meta+'</span>':'')+'</div>'
       +right+(acts?'<span class="wm-acts" onclick="event.stopPropagation()">'+acts+'</span>':'')+'</div>';
   }
-  function apiRow(color,mono,name,connected,balv,upd,metaExtra){
+  function apiRow(color,mono,name,connected,balv,upd,metaExtra,logo){
     if(connected){
       var meta=(metaExtra?metaExtra:'')+(metaExtra&&upd?' · ':'')+(upd?'Updated '+upd:'');
-      return wmRow(color,mono,balv!==null?'on':'off',name,meta||'Connected',balv!==null?balHtml(balv):'<span class="wm-bal" style="color:var(--txt3)">—</span>','');
+      return wmRow(color,mono,balv!==null?'on':'off',name,meta||'Connected',balv!==null?balHtml(balv):'<span class="wm-bal" style="color:var(--txt3)">—</span>','',logo);
     }
-    return wmRow(color,mono,'off',name,'Not connected','<button class="btn btns btnp wm-connect" onclick="showPage(\'settings\',null)">Connect</button>','');
+    return wmRow(color,mono,'off',name,'Not connected','<button class="btn btns btnp wm-connect" onclick="showPage(\'settings\',null)">Connect</button>','',logo);
   }
 
   // ── Exchanges ─────────────────────────────────────────────────────────
   var exRows=''
-    +apiRow('#9B70F0','B','Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'')
-    +apiRow('#FB923C','B','Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'')
-    +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'')
-    +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'')
-    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT');
+    +apiRow('#9B70F0','B','Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png')
+    +apiRow('#FB923C','B','Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'','/logo-binance.png')
+    +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'','/logo-bybit.png')
+    +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'','/logo-okx.png')
+    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT','/logo-trezor.png');
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){

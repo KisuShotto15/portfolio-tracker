@@ -13,6 +13,7 @@ portfolio-twa/build-src/
 *.pdf
 *.png
 !/public/KS.png
+!/public/logo-*.png
 *.jpg
 !/public/favicon.jpg
 CLAUDE\ (1).md

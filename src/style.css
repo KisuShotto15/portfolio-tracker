@@ -465,6 +465,8 @@ input,select,textarea,button{font-family:inherit}
 .wm-row{display:flex;align-items:center;gap:13px;padding:11px 16px;border-radius:12px;transition:background .12s}
 .wm-row:hover{background:rgba(255,255,255,.025)}
 .wm-chip{position:relative;width:36px;height:36px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-num);font-weight:600;font-size:14px;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c)}
+.wm-chip.has-logo{background:none}
+.wm-logo{width:36px;height:36px;border-radius:11px;object-fit:cover;display:block}
 .wm-status{position:absolute;bottom:-2px;right:-2px;width:11px;height:11px;border-radius:50%;border:2.5px solid var(--surface)}
 .wm-status.on{background:var(--green)}
 .wm-status.off{background:#6B7280}
