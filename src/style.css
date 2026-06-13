@@ -763,6 +763,10 @@ input::placeholder{color:var(--txt3)}
 
   /* Wallets mobile layout */
   .wm-cols{grid-template-columns:1fr;gap:15px}
+  /* Holdings header mobile: Updated centered between title and Refresh */
+  #page-holdings .dash-head{justify-content:space-between}
+  .hld-head-right{display:contents}
+  .hld-updated{font-size:10px;text-align:center}
   .wm-hero{padding:22px 22px;overflow:hidden}
   .wm-hero-val{font-size:32px}
   .wm-row{padding:11px 14px;gap:12px}
