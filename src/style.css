@@ -3,7 +3,7 @@
    Drop-in stylesheet for the existing vanilla-JS app.
    No changes to main.js required. Restyles existing classes/IDs.
    ════════════════════════════════════════════════════════════════════ */
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
+/* Fonts are preloaded via <link> in index.html <head> (parallel, non-blocking). */
 
 :root{
   --bg:#0C0C0E;
@@ -778,6 +778,31 @@ input::placeholder{color:var(--txt3)}
 .nb:active,.ttt:active,.tool-toggle:active{transform:scale(.96)}
 .bottom-nav .nb:focus-visible .nb-label{transform:none}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
+
+/* ───────────────── Entrance animations ───────────────── */
+/* Page switch: subtle fade + lift. transform/opacity only → compositor-only, no layout. */
+@keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.page.active{animation:pageIn .32s cubic-bezier(.22,.61,.36,1) both}
+
+/* Dashboard sections + cards rise in with a light stagger */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.dash-grid > div,.tool-card,.wm-group,.bdg-cat,.hld-list,.hld-top,.bdg-top,.wm-hero,.fc{
+  animation:fadeUp .42s cubic-bezier(.22,.61,.36,1) both;
+}
+.dash-grid > div:nth-child(2){animation-delay:.05s}
+.dash-grid > div:nth-child(3){animation-delay:.1s}
+.dash-grid > div:nth-child(4){animation-delay:.15s}
+.dash-grid > div:nth-child(5){animation-delay:.2s}
+.bdg-cat:nth-child(2){animation-delay:.04s}
+.bdg-cat:nth-child(3){animation-delay:.08s}
+.bdg-cat:nth-child(4){animation-delay:.12s}
+
+/* Progress / allocation bars grow from the left on render (scaleX → GPU, radius intact at rest) */
+@keyframes barGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.hb-fill,.goal-bar i,.bdg-pf,.hld-bar i{
+  transform-origin:left center;
+  animation:barGrow .65s cubic-bezier(.22,.61,.36,1) both;
+}
 
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}

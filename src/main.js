@@ -433,7 +433,7 @@ var whDonutChart=null;
 function drawHoldingsDonut(assets, tokenColor){
   var el=document.getElementById('hld-donut'); if(!el||!window.Chart) return;
   if(whDonutChart){ whDonutChart.destroy(); whDonutChart=null; }
-  whDonutChart=new Chart(el,{type:'doughnut',data:{labels:assets.map(function(a){ return a.symbol; }),datasets:[{data:assets.map(function(a){ return parseFloat(a.balanceUsd.toFixed(2)); }),backgroundColor:assets.map(function(a){ return tokenColor(a.symbol); }),borderWidth:0,spacing:2}]},options:{cutout:'72%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},animation:false,responsive:true,maintainAspectRatio:false}});
+  whDonutChart=new Chart(el,{type:'doughnut',data:{labels:assets.map(function(a){ return a.symbol; }),datasets:[{data:assets.map(function(a){ return parseFloat(a.balanceUsd.toFixed(2)); }),backgroundColor:assets.map(function(a){ return tokenColor(a.symbol); }),borderWidth:0,spacing:2}]},options:{cutout:'72%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},animation:{animateRotate:true,duration:600},responsive:true,maintainAspectRatio:false}});
 }
 function hldHash(s){ var h=0; s=String(s); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return h; }
 function fmtShortUSD(v){ return '$'+Math.round(v).toLocaleString('en-US'); }
@@ -1654,8 +1654,24 @@ function normCat(raw){ var c=(raw||'').toLowerCase();
   if(c.indexOf('services')>=0) return 'Services'; if(c.indexOf('zelle')>=0) return 'Zelle'; if(c.indexOf('other')>=0) return 'Other';
   return raw||''; }
 
+function loadPapa(){
+  if(window.Papa) return Promise.resolve();
+  if(window._papaPromise) return window._papaPromise;
+  window._papaPromise=new Promise(function(resolve,reject){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js';
+    s.onload=resolve; s.onerror=reject;
+    document.head.appendChild(s);
+  });
+  return window._papaPromise;
+}
 function handleCSV(file){
   if(!file) return;
+  var result=document.getElementById('import-result');
+  if(result) result.innerHTML='<div class="empty"><span class="spin"></span>Loading…</div>';
+  loadPapa().then(function(){ _parseCSV(file); }).catch(function(){ if(result) result.innerHTML='<div class="empty" style="color:#E24B4A">Failed to load CSV parser</div>'; });
+}
+function _parseCSV(file){
   Papa.parse(file,{header:true,skipEmptyLines:true,dynamicTyping:false,complete:function(res){
     var rows=res.data; var result=document.getElementById('import-result');
     if(!rows.length){ result.innerHTML='<div class="empty">Empty CSV</div>'; return; }
