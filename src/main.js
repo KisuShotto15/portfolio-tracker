@@ -674,7 +674,7 @@ var CAT_META={
 };
 function catIcon(cat){
   var m=CAT_META[cat]||{bg:'#252535',svg:''};
-  var inner=m.logo?'<img src="'+m.logo+'" style="width:20px;height:20px;border-radius:5px;object-fit:cover">':'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>';
+  var inner=m.logo?'<img src="'+m.logo+'" style="width:36px;height:36px;border-radius:10px;object-fit:cover">':'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>';
   return '<span class="cat-ico" style="background:'+(m.logo?'transparent':m.bg)+'">'+inner+'</span>';
 }
 
