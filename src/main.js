@@ -51,6 +51,7 @@ var S = {
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
+var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
@@ -925,7 +926,7 @@ function renderHealthScore(){
     return '<div class="hb-item"><div class="hb-name">'+name+'</div><div class="hb-bar"><div class="hb-fill" style="width:'+(pct*100)+'%"></div></div></div>';
   }
   var RR=42, CIRC=2*Math.PI*RR, dash=(total/100)*CIRC;
-  el.innerHTML='<div class="cleg">Salud Financiera</div>'
+  var hHtml='<div class="cleg">Salud Financiera</div>'
     +'<div class="health-ring-wrap">'
       +'<div class="health-ring"><svg width="100%" height="100%" viewBox="0 0 100 100">'
         +'<circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"></circle>'
@@ -935,6 +936,8 @@ function renderHealthScore(){
         +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
       +'</div>'
     +'</div>';
+  // Only touch the DOM when output actually changed → no node recreation, no re-animation on tab return.
+  if(hHtml!==_healthSig){ el.innerHTML=hHtml; _healthSig=hHtml; }
 
   // mobile compact bar
   var barEl=document.getElementById('health-bar-m');
@@ -967,7 +970,7 @@ function renderHealthScore(){
           +chevSvg
         +'</button>'
       :'<span class="hbm-status"><span class="hbm-dot" style="background:'+aDot+'"></span>'+aTxt+'</span>';
-    barEl.innerHTML='<div class="hbm-row">'
+    var mHtml='<div class="hbm-row">'
       +'<button class="hbm-pill" onclick="toggleHealthDrop()">'
         +'<span class="hbm-dot" style="background:'+color+'"></span>'
         +'<span class="hbm-txt">Salud: <b style="color:'+color+'">'+total+'</b></span>'
@@ -976,6 +979,7 @@ function renderHealthScore(){
       +alertPill
     +'</div>'
     +healthDrop+alertDrop;
+    if(mHtml!==_healthMSig){ barEl.innerHTML=mHtml; _healthMSig=mHtml; }
   }
 }
 
@@ -1132,8 +1136,9 @@ function renderGoal(){
     +'<input type="number" id="goal-input" value="'+(goal||'')+'" placeholder="e.g. 100000" style="flex:1;background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:6px 10px;color:#fff;font-size:14px"/>'
     +'<button class="btn btns" onclick="saveGoal()" style="padding:6px 14px">Set</button>'
     +'</div>';
+  var gHtml;
   if(goal>0){
-    el.innerHTML='<div class="goal-head">'
+    gHtml='<div class="goal-head">'
       +'<span class="cleg" style="margin:0">Goal · '+fmtUSD(goal)+'</span>'
       +'<span class="goal-pct">'+pct.toFixed(1)+'%</span>'
       +'<button class="goal-edit-btn" title="Edit goal" onclick="document.getElementById(\'goal-input-row\').style.display=document.getElementById(\'goal-input-row\').style.display===\'none\'?\'flex\':\'none\'">'+PENCIL+'</button>'
@@ -1142,8 +1147,10 @@ function renderGoal(){
       +'<div class="goal-bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'
       +'<div class="goal-meta"><span>'+fmtUSD(current)+'</span><span>'+(months?'~'+months+' mo · '+fmtUSD(contrib)+'/mo':'')+'</span></div>';
   } else {
-    el.innerHTML='<div class="cleg">Financial Goal</div>'+inputRow;
+    gHtml='<div class="cleg">Financial Goal</div>'+inputRow;
   }
+  // Skip re-render when unchanged → bar keeps its state instead of re-animating on tab return.
+  if(gHtml!==_goalSig){ el.innerHTML=gHtml; _goalSig=gHtml; }
 }
 
 function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; save(); renderSummary(); } }
@@ -1643,7 +1650,7 @@ function renderWallets(){
   var walletCount=5+trackerNames.length+manualNormalCount;
   var notConn=[S.binanceBalance,S.bibiBinanceBalance,S.bybitBalance,S.okxBalance].filter(function(b){return b===null;}).length;
 
-  grid.innerHTML=
+  var wHtml=
     '<div class="wm-hero">'
       +'<div class="wm-hero-lbl">Total · All Wallets</div>'
       +'<div class="wm-hero-val">'+fmtUSD(grand)+'</div>'
@@ -1655,6 +1662,8 @@ function renderWallets(){
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers &amp; Manual</span><span class="wm-group-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div><div class="wm-rows">'+trRows+mnRows+'</div><button class="wm-add" onclick="openWalletForm()">+ Add wallet</button></div>'
     +'</div>';
+  // Skip re-render when unchanged → no flicker / re-animation on tab return.
+  if(wHtml!==_walletsSig){ grid.innerHTML=wHtml; _walletsSig=wHtml; }
 }
 
 
