@@ -50,6 +50,8 @@ var S = {
   categoryBudgets:{}
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
+var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
+var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
@@ -674,20 +676,33 @@ function catIcon(cat){
   return '<span class="cat-ico" style="background:'+m.bg+'"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg></span>';
 }
 
+function loadMoreTx(){ _txLimit+=_txBase; renderTx(); }
+window.loadMoreTx=loadMoreTx;
 function renderTx(){
   var wrap=document.getElementById('tx-wrap');
   var tF=document.getElementById('tf-type').value, cF=document.getElementById('tf-cat').value, wF=document.getElementById('tf-wallet').value, mF=document.getElementById('tf-month').value, sF=(document.getElementById('tf-search').value||'').toLowerCase().trim();
+  // Reset pagination whenever the filter set changes (loadMoreTx keeps the same filters → no reset).
+  var fSig=tF+'|'+cF+'|'+wF+'|'+mF+'|'+sF;
+  if(fSig!==_txFilterSig){ _txLimit=_txBase; _txFilterSig=fSig; }
+  // Single pass: sort once, then one combined filter instead of 5 chained passes.
   var data=sortTx(S.transactions);
-  if(tF) data=data.filter(function(t){ return t.type===tF; });
-  if(cF) data=data.filter(function(t){ return t.category===cF; });
-  if(wF) data=data.filter(function(t){ return t.wallet===wF; });
-  if(mF) data=data.filter(function(t){ return t.date.startsWith(mF); });
-  if(sF) data=data.filter(function(t){ return (t.desc||'').toLowerCase().indexOf(sF)>=0||(t.wallet||'').toLowerCase().indexOf(sF)>=0||(t.category||'').toLowerCase().indexOf(sF)>=0||(t.date||'').indexOf(sF)>=0; });
+  if(tF||cF||wF||mF||sF){
+    data=data.filter(function(t){
+      if(tF&&t.type!==tF) return false;
+      if(cF&&t.category!==cF) return false;
+      if(wF&&t.wallet!==wF) return false;
+      if(mF&&!t.date.startsWith(mF)) return false;
+      if(sF&&!((t.desc||'').toLowerCase().indexOf(sF)>=0||(t.wallet||'').toLowerCase().indexOf(sF)>=0||(t.category||'').toLowerCase().indexOf(sF)>=0||(t.date||'').indexOf(sF)>=0)) return false;
+      return true;
+    });
+  }
   if(!data.length){ wrap.innerHTML=emptyState('No transactions yet','Use the + button to add your first transaction'); return; }
-  var totalDebits=data.filter(function(t){ return t.type==='Debit'&&inSummary(t); }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var totalDebits=data.reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
+  // Only build DOM for the first _txLimit rows; the rest load on demand (keeps innerHTML small).
+  var shown=data.length>_txLimit?data.slice(0,_txLimit):data;
   // Group by date — single table with separator rows so columns stay aligned
   var groups={}, groupOrder=[];
-  data.forEach(function(t){ if(!groups[t.date]){ groups[t.date]=[]; groupOrder.push(t.date); } groups[t.date].push(t); });
+  shown.forEach(function(t){ if(!groups[t.date]){ groups[t.date]=[]; groupOrder.push(t.date); } groups[t.date].push(t); });
   function fmtDateHdr(d){
     var today=localToday();
     var yd=new Date(); yd.setDate(yd.getDate()-1);
@@ -726,8 +741,10 @@ function renderTx(){
     }).join('');
     return sep+txRows;
   }).join('');
+  var remaining=data.length-shown.length;
+  var moreBtn=remaining>0?'<div style="text-align:center;margin-top:18px"><button class="btn btns" onclick="loadMoreTx()">Mostrar '+Math.min(_txBase,remaining)+' mas · '+remaining+' restantes</button></div>':'';
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
@@ -1171,6 +1188,10 @@ function renderMonthlyChart(){
   var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
+  // Skip rebuild when the underlying data is identical (re-navigation, visibilitychange, sync with no change).
+  var sig=JSON.stringify([labels,cD,crD]);
+  if(sig===_mChartSig&&mChart) return;
+  _mChartSig=sig;
   document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:14px"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#209473;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#721414;display:inline-block"></span>Outflows</span></span>';
   if(mChart){ mChart.destroy(); mChart=null; }
   mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#209473',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#721414',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:15}}},y:{display:false}}}});
@@ -1214,6 +1235,10 @@ function renderEquityChart(){
     }
     return parseFloat((s.total+cumOut-cumIn).toFixed(2));
   });
+  // Skip rebuild when snapshots + investment flows are unchanged (adjVals folds in both).
+  var sig=JSON.stringify([labels,vals,adjVals]);
+  if(sig===_eChartSig&&eChart) return;
+  _eChartSig=sig;
   var snapsSorted=snaps.slice().reverse();
   function makeSnapRow(s){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:var(--color-text-secondary)">'+s.date+'</span><span style="font-weight:500">'+fmtUSD(s.total)+'</span><div style="display:flex;gap:4px"><button class="btn btns" onclick="editSnapshot('+s.id+')" style="font-size:11px;padding:2px 7px;opacity:1">edit</button><button class="btn btnd" onclick="deleteSnapshot('+s.id+')" style="font-size:11px;padding:2px 7px;opacity:1">×</button></div></div>'; }
   var latestSnap=makeSnapRow(snapsSorted[0]);

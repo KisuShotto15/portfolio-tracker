@@ -454,7 +454,9 @@
   function attach(){
     var strip=document.getElementById('kpi-strip');
     if(!strip){ return setTimeout(attach,60); }
-    new MutationObserver(sync2).observe(strip,{childList:true,subtree:true,characterData:true});
+    /* KPI strip is rebuilt via innerHTML (childList mutation), never by mutating text in place,
+       so characterData observation is unnecessary churn. childList+subtree is enough. */
+    new MutationObserver(sync2).observe(strip,{childList:true,subtree:true});
     sync2();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',attach); else attach();
@@ -467,8 +469,9 @@
       var c=window.Chart.getChart(el); if(c){ try{ c.resize(); c.render(); }catch(e){} }
     });
   }
-  var nudgeT;
-  function scheduleNudge(){ clearTimeout(nudgeT); nudgeT=setTimeout(nudgeCharts, 60); setTimeout(nudgeCharts, 350); }
+  var nudgeT,nudgeRaf;
+  /* One nudge on the next frame (layout settled) + one delayed fallback, instead of two timers each call. */
+  function scheduleNudge(){ cancelAnimationFrame(nudgeRaf); clearTimeout(nudgeT); nudgeRaf=requestAnimationFrame(nudgeCharts); nudgeT=setTimeout(nudgeCharts, 350); }
   function sync2(){ sync(); scheduleNudge(); }
   window.addEventListener('load', function(){ scheduleNudge(); });
 })();
