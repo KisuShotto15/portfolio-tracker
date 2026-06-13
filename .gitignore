@@ -14,6 +14,7 @@ portfolio-twa/build-src/
 *.png
 !/public/KS.png
 !/public/logo-*.png
+!/public/logo-zelle.png
 *.jpg
 !/public/favicon.jpg
 CLAUDE\ (1).md

@@ -12,7 +12,7 @@ var VERCEL_SECRET = 'ptk-2025-kisu';
 var AUTOFILL_RULES = [
   { keywords:['income','salario','cobro','pago','freelance','consulting','dividendo','ganancia','utilidad'],                                                                                                       type:'Credit', category:'Income' },
   { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto','bodega','mercado','automercado','central','polleria','panaderia','carneceria','charcuteria','verduras','frutas','lacteos','huevos','harina','arroz','pasta','embutidos','licoreria'], type:'Debit', category:'Groceries', currency:'VES' },
-  { keywords:['remesa','emily'],                                                                                                                                                                             type:'Credit', wallet:'Zelle', category:'Remesa' },
+  { keywords:['remesa','emily'],                                                                                                                                                                             type:'Credit', wallet:'Zelle', category:'Emily' },
   { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv','netuno','simpletv','directv','condominio','alquiler','agua','gas','plomero','electricista','pintura','mantenimiento','ferreteria','homemax','reparacion'], type:'Debit', category:'Home', currency:'VES' },
   { keywords:['enviado','transferencia','familia','apoyo','ayuda','envio','giro'],                                                                                                                                 type:'Debit',  category:'Support' },
   { keywords:['uber','taxi','metro','buseta','gasolina','vamos','yummy','ridery','busvero','mototaxi','encomienda','mudanza','estacionamiento','peaje'],                                                            type:'Debit',  category:'Transport', currency:'USD' },
@@ -27,7 +27,7 @@ var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business',
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
 var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8','Eating Out':'#FB923C',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
-  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Zelle:'#a78bfa',Other:'#6B7280'};
+  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Zelle:'#a78bfa',Other:'#6B7280',Remesa:'#6c1cd3',Emily:'#6c1cd3'};
 
 var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
@@ -670,11 +670,12 @@ var CAT_META={
   'Business':     {bg:'#0f4a4a', svg:'<rect x="1.5" y="6" width="13" height="8" rx="1.5"/><path d="M5 6V4.5A1.5 1.5 0 0 1 6.5 3h3A1.5 1.5 0 0 1 11 4.5V6"/><line x1="1.5" y1="10" x2="14.5" y2="10"/>'},
   'Support':      {bg:'#5a1515', svg:'<path d="M8 12.5C6 11 2 8.5 2 5.5A3 3 0 0 1 8 4 3 3 0 0 1 14 5.5C14 8.5 10 11 8 12.5z"/>'},
   'Savings':      {bg:'#0f3060', svg:'<rect x="1.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="7" cy="8" r="2.5"/><line x1="7" y1="8" x2="8.8" y2="6.5"/><line x1="12.5" y1="5.5" x2="14.5" y2="5.5"/><line x1="12.5" y1="10.5" x2="14.5" y2="10.5"/>'},
-  'Remesa':       {bg:'#1a3a5c', svg:'<line x1="2" y1="8" x2="11" y2="8"/><polyline points="8 5 11 8 8 11"/><path d="M11 3h2a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-2"/>'},
+  'Emily':        {bg:'#3d1580', logo:'/logo-zelle.png?v=1'},
 };
 function catIcon(cat){
   var m=CAT_META[cat]||{bg:'#252535',svg:''};
-  return '<span class="cat-ico" style="background:'+m.bg+'"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg></span>';
+  var inner=m.logo?'<img src="'+m.logo+'" style="width:20px;height:20px;border-radius:5px;object-fit:cover">':'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>';
+  return '<span class="cat-ico" style="background:'+(m.logo?'transparent':m.bg)+'">'+inner+'</span>';
 }
 
 function loadMoreTx(){ _txLimit+=_txBase; renderTx(); }
@@ -1651,7 +1652,8 @@ function renderWallets(){
     var total=calcTrackerBal(name); var mw=S.manualWallets.find(function(w){return w.name===name;});
     var meta=name==='Zelle'?'+5%: '+fmtUSD(total*1.05):'Calculated from transactions';
     var acts=mw?'<button class="wico" onclick="renameManualWallet('+mw.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>':'';
-    return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name)+' <span class="wm-badge">tracker</span>',meta,balHtml(total),acts);
+    var tlogo=name==='Zelle'?'/logo-zelle.png?v=1':null;
+    return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name)+' <span class="wm-badge">tracker</span>',meta,balHtml(total),acts,tlogo);
   }).join('');
   var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
