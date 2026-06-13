@@ -681,6 +681,7 @@ function loadMoreTx(){ _txLimit+=_txBase; renderTx(); }
 window.loadMoreTx=loadMoreTx;
 function renderTx(){
   var wrap=document.getElementById('tx-wrap');
+  populateTxMonth();
   var tF=document.getElementById('tf-type').value, cF=document.getElementById('tf-cat').value, wF=document.getElementById('tf-wallet').value, mF=document.getElementById('tf-month').value, sF=(document.getElementById('tf-search').value||'').toLowerCase().trim();
   // Reset pagination whenever the filter set changes (loadMoreTx keeps the same filters → no reset).
   var fSig=tF+'|'+cF+'|'+wF+'|'+mF+'|'+sF;
@@ -749,7 +750,17 @@ function renderTx(){
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
-function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
+function fmtMonthLabel(m){ var p=String(m).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ',', '); }
+function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
+function populateTxMonth(){
+  var sel=document.getElementById('tf-month'); if(!sel) return;
+  var cur=sel.value;
+  var months=getMonths().slice();
+  var nowM=new Date().toISOString().slice(0,7);
+  if(months.indexOf(nowM)<0) months.unshift(nowM); // current month always selectable
+  sel.innerHTML='<option value="">All months</option>'+months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join('');
+  sel.value=cur; // preserve selection ("" → All months)
+}
 
 function groupSum(txDebit, cats){ return cats.reduce(function(s,c){ return s+txDebit.filter(function(t){ return t.category===c; }).reduce(function(a,t){ return a+t.amountUSD; },0); },0); }
 
@@ -1388,7 +1399,7 @@ async function deleteSnapshot(id){
   }
   save(); renderEquityChart(); renderSnapshotPnL();
 }
-function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var val=parseFloat(prompt('Edit snapshot value for '+snap.date+':',snap.total)); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
+async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
@@ -1454,7 +1465,7 @@ function renderBudget(){
   html+='<div class="dash-head">'
     +'<span class="dash-eyebrow">Budget</span>'
     +'<select onchange="window._budMonthSel(this.value)">'
-    +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+m+'</option>'; }).join('')
+    +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+fmtMonthLabel(m)+'</option>'; }).join('')
     +'</select>'
     +'</div>';
 
@@ -1821,57 +1832,56 @@ function renderHistory(view){
 
   if(titleEl) titleEl.textContent=view==='pnl'?'Snapshot P&L History':'Snapshot History';
 
-  function colorP(v){ return v>0?'#1D9E75':v<0?'#E24B4A':'#888'; }
-  function sign(v){ return v>0?'+':v<0?'-':''; }
+  function cls(v){ return v>0?'up':v<0?'down':'flat'; }
+  function sgn(v){ return v>0?'+':v<0?'-':''; }
+  function adjLine(r){
+    var parts=[];
+    if(r.invOut>0) parts.push('<span style="color:#EF9F27">Invested '+fmtUSD(r.invOut)+'</span>');
+    if(r.invIn>0)  parts.push('<span style="color:#60A5FA">Returned '+fmtUSD(r.invIn)+'</span>');
+    return parts.length?'<span class="snap-adj">'+parts.join(' · ')+'</span>':'';
+  }
+  var PENCIL='<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>';
+  var XICO='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg>';
 
-  var headers=view==='pnl'
-    ?['Period','From','To','P&L','%','Adjustments']
-    :['Date','Total','P&L','%','Adjustments','Cumulative','Actions'];
+  var html='';
+  if(view!=='pnl'){
+    var latest=snaps[snaps.length-1];
+    var totDelta=latest.total-firstTotal;
+    var totPct=firstTotal>0?(totDelta/firstTotal)*100:0;
+    html+='<div class="snap-hero">'
+      +'<div class="snap-hero-main">'
+        +'<div class="snap-hero-lbl">Latest Net Worth</div>'
+        +'<div class="snap-hero-val">'+fmtUSD(latest.total)+'</div>'
+        +'<div class="snap-hero-meta">'+snaps.length+' snapshots · '+snaps[0].date+' → '+latest.date+'</div>'
+      +'</div>'
+      +'<div class="snap-hero-delta '+cls(totDelta)+'">'+sgn(totDelta)+fmtUSD(Math.abs(totDelta))+' · '+sgn(totPct)+Math.abs(totPct).toFixed(1)+'%</div>'
+    +'</div>';
+  }
 
-  var html='<div class="cw" style="padding:0;overflow:hidden">'
-    +'<div style="overflow-x:auto"><table class="hist-table">'
-    +'<thead><tr>'+headers.map(function(h){ return '<th>'+h+'</th>'; }).join('')+'</tr></thead>'
-    +'<tbody>';
-
+  html+='<div class="snap-list">';
   rows.forEach(function(r){
-    var adjTxt='';
-    if(r.invOut>0||r.invIn>0){
-      var parts=[];
-      if(r.invOut>0) parts.push('<span style="color:#EF9F27">Invested '+fmtUSD(r.invOut)+'</span>');
-      if(r.invIn>0) parts.push('<span style="color:#60A5FA">Returned '+fmtUSD(r.invIn)+'</span>');
-      adjTxt=parts.join(' · ');
-    } else adjTxt='<span style="color:rgba(255,255,255,0.2)">—</span>';
-
-    var profitCell=r.profit!==null
-      ?'<span style="color:'+colorP(r.profit)+'">'+sign(r.profit)+fmtUSD(Math.abs(r.profit))+'</span>'
-      :'<span style="color:rgba(255,255,255,0.2)">—</span>';
-    var pctCell=r.pct!==null
-      ?'<span style="color:'+colorP(r.pct)+'">'+sign(r.pct)+r.pct.toFixed(2)+'%</span>'
-      :'<span style="color:rgba(255,255,255,0.2)">—</span>';
-
+    var periodChip=r.profit!==null
+      ?'<span class="snap-chip '+cls(r.profit)+'">'+sgn(r.profit)+fmtUSD(Math.abs(r.profit))+' · '+sgn(r.pct)+Math.abs(r.pct).toFixed(2)+'%</span>'
+      :'<span class="snap-chip flat">Baseline</span>';
     if(view==='pnl'){
-      html+='<tr>'
-        +'<td>'+r.prev.date+' → '+r.s.date+'</td>'
-        +'<td>'+fmtUSD(r.prev.total)+'</td>'
-        +'<td>'+fmtUSD(r.s.total)+'</td>'
-        +'<td>'+profitCell+'</td>'
-        +'<td>'+pctCell+'</td>'
-        +'<td style="font-size:12px">'+adjTxt+'</td>'
-        +'</tr>';
+      html+='<div class="snap-row">'
+        +'<div class="snap-date"><span class="snap-d">'+r.prev.date+' → '+r.s.date+'</span>'+adjLine(r)+'</div>'
+        +'<div class="snap-spacer"></div>'
+        +'<div class="snap-figs"><span class="snap-total" style="font-size:14px;color:var(--txt2)">'+fmtUSD(r.prev.total)+' → '+fmtUSD(r.s.total)+'</span><div class="snap-deltas">'+periodChip+'</div></div>'
+      +'</div>';
     } else {
-      var cumColor=colorP(r.cumDelta);
-      html+='<tr>'
-        +'<td>'+r.s.date+'</td>'
-        +'<td style="font-weight:500">'+fmtUSD(r.s.total)+'</td>'
-        +'<td>'+profitCell+'</td>'
-        +'<td>'+pctCell+'</td>'
-        +'<td style="font-size:12px">'+adjTxt+'</td>'
-        +'<td><span style="color:'+cumColor+'">'+sign(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+'</span> <span style="color:rgba(255,255,255,0.4);font-size:11px">('+sign(r.cumPct)+r.cumPct.toFixed(1)+'%)</span></td>'
-        +'<td style="white-space:nowrap"><button class="btn btns" style="padding:3px 8px;font-size:11px;margin-right:4px" onclick="editSnapshot('+r.s.id+')">edit</button><button class="btn btnd" style="padding:3px 8px;font-size:11px;opacity:1" onclick="deleteSnapshotFromHistory('+r.s.id+')">×</button></td>'
-        +'</tr>';
+      html+='<div class="snap-row">'
+        +'<div class="snap-date"><span class="snap-d">'+r.s.date+'</span>'+adjLine(r)+'</div>'
+        +'<div class="snap-spacer"></div>'
+        +'<div class="snap-figs">'
+          +'<span class="snap-total">'+fmtUSD(r.s.total)+'</span>'
+          +'<div class="snap-deltas">'+periodChip+'<span class="snap-cum">Cum '+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' ('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></div>'
+        +'</div>'
+        +'<div class="snap-acts"><button class="wico" title="Edit" onclick="editSnapshot('+r.s.id+')">'+PENCIL+'</button><button class="wico del" title="Delete" onclick="deleteSnapshotFromHistory('+r.s.id+')">'+XICO+'</button></div>'
+      +'</div>';
     }
   });
-  html+='</tbody></table></div></div>';
+  html+='</div>';
   wrap.innerHTML=html;
 }
 window.renderHistory=renderHistory;
@@ -2111,7 +2121,8 @@ async function init(){
   loadLocal();
   var today=localToday();
   document.getElementById('tx-date').value=today;
-  document.getElementById('tf-month').value=today.slice(0,7);
+  populateTxMonth();
+  document.getElementById('tf-month').value=today.slice(0,7); // default: current month
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   var pulled=await pullFromCloud();

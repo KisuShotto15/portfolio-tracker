@@ -231,12 +231,12 @@ input,select,textarea,button{font-family:inherit}
 .frow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:22px}
 .frow-break{flex-basis:100%;height:0}
 .frow input[type="search"]{
-  background:var(--surface);border:1px solid var(--line-soft);border-radius:999px;
+  background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;
   padding:10px 19px;color:var(--txt);font-size:16px;min-width:200px;flex:1;max-width:320px;
 }
 .frow input::placeholder{color:var(--txt3)}
 .frow select,.frow input[type="month"]{
-  background:var(--surface);border:1px solid var(--line-soft);border-radius:999px;
+  background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;
   padding:10px 16px;color:var(--txt2);font-size:16px;cursor:pointer;
 }
 
@@ -288,7 +288,8 @@ input,select,textarea,button{font-family:inherit}
 .tag.tR{color:#f0a0a0;background:rgba(228,88,88,.13)}
 .tag.tB{color:#a9cdfb;background:rgba(96,165,250,.13)}
 .tag.tA{color:#f3c879;background:rgba(239,159,39,.13)}
-.tag.tP,.tag.tBinance{color:#c3abf6;background:var(--accent-soft)}
+.tag.tP{color:#c3abf6;background:var(--accent-soft)}
+.tag.tBinance{color:#f0b90b;background:rgba(240,185,11,.15)}
 .tag.tZ{color:#c3abf6;background:var(--accent-soft)}
 .tag.tX{color:var(--txt2);background:rgba(255,255,255,.06)}
 .badge-t{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:2.5px 7.5px;margin-left:6px}
@@ -566,10 +567,40 @@ input::placeholder{color:var(--txt3)}
 .hist-popup{position:absolute;right:0;top:42px;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:17px;display:none;z-index:30;box-shadow:0 12px 32px rgba(0,0,0,.5)}
 .hist-popup.open{display:block}
 
-/* History table */
-.hist-table{width:100%;border-collapse:collapse;font-size:16px}
-.hist-table th{font-size:13px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3);text-align:left;padding:15px 17px;border-bottom:1px solid var(--line-soft)}
-.hist-table td{padding:14px 17px;border-bottom:1px solid var(--line-soft)}
+/* Snapshot history — card list (consistent with holdings / wallets) */
+.snap-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 28px;margin-bottom:22px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.snap-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
+.snap-hero-val{font-family:var(--font-num);font-size:44px;font-weight:500;letter-spacing:-.03em;line-height:1;margin:8px 0 8px}
+.snap-hero-meta{font-size:13px;color:var(--txt2);font-family:var(--font-num)}
+.snap-hero-delta{font-family:var(--font-num);font-size:17px;font-weight:500;padding:6px 14px;border-radius:12px}
+.snap-hero-delta.up{color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
+.snap-hero-delta.down{color:var(--red);background:color-mix(in srgb,var(--red) 13%,transparent)}
+.snap-hero-delta.flat{color:var(--txt3);background:rgba(255,255,255,.06)}
+
+.snap-list{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);overflow:hidden}
+.snap-row{display:flex;align-items:center;gap:16px;padding:16px 22px;border-bottom:1px solid var(--line-soft);transition:background .12s}
+.snap-row:last-child{border-bottom:none}
+.snap-row:hover{background:rgba(255,255,255,.025)}
+.snap-date{display:flex;flex-direction:column;gap:3px;min-width:0}
+.snap-d{font-family:var(--font-num);font-size:15px;font-weight:500;color:var(--txt)}
+.snap-adj{font-size:12px;color:var(--txt3)}
+.snap-spacer{flex:1}
+.snap-figs{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.snap-total{font-family:var(--font-num);font-size:18px;font-weight:600;color:var(--txt)}
+.snap-deltas{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.snap-chip{font-family:var(--font-num);font-size:13px;font-weight:500;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.snap-chip.up{color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
+.snap-chip.down{color:var(--red);background:color-mix(in srgb,var(--red) 13%,transparent)}
+.snap-chip.flat{color:var(--txt3);background:rgba(255,255,255,.06)}
+.snap-cum{font-size:12px;color:var(--txt3);font-family:var(--font-num);white-space:nowrap}
+.snap-acts{display:flex;gap:5px;flex-shrink:0;opacity:0;transition:opacity .12s}
+.snap-row:hover .snap-acts,.snap-row:focus-within .snap-acts{opacity:1}
+@media(max-width:720px){
+  .snap-acts{opacity:1}
+  .snap-hero-val{font-size:34px}
+  .snap-row{padding:14px 16px;gap:10px}
+  .snap-cum{display:none}
+}
 
 /* Empty state */
 .es{text-align:center;color:var(--txt3);padding:2.5rem 1rem;display:flex;flex-direction:column;align-items:center;gap:6px}
@@ -802,6 +833,85 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
 .hb-fill,.goal-bar i,.bdg-pf,.hld-bar i{
   transform-origin:left center;
   animation:barGrow .65s cubic-bezier(.22,.61,.36,1) both;
+}
+
+/* ───────────────── Custom <select> dropdown (all selects) ─────────────────
+   Custom-styled native <select> popup via the modern customizable-select model.
+   Progressive enhancement: browsers without support ignore these rules and keep
+   the native dropdown — no JS touched, no regression. */
+select{
+  appearance:base-select;
+}
+select::picker-icon{
+  color:var(--txt3);
+  transition:transform .2s ease;
+}
+select:open::picker-icon{
+  transform:rotate(180deg);
+}
+select::picker(select){
+  appearance:base-select;
+  background:var(--surface2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:6px;
+  margin-top:8px;
+  max-height:min(300px,52vh);
+  overflow-y:auto;
+  box-shadow:0 16px 40px rgba(0,0,0,.55);
+  /* minimal scrollbar (Firefox) */
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.18) transparent;
+  /* open animation */
+  opacity:0;
+  transform:translateY(-6px) scale(.97);
+  transform-origin:top center;
+  transition:opacity .16s ease,transform .16s ease,overlay .16s allow-discrete,display .16s allow-discrete;
+}
+select:open::picker(select){
+  opacity:1;
+  transform:none;
+}
+@starting-style{
+  select:open::picker(select){
+    opacity:0;
+    transform:translateY(-6px) scale(.97);
+  }
+}
+/* minimal scrollbar (WebKit/Chromium) */
+select::picker(select)::-webkit-scrollbar{width:8px}
+select::picker(select)::-webkit-scrollbar-track{background:transparent;margin:6px 0}
+select::picker(select)::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.16);
+  border-radius:99px;
+  border:2px solid transparent;
+  background-clip:padding-box;
+  transition:background .15s;
+}
+select::picker(select)::-webkit-scrollbar-thumb:hover{
+  background:rgba(255,255,255,.3);
+  background-clip:padding-box;
+}
+select option{
+  font-family:var(--font-num);
+  font-size:15px;
+  color:var(--txt2);
+  padding:9px 14px;
+  border-radius:9px;
+  background:transparent;
+  transition:background .12s,color .12s;
+}
+select option:hover{
+  background:rgba(255,255,255,.05);
+  color:var(--txt);
+}
+select option:checked{
+  background:var(--accent-soft);
+  color:var(--accent);
+  font-weight:600;
+}
+select option::checkmark{
+  content:"";
 }
 
 @media(prefers-reduced-motion:reduce){
