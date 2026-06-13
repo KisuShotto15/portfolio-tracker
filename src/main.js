@@ -1640,8 +1640,8 @@ function renderWallets(){
 
   // ── Exchanges ─────────────────────────────────────────────────────────
   var exRows=''
-    +apiRow('#9B70F0','B','Binance Funding',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png?v=3')
-    +apiRow('#FB923C','B','Bibi Binance',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'','/logo-binance.png?v=3')
+    +apiRow('#9B70F0','B','Binance',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png?v=3')
+    +apiRow('#FB923C','B','Binance Bibi',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'','/logo-binance.png?v=3')
     +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'','/logo-bybit.png?v=2')
     +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'','/logo-okx.png?v=2')
     +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT','/logo-trezor.png?v=2');
