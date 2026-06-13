@@ -2142,8 +2142,8 @@ async function init(){
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
-  // One-time migration: Zelle wallet transactions with category Remesa → Emily
-  var migrated=S.transactions.filter(function(t){ return t.wallet==='Zelle'&&t.category==='Remesa'; });
+  // Migration: all Zelle wallet transactions → category Emily
+  var migrated=S.transactions.filter(function(t){ return t.wallet==='Zelle'&&t.category!=='Emily'; });
   if(migrated.length){ migrated.forEach(function(t){ t.category='Emily'; t.updatedAt=Date.now(); }); S.transactionsUpdatedAt=Date.now(); save(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
