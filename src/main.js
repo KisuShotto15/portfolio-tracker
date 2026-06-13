@@ -1654,14 +1654,17 @@ function renderWallets(){
     var mw=S.manualWallets.find(function(w){return w.name===name;});
     var total=mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(name);
     var isZelle=name==='Zelle';
-    var meta=isZelle?'+5%: '+fmtUSD(total*1.05):(mw&&mw.balanceOverride!=null?'Manual override':'Calculated from transactions');
+    var meta='<span class="wm-badge">tracker</span>';
+    var right=isZelle
+      ?'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span class="wm-meta" style="white-space:nowrap">+5%: '+fmtUSD(total*1.05)+'</span>'+balHtml(total)+'</div>'
+      :balHtml(total);
     var acts='';
     if(mw){
       if(!isZelle) acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
     var tlogo=isZelle?'/logo-zelle.png?v=1':null;
-    return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name)+' <span class="wm-badge">tracker</span>',meta,balHtml(total),acts,tlogo);
+    return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
   }).join('');
   var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
