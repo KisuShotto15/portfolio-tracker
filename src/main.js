@@ -1606,6 +1606,7 @@ window.refreshAllWallets=async function(){
   if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
 };
 
+var WALLET_LOGOS={'Zelle':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1'};
 function renderWallets(){
   var grid=document.getElementById('w-grid'); var cards=[];
   var apiTotal=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
@@ -1668,13 +1669,12 @@ function renderWallets(){
       if(!isZelle) acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
-    var TRACKER_LOGOS={'Zelle':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1'};
-    var tlogo=TRACKER_LOGOS[name]||null;
+    var tlogo=WALLET_LOGOS[name]||null;
     return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
   }).join('');
   var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
-    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),'Manual balance',balHtml(w.balance),acts);
+    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),'Manual balance',balHtml(w.balance),acts,WALLET_LOGOS[w.name]||null);
   }).join('');
 
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
