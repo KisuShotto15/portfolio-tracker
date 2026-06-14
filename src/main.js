@@ -6,6 +6,7 @@ var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-bal
 var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
+var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
 var VERCEL_SECRET = 'ptk-2025-kisu';
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
@@ -535,6 +536,56 @@ function autofillFromNote(){
 }
 function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; document.getElementById('usd-preview').textContent=(S.rate&&a>0)?(a/S.rate).toFixed(2):'-'; }
 
+var pendingReceiptUrl = null;
+function renderReceiptPreview(){
+  var prev=document.getElementById('tx-receipt-preview');
+  var img=document.getElementById('tx-receipt-img');
+  if(pendingReceiptUrl){ img.src=pendingReceiptUrl; prev.style.display='flex'; }
+  else{ img.src=''; prev.style.display='none'; }
+}
+function removeReceipt(){
+  pendingReceiptUrl=null;
+  document.getElementById('tx-receipt').value='';
+  document.getElementById('tx-receipt-status').textContent='';
+  renderReceiptPreview();
+}
+function compressImage(file){
+  return new Promise(function(resolve,reject){
+    var img=new Image();
+    img.onload=function(){
+      var max=1200, w=img.width, h=img.height;
+      if(w>h&&w>max){ h=Math.round(h*max/w); w=max; }
+      else if(h>=w&&h>max){ w=Math.round(w*max/h); h=max; }
+      var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(cv.toDataURL('image/jpeg',0.8));
+    };
+    img.onerror=reject;
+    var fr=new FileReader();
+    fr.onload=function(){ img.src=fr.result; };
+    fr.onerror=reject;
+    fr.readAsDataURL(file);
+  });
+}
+async function onReceiptPick(input){
+  var file=input.files&&input.files[0]; if(!file) return;
+  var status=document.getElementById('tx-receipt-status');
+  status.textContent='Subiendo...';
+  try{
+    var dataUrl=await compressImage(file);
+    var dataB64=dataUrl.split(',')[1];
+    var r=await fetch(BLOB_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({filename:'receipt.jpg',dataB64:dataB64,contentType:'image/jpeg'})});
+    if(!r.ok) throw new Error('upload failed');
+    var j=await r.json();
+    pendingReceiptUrl=j.url;
+    status.textContent='';
+    renderReceiptPreview();
+  }catch(e){
+    status.textContent='Error al subir';
+    input.value='';
+  }
+}
+
 function addTx(){
   var date=document.getElementById('tx-date').value;
   var desc=document.getElementById('tx-desc').value.trim();
@@ -548,7 +599,7 @@ function addTx(){
   if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
   snapshot();
   var _now=Date.now();
-  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false,updatedAt:_now});
+  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_now});
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
@@ -568,6 +619,7 @@ function editTx(id){
   document.getElementById('tx-cat').value=t.category;
   document.getElementById('tx-cur').value=t.originalCurrency||'USD';
   document.getElementById('tx-amount').value=t.originalCurrency==='VES'&&t.amountVES?t.amountVES:t.amountUSD;
+  pendingReceiptUrl=t.receiptUrl||null; renderReceiptPreview();
   toggleVesHint();
   var btn=document.querySelector('.btn-add');
   btn.textContent='Confirm';
@@ -602,6 +654,7 @@ function closeTxForm(){
   document.getElementById('tx-cat').value='';
   document.getElementById('tx-amount').value='';
   document.getElementById('tx-cur').value='USD';
+  removeReceipt();
   toggleVesHint();
   document.getElementById('tx-form-panel').classList.remove('open');
   document.getElementById('tx-overlay').classList.remove('open');
@@ -641,7 +694,7 @@ function updateTx(){
   snapshot();
   var t=S.transactions.find(function(x){ return x.id===editingTxId; });
   var _now=Date.now();
-  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; t.updatedAt=_now; }
+  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
@@ -746,7 +799,7 @@ function renderTx(){
         +  '<span class="td-amt-val td-amt-desk" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
         +  origM
         +'</td>'
-        +'<td class="td-act"><button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
+        +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" title="Factura" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
       +'</tr>';
     }).join('');
     return sep+txRows;
@@ -1612,7 +1665,7 @@ function renderWallets(){
   var apiTotal=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
   var trackerNames=['Zelle'];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
-  var trackerTotal=trackerNames.reduce(function(s,n){ return s+calcTrackerBal(n); },0);
+  var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var grand=apiTotal+trackerTotal+manualNormal;
   // ── allocation bar data ──────────────────────────────────────────────
@@ -1942,6 +1995,19 @@ if(!window._wvSelListener){
   window._wvSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.wv-row')) document.querySelectorAll('.wv-exp').forEach(function(r){ r.classList.remove('wv-exp'); }); });
 }
+window.onReceiptPick = onReceiptPick;
+window.removeReceipt = removeReceipt;
+window.openReceipt = function(url){
+  var ov=document.getElementById('receipt-lightbox');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='receipt-lightbox'; ov.className='receipt-lightbox';
+    ov.onclick=function(){ ov.classList.remove('open'); };
+    ov.innerHTML='<img alt="">';
+    document.body.appendChild(ov);
+  }
+  ov.querySelector('img').src=url;
+  ov.classList.add('open');
+};
 window.addTxOrUpdate = addTxOrUpdate;
 window.cancelEditTx = cancelEditTx;
 window.openTxForm = openTxForm;
