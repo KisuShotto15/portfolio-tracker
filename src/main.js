@@ -537,6 +537,7 @@ function autofillFromNote(){
 function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; document.getElementById('usd-preview').textContent=(S.rate&&a>0)?(a/S.rate).toFixed(2):'-'; }
 
 var pendingReceiptUrl = null;
+var receiptUploading = false;
 function toggleReceiptMenu(e){
   if(e) e.stopPropagation();
   var m=document.getElementById('receipt-menu'); if(!m) return;
@@ -587,6 +588,7 @@ async function onReceiptPick(input){
   var file=input.files&&input.files[0]; if(!file) return;
   var status=document.getElementById('tx-receipt-status');
   status.textContent='Subiendo...';
+  receiptUploading=true;
   try{
     var dataUrl=await compressImage(file);
     var dataB64=dataUrl.split(',')[1];
@@ -599,6 +601,8 @@ async function onReceiptPick(input){
   }catch(e){
     status.textContent='Error al subir';
     input.value='';
+  }finally{
+    receiptUploading=false;
   }
 }
 
@@ -694,6 +698,7 @@ function toggleWmBalField(){
   if(f) f.style.display=document.getElementById('wm-type').value==='normal'?'flex':'none';
 }
 function addTxOrUpdate(){
+  if(receiptUploading){ alert('Espera a que termine de subir la factura'); return; }
   if(editingTxId) updateTx(); else addTx();
 }
 function updateTx(){
