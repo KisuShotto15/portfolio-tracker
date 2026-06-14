@@ -578,8 +578,13 @@ function editTx(id){
 function cancelEditTx(){
   closeTxForm();
 }
+function setDefaultWallet(){
+  var ws=document.getElementById('tx-wallet'); if(!ws) return;
+  for(var i=0;i<ws.options.length;i++){ if(ws.options[i].value==='Binance'){ ws.value='Binance'; return; } }
+  ws.value='';
+}
 function openTxForm(){
-  if(!editingTxId) document.getElementById('tx-date').value=localToday();
+  if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
   document.getElementById('tx-form-panel').classList.add('open');
   document.getElementById('tx-overlay').classList.add('open');
   document.getElementById('fab-add').style.display='none';
@@ -592,7 +597,7 @@ function closeTxForm(){
   var today=localToday();
   document.getElementById('tx-date').value=today;
   document.getElementById('tx-desc').value='';
-  document.getElementById('tx-wallet').value='';
+  setDefaultWallet();
   document.getElementById('tx-type').value='Debit';
   document.getElementById('tx-cat').value='';
   document.getElementById('tx-amount').value='';
