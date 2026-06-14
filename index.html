@@ -503,7 +503,9 @@
     <button class="btn btn-add" onclick="addTxOrUpdate()">Add</button>
     <button id="btn-cancel-edit" class="btn" onclick="cancelEditTx()" style="display:none;color:#E24B4A;border-color:transparent">Cancel</button>
     <input type="file" id="tx-receipt" accept="image/*" style="display:none" onchange="onReceiptPick(this)"/>
-    <button class="btn btns" id="btn-receipt" onclick="document.getElementById('tx-receipt').click()">📎 Factura</button>
+    <input type="file" id="tx-receipt-cam" accept="image/*" capture="environment" style="display:none" onchange="onReceiptPick(this)"/>
+    <button class="btn btns" id="btn-receipt-cam" onclick="document.getElementById('tx-receipt-cam').click()">📷 Camara</button>
+    <button class="btn btns" id="btn-receipt" onclick="document.getElementById('tx-receipt').click()">🖼️ Galeria</button>
     <span id="tx-receipt-status" style="font-size:12px;color:var(--color-text-secondary)"></span>
     <div id="tx-receipt-preview" style="display:none;align-items:center;gap:8px">
       <img id="tx-receipt-img" src="" alt="" onclick="openReceipt(this.src)"/>
