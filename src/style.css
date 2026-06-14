@@ -263,6 +263,10 @@ input,select,textarea,button{font-family:inherit}
 .btn-edit-tx{background:rgba(255,255,255,.06);border:none;color:var(--txt2);width:32px;height:32px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s}
 .tx-row:hover .btn-edit-tx,.tx-row:focus-within .btn-edit-tx{opacity:1}
 .btn-edit-tx:hover{color:var(--txt)}
+.receipt-attach{position:relative;display:inline-block}
+.receipt-menu{display:none;position:absolute;bottom:calc(100% + 6px);left:0;flex-direction:column;gap:6px;padding:8px;background:var(--card,#1a1a1f);border:1px solid var(--line-soft);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:20;min-width:150px}
+.receipt-menu.open{display:flex}
+.receipt-menu .btn{justify-content:flex-start}
 .tx-receipt-thumb{width:28px;height:28px;border-radius:6px;object-fit:cover;cursor:pointer;vertical-align:middle;margin-right:6px;border:1px solid var(--line-soft)}
 #tx-receipt-img{width:40px;height:40px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid var(--line-soft)}
 .receipt-lightbox{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out}

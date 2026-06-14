@@ -537,6 +537,22 @@ function autofillFromNote(){
 function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; document.getElementById('usd-preview').textContent=(S.rate&&a>0)?(a/S.rate).toFixed(2):'-'; }
 
 var pendingReceiptUrl = null;
+function toggleReceiptMenu(e){
+  if(e) e.stopPropagation();
+  var m=document.getElementById('receipt-menu'); if(!m) return;
+  var open=m.classList.toggle('open');
+  if(open){
+    setTimeout(function(){
+      document.addEventListener('click',function close(ev){
+        if(!ev.target.closest('.receipt-attach')){ m.classList.remove('open'); document.removeEventListener('click',close); }
+      });
+    },0);
+  }
+}
+function pickReceipt(id){
+  var m=document.getElementById('receipt-menu'); if(m) m.classList.remove('open');
+  document.getElementById(id).click();
+}
 function renderReceiptPreview(){
   var prev=document.getElementById('tx-receipt-preview');
   var img=document.getElementById('tx-receipt-img');
@@ -1997,6 +2013,8 @@ if(!window._wvSelListener){
 }
 window.onReceiptPick = onReceiptPick;
 window.removeReceipt = removeReceipt;
+window.toggleReceiptMenu = toggleReceiptMenu;
+window.pickReceipt = pickReceipt;
 window.openReceipt = function(url){
   var ov=document.getElementById('receipt-lightbox');
   if(!ov){
