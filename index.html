@@ -502,7 +502,7 @@
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
     <button class="btn btn-add" onclick="addTxOrUpdate()">Add</button>
     <button id="btn-cancel-edit" class="btn" onclick="cancelEditTx()" style="display:none;color:#E24B4A;border-color:transparent">Cancel</button>
-    <input type="file" id="tx-receipt" accept="image/*" capture="environment" style="display:none" onchange="onReceiptPick(this)"/>
+    <input type="file" id="tx-receipt" accept="image/*" style="display:none" onchange="onReceiptPick(this)"/>
     <button class="btn btns" id="btn-receipt" onclick="document.getElementById('tx-receipt').click()">📎 Factura</button>
     <span id="tx-receipt-status" style="font-size:12px;color:var(--color-text-secondary)"></span>
     <div id="tx-receipt-preview" style="display:none;align-items:center;gap:8px">
