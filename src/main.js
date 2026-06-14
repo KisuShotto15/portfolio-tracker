@@ -660,7 +660,7 @@ function openTxForm(){
   document.getElementById('tx-form-panel').classList.add('open');
   document.getElementById('tx-overlay').classList.add('open');
   document.getElementById('fab-add').style.display='none';
-  setTimeout(function(){ var d=document.getElementById('tx-desc'); if(d) d.focus(); },120);
+  if(!editingTxId) setTimeout(function(){ var d=document.getElementById('tx-desc'); if(d) d.focus(); },120);
 }
 function closeTxForm(){
   editingTxId=null;
