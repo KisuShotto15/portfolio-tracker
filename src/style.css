@@ -271,7 +271,6 @@ input,select,textarea,button{font-family:inherit}
 .preset-lbl{cursor:pointer}
 .preset-x{margin-left:8px;padding-left:8px;border-left:1px solid var(--line-soft);color:var(--txt3);font-size:12px;cursor:pointer}
 .preset-x:hover{color:var(--red)}
-.preset-chip.suggested{background:transparent;border-style:dashed;color:var(--txt3)}
 .preset-chip.preset-save{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 .preset-mrow{display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--line-soft)}
 .preset-mrid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -637,19 +636,20 @@ input::placeholder{color:var(--txt3)}
 /* ───────────────── Modal / tx form / FAB ───────────────── */
 .tx-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,.6);
-  opacity:0;pointer-events:none;transition:opacity .18s;z-index:55;
+  opacity:0;pointer-events:none;transition:opacity .18s;z-index:55;will-change:opacity;
 }
 .tx-overlay.open{opacity:1;pointer-events:auto}
 
 .tx-form-panel{
   position:fixed;left:50%;bottom:0;transform:translateX(-50%) translateY(110%);
-  width:min(850px,94vw);background:var(--surface);border:1px solid var(--line);
-  border-radius:20px 20px 0 0;padding:27px 32px 38px;z-index:60;
-  transition:transform .28s cubic-bezier(.32,.72,0,1);
-  will-change:transform;
+  width:min(620px,94vw);background:var(--surface);border:1px solid var(--line);
+  border-radius:24px 24px 0 0;padding:24px 28px 34px;z-index:60;
+  transition:transform .24s cubic-bezier(.32,.72,0,1);
+  will-change:transform;backface-visibility:hidden;contain:layout paint;
+  box-shadow:0 -8px 30px rgba(0,0,0,.45);
 }
-.tx-form-panel.open{transform:translateX(-50%) translateY(0);box-shadow:0 -8px 24px rgba(0,0,0,.4)}
-.tx-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.tx-form-panel.open{transform:translateX(-50%) translateY(0)}
+.tx-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .app-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:160;align-items:center;justify-content:center}
 .app-modal-overlay.open{display:flex}
 .app-modal{background:rgba(14,14,24,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:1.5rem 1.5rem 1.25rem;min-width:280px;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
@@ -658,9 +658,17 @@ input::placeholder{color:var(--txt3)}
 .app-modal .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1.25rem}
 .modal-inp{width:100%;padding:9px 12px;font-size:15px;color:#fff;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:8px;outline:none}
 .modal-inp:focus{border-color:var(--accent)}
-.tx-panel-header h3{margin:0;font-size:15px;font-weight:600}
-.tx-form-panel .field-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.tx-panel-header h3{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.tx-form-panel .field-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 14px;margin-bottom:14px}
 .tx-form-panel .field-row .field[style*="span 2"]{grid-column:span 2}
+/* Minimalist form: lighter labels, calmer inputs, prominent amount */
+.tx-form-panel .field{gap:5px}
+.tx-form-panel .field-lbl{font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--txt3)}
+.tx-form-panel input,.tx-form-panel select{font-size:15px;padding:9px 13px;border-radius:10px;background:rgba(255,255,255,.03)}
+.tx-form-panel #tx-amount{font-size:19px;font-weight:600;font-family:var(--font-num)}
+.tx-form-panel .btn-add{flex:1;justify-content:center;padding:11px 25px;border-radius:12px}
+.tx-close{width:32px;height:32px;padding:0;justify-content:center;border-radius:50%;color:var(--txt3)}
+#btn-receipt{width:40px;justify-content:center;padding:9px 0;font-size:16px}
 
 .fab-add{
   position:fixed;right:32px;bottom:32px;width:67px;height:67px;border-radius:999px;
@@ -754,8 +762,15 @@ input::placeholder{color:var(--txt3)}
   .td-orig-m{display:block}
   .date-sep{display:block}
   .date-sep td{display:block;padding:18px 0 6px;border:none;background:none}
-  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto}
+  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
   .tx-form-panel .field-row{grid-template-columns:1fr 1fr}
+  /* Note full-width on top; Date + Wallet share one row to save space */
+  .tx-form-panel .field-row .field[style*="span 2"]{order:-1}
+  /* 2 presets per line, compacted */
+  .tx-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .preset-chip{justify-content:space-between;min-width:0;padding:5px 10px;font-size:12px}
+  .preset-chip .preset-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .preset-x{margin-left:6px;padding-left:6px}
 
   .bottom-nav{
     display:flex;position:fixed;bottom:0;left:0;right:0;

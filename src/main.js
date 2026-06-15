@@ -648,22 +648,6 @@ function addTx(){
 function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
 
 // ── Quick-add presets ──────────────────────────────────────────────────
-var _suggestCache=[];
-function suggestedPresets(){
-  var existing={};
-  (S.presets||[]).forEach(function(p){ existing[(p.note||'')+'|'+(p.category||'')+'|'+(p.wallet||'')]=true; });
-  var counts={};
-  (S.transactions||[]).forEach(function(t){
-    if(!t.desc) return;
-    var key=t.desc+'|'+(t.category||'')+'|'+(t.wallet||'');
-    if(!counts[key]) counts[key]={key:key,note:t.desc,category:t.category||'',wallet:t.wallet||'',type:t.type||'Debit',currency:t.originalCurrency||'USD',n:0};
-    counts[key].n++;
-  });
-  return Object.keys(counts).map(function(k){ return counts[k]; })
-    .filter(function(c){ return c.n>=2 && !existing[c.key]; })
-    .sort(function(a,b){ return b.n-a.n; })
-    .slice(0,4);
-}
 function renderPresets(){
   var wrap=document.getElementById('tx-presets'); if(!wrap) return;
   if(editingTxId){ wrap.innerHTML=''; return; }
@@ -671,10 +655,6 @@ function renderPresets(){
   var html=sorted.map(function(p){
     var amt=(p.amount!=null&&p.amount!=='')?' <b>'+(p.currency==='VES'?'Bs ':'$')+p.amount+'</b>':'';
     return '<span class="preset-chip"><span class="preset-lbl" onclick="applyPreset('+p.id+')">'+escHtml(p.label)+amt+'</span><span class="preset-x" onclick="deletePreset('+p.id+')" title="Borrar">✕</span></span>';
-  }).join('');
-  _suggestCache=suggestedPresets();
-  html+=_suggestCache.map(function(s,i){
-    return '<button class="preset-chip suggested" onclick="applySuggestion('+i+')" title="Usar">'+escHtml(s.note)+'</button>';
   }).join('');
   html+='<button class="preset-chip preset-save" onclick="saveAsPreset()">💾 Guardar</button>';
   wrap.innerHTML=html;
@@ -710,16 +690,6 @@ async function saveAsPreset(){
   if(!S.presets) S.presets=[];
   S.presets.push(p); S.presetsUpdatedAt=Date.now();
   save(); renderPresets(); renderPresetsManage();
-}
-function applySuggestion(i){
-  var s=_suggestCache[i]; if(!s) return;
-  document.getElementById('tx-desc').value=s.note||'';
-  if(s.wallet) document.getElementById('tx-wallet').value=s.wallet;
-  document.getElementById('tx-type').value=s.type||'Debit';
-  document.getElementById('tx-cat').value=s.category||'';
-  document.getElementById('tx-cur').value=s.currency||'USD';
-  toggleVesHint();
-  var a=document.getElementById('tx-amount'); if(a){ a.value=''; a.focus(); }
 }
 function deletePreset(id){
   S.presets=(S.presets||[]).filter(function(x){ return x.id!==id; }); S.presetsUpdatedAt=Date.now();
@@ -2148,7 +2118,6 @@ window.toggleReceiptMenu = toggleReceiptMenu;
 window.pickReceipt = pickReceipt;
 window.applyPreset = applyPreset;
 window.saveAsPreset = saveAsPreset;
-window.applySuggestion = applySuggestion;
 window.deletePreset = deletePreset;
 window.renamePreset = renamePreset;
 window.openReceipt = function(url){

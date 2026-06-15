@@ -491,7 +491,7 @@
 <div class="tx-form-panel" id="tx-form-panel">
   <div class="tx-panel-header">
     <h3>New transaction</h3>
-    <button class="btn btns" onclick="closeTxForm()" style="padding:4px 10px">&#x2715; Close</button>
+    <button class="btn btns tx-close" onclick="closeTxForm()" title="Close" aria-label="Close">&#x2715;</button>
   </div>
   <div class="tx-presets" id="tx-presets"></div>
   <div class="field-row">
@@ -511,7 +511,7 @@
     <input type="file" id="tx-receipt" accept="image/*" style="display:none" onchange="onReceiptPick(this)"/>
     <input type="file" id="tx-receipt-cam" accept="image/*" capture="environment" style="display:none" onchange="onReceiptPick(this)"/>
     <div class="receipt-attach">
-      <button class="btn btns" id="btn-receipt" onclick="toggleReceiptMenu(event)">📎 Adjuntar factura</button>
+      <button class="btn btns" id="btn-receipt" title="Adjuntar factura" onclick="toggleReceiptMenu(event)">📎</button>
       <div class="receipt-menu" id="receipt-menu">
         <button class="btn btns" onclick="pickReceipt('tx-receipt-cam')">📷 Camara</button>
         <button class="btn btns" onclick="pickReceipt('tx-receipt')">🖼️ Galeria</button>
