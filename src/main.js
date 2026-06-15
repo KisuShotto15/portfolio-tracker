@@ -667,7 +667,8 @@ function suggestedPresets(){
 function renderPresets(){
   var wrap=document.getElementById('tx-presets'); if(!wrap) return;
   if(editingTxId){ wrap.innerHTML=''; return; }
-  var html=(S.presets||[]).map(function(p){
+  var sorted=(S.presets||[]).slice().sort(function(a,b){ return (b.uses||0)-(a.uses||0) || b.id-a.id; });
+  var html=sorted.map(function(p){
     var amt=(p.amount!=null&&p.amount!=='')?' <b>'+(p.currency==='VES'?'Bs ':'$')+p.amount+'</b>':'';
     return '<span class="preset-chip"><span class="preset-lbl" onclick="applyPreset('+p.id+')">'+escHtml(p.label)+amt+'</span><span class="preset-x" onclick="deletePreset('+p.id+')" title="Borrar">✕</span></span>';
   }).join('');
@@ -680,6 +681,7 @@ function renderPresets(){
 }
 function applyPreset(id){
   var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
+  p.uses=(p.uses||0)+1; S.presetsUpdatedAt=Date.now(); save();
   document.getElementById('tx-desc').value=p.note||'';
   if(p.wallet) document.getElementById('tx-wallet').value=p.wallet;
   document.getElementById('tx-type').value=p.type||'Debit';
@@ -733,7 +735,7 @@ async function renamePreset(id){
 function renderPresetsManage(){
   var wrap=document.getElementById('presets-manage'); if(!wrap) return;
   if(!(S.presets||[]).length){ wrap.innerHTML='<p style="font-size:13px;color:var(--txt3);padding:6px 2px">No hay presets. Crealos con "Guardar como preset" en el form de transaccion.</p>'; return; }
-  wrap.innerHTML=S.presets.map(function(p){
+  wrap.innerHTML=S.presets.slice().sort(function(a,b){ return (b.uses||0)-(a.uses||0) || b.id-a.id; }).map(function(p){
     var kind=(p.amount!=null&&p.amount!=='')?'instant · '+(p.currency==='VES'?'Bs ':'$')+p.amount:'template';
     return '<div class="preset-mrow"><div class="preset-mrid"><span class="preset-mname">'+escHtml(p.label)+'</span><span class="preset-mmeta">'+kind+' · '+escHtml(p.category||'-')+' · '+escHtml(p.wallet||'-')+'</span></div>'
       +'<div class="preset-macts"><button class="wico" onclick="renamePreset('+p.id+')">'+ '✎' +'</button><button class="wico del" onclick="deletePreset('+p.id+')">✕</button></div></div>';
@@ -773,7 +775,6 @@ function openTxForm(){
   document.getElementById('tx-form-panel').classList.add('open');
   document.getElementById('tx-overlay').classList.add('open');
   document.getElementById('fab-add').style.display='none';
-  if(!editingTxId) setTimeout(function(){ var d=document.getElementById('tx-desc'); if(d) d.focus(); },120);
 }
 function closeTxForm(){
   editingTxId=null;
@@ -2121,6 +2122,17 @@ window.selectTxRow = function(el){
 if(!window._txSelListener){
   window._txSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
+}
+// Keep the focused tx-form field visible when the mobile keyboard opens
+if(!window._txScrollListener){
+  window._txScrollListener=true;
+  var _txPanel=document.getElementById('tx-form-panel');
+  if(_txPanel) _txPanel.addEventListener('focusin',function(e){
+    var t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA')){
+      setTimeout(function(){ t.scrollIntoView({behavior:'smooth',block:'center'}); },300);
+    }
+  });
 }
 window.selectWvRow = function(el){
   document.querySelectorAll('.wv-row.wv-exp').forEach(function(r){ if(r!==el) r.classList.remove('wv-exp'); });
