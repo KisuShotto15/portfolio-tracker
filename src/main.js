@@ -739,8 +739,14 @@ function setDefaultWallet(){
   for(var i=0;i<ws.options.length;i++){ if(ws.options[i].value==='Binance'){ ws.value='Binance'; return; } }
   ws.value='';
 }
+function updateDateDisplay(){
+  var i=document.getElementById('tx-date'), d=document.getElementById('tx-date-display'); if(!i||!d) return;
+  var v=i.value; if(!v){ d.textContent=''; return; }
+  var p=v.split('-'); d.textContent=p[2]+'/'+p[1]+'/'+p[0];
+}
 function openTxForm(){
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
+  updateDateDisplay();
   renderPresets();
   document.getElementById('tx-form-panel').classList.add('open');
   document.getElementById('tx-overlay').classList.add('open');
@@ -2093,6 +2099,16 @@ if(!window._txSelListener){
   window._txSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
 }
+// Touch: tapping an already-open base-select reopens it after light-dismiss; close instead
+if(!window._selToggleFix){
+  window._selToggleFix=true;
+  document.addEventListener('pointerdown',function(e){
+    var sel=e.target.closest&&e.target.closest('select');
+    if(!sel||!sel.closest('#tx-form-panel')) return;
+    if(e.target.tagName==='OPTION'||(e.target.closest&&e.target.closest('option'))) return;
+    if(sel.matches(':open')){ e.preventDefault(); }
+  },true);
+}
 // Keep the focused tx-form field visible when the mobile keyboard opens
 if(!window._txScrollListener){
   window._txScrollListener=true;
@@ -2116,6 +2132,7 @@ window.onReceiptPick = onReceiptPick;
 window.removeReceipt = removeReceipt;
 window.toggleReceiptMenu = toggleReceiptMenu;
 window.pickReceipt = pickReceipt;
+window.updateDateDisplay = updateDateDisplay;
 window.applyPreset = applyPreset;
 window.saveAsPreset = saveAsPreset;
 window.deletePreset = deletePreset;

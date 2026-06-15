@@ -664,8 +664,18 @@ input::placeholder{color:var(--txt3)}
 /* Minimalist form: lighter labels, calmer inputs, prominent amount */
 .tx-form-panel .field{gap:5px}
 .tx-form-panel .field-lbl{font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--txt3)}
-.tx-form-panel input,.tx-form-panel select{font-size:15px;padding:9px 13px;border-radius:10px;background:rgba(255,255,255,.03)}
+.tx-form-panel input,.tx-form-panel select{font-size:15px;padding:9px 13px;border-radius:10px;background:rgba(255,255,255,.03);height:42px;box-sizing:border-box;min-width:0;width:100%}
 .tx-form-panel #tx-amount{font-size:19px;font-weight:600;font-family:var(--font-num)}
+.tx-form-panel select{position:relative;justify-content:center;text-align:center}
+.tx-form-panel select::selectedcontent{text-align:center}
+.tx-form-panel select::picker-icon{position:absolute;right:13px;top:0;bottom:0;display:flex;align-items:center}
+.tx-form-panel select option{justify-content:center;text-align:center}
+/* Custom date field: forces DD/MM/YYYY display regardless of browser locale */
+.tx-form-panel .date-field{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;height:42px;padding:9px 13px;border:1px solid var(--line-soft);border-radius:10px;background:rgba(255,255,255,.03);box-sizing:border-box;cursor:pointer}
+.tx-form-panel .date-field #tx-date-display{font-size:15px;color:var(--txt)}
+.tx-form-panel .date-field svg{color:var(--txt3);flex-shrink:0;pointer-events:none}
+.tx-form-panel .date-field #tx-date{position:absolute;inset:0;width:100%;height:100%;min-width:0;padding:0;margin:0;border:none;opacity:0;cursor:pointer}
+.tx-form-panel .date-field #tx-date:focus{box-shadow:none}
 .tx-form-panel .btn-add{flex:1;justify-content:center;padding:11px 25px;border-radius:12px}
 .tx-close{width:32px;height:32px;padding:0;justify-content:center;border-radius:50%;color:var(--txt3)}
 #btn-receipt{width:40px;justify-content:center;padding:9px 0;font-size:16px}
@@ -763,7 +773,7 @@ input::placeholder{color:var(--txt3)}
   .date-sep{display:block}
   .date-sep td{display:block;padding:18px 0 6px;border:none;background:none}
   .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-  .tx-form-panel .field-row{grid-template-columns:1fr 1fr}
+  .tx-form-panel .field-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   /* Note full-width on top; Date + Wallet share one row to save space */
   .tx-form-panel .field-row .field[style*="span 2"]{order:-1}
   /* 2 presets per line, compacted */
