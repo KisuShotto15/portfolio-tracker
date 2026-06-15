@@ -470,7 +470,7 @@ input,select,textarea,button{font-family:inherit}
 .wm-group{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:7px 8px 11px;min-width:0}
 .wm-group-head{display:flex;align-items:baseline;justify-content:space-between;padding:13px 16px 11px}
 .wm-group-title{font-size:13px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
-.wm-group-sum{font-family:var(--font-num);font-size:14px;color:var(--txt3)}
+.wm-group-sum{font-family:var(--font-num);font-size:14px;color:var(--txt3);margin-right:83px}
 .wm-rows{display:flex;flex-direction:column}
 .wm-row{display:flex;align-items:center;gap:13px;padding:11px 16px;border-radius:12px;transition:background .12s}
 .wm-row:hover{background:rgba(255,255,255,.025)}
@@ -486,7 +486,7 @@ input,select,textarea,button{font-family:inherit}
 .wm-bal{font-family:var(--font-num);font-size:16px;font-weight:600;color:var(--txt);flex-shrink:0;white-space:nowrap}
 .wm-badge{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:2px 6px;border-radius:5px}
 .wm-connect{font-size:12px;padding:5px 13px;flex-shrink:0}
-.wm-acts{display:flex;gap:4px;opacity:0;pointer-events:none;transition:opacity .12s;flex-shrink:0;margin-left:2px}
+.wm-acts{display:flex;gap:4px;justify-content:flex-end;opacity:0;pointer-events:none;transition:opacity .12s;flex-shrink:0;margin-left:2px;min-width:68px}
 .wm-row:hover .wm-acts,.wm-row:focus-within .wm-acts{opacity:1;pointer-events:auto}
 .wm-add{width:calc(100% - 32px);margin:8px 16px 4px;background:none;border:1px dashed var(--line);color:var(--txt3);font-size:14px;font-weight:500;padding:11px 0;border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .wm-add:hover{color:var(--txt2);border-color:rgba(255,255,255,.2)}
@@ -785,7 +785,8 @@ input::placeholder{color:var(--txt3)}
   .wm-hero-val{font-size:32px}
   .wm-row{padding:11px 14px;gap:12px}
   .wm-group-head{padding:12px 14px 10px}
-  .wm-acts{opacity:1;pointer-events:auto}
+  .wm-group-sum{margin-right:62px}
+  .wm-acts{opacity:1;pointer-events:auto;min-width:48px}
 
   /* Budget + Holdings hero font */
   .bdg-hero-val{font-size:38px}

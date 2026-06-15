@@ -1711,7 +1711,7 @@ function renderWallets(){
     var chipInner=logo?'<img class="wm-logo" src="'+logo+'" alt="">':mono;
     return '<div class="wm-row"><span class="wm-chip'+(logo?' has-logo':'')+'" style="--c:'+color+'">'+chipInner+st+'</span>'
       +'<div class="wm-rid"><span class="wm-name">'+name+'</span>'+(meta?'<span class="wm-meta">'+meta+'</span>':'')+'</div>'
-      +right+(acts?'<span class="wm-acts" onclick="event.stopPropagation()">'+acts+'</span>':'')+'</div>';
+      +right+'<span class="wm-acts" onclick="event.stopPropagation()">'+(acts||'')+'</span>'+'</div>';
   }
   function apiRow(color,mono,name,connected,balv,upd,metaExtra,logo){
     if(connected){
@@ -1736,7 +1736,7 @@ function renderWallets(){
     var isZelle=name==='Zelle';
     var meta='<span class="wm-badge">tracker</span>';
     var right=isZelle
-      ?'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span class="wm-meta" style="white-space:nowrap">+5%: '+fmtUSD(total*1.05)+'</span>'+balHtml(total)+'</div>'
+      ?'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span class="wm-meta" style="white-space:nowrap;font-size:14px">+5%: '+fmtUSD(total*1.05)+'</span>'+balHtml(total)+'</div>'
       :balHtml(total);
     var acts='';
     if(mw){
