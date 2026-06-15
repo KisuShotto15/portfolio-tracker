@@ -363,6 +363,11 @@
 
   <div id="page-settings" class="page">
     <div class="fc">
+      <h3>Quick-add presets</h3>
+      <p class="hint">Atajos de 1 toque para transacciones frecuentes. Crealos con "Guardar" en el form de transaccion.</p>
+      <div id="presets-manage"></div>
+    </div>
+    <div class="fc">
       <h3>Binance API</h3>
       <p class="hint">Keys stored locally in browser. Requests go directly to Binance using your VPN.</p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
@@ -488,6 +493,7 @@
     <h3>New transaction</h3>
     <button class="btn btns" onclick="closeTxForm()" style="padding:4px 10px">&#x2715; Close</button>
   </div>
+  <div class="tx-presets" id="tx-presets"></div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">Date</span><input type="date" id="tx-date" tabindex="7"/></div>
     <div class="field" style="grid-column:span 2"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote()"/></div>

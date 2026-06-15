@@ -48,7 +48,8 @@ var S = {
   deletedTxIds:[],
   transactionsUpdatedAt:null,
   dashGoal:0,
-  categoryBudgets:{}
+  categoryBudgets:{},
+  presets:[], presetsUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
@@ -142,7 +143,12 @@ async function pushToCloud(){
             S.onchainWalletsUpdatedAt=cd.data.onchainWalletsUpdatedAt;
             needRender=true;
           }
-          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); }
+          if(cd.data.presets&&(cd.data.presetsUpdatedAt||0)>=(S.presetsUpdatedAt||0)){
+            S.presets=cd.data.presets;
+            S.presetsUpdatedAt=cd.data.presetsUpdatedAt;
+            needRender=true;
+          }
+          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); }
         }
       }
     }catch(e){ /* continue with push even if merge-pull fails */ }
@@ -153,6 +159,7 @@ async function pushToCloud(){
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
     syncFailed=false;
+    if(typeof _retryTimer!=='undefined') clearTimeout(_retryTimer);
     setSyncStatus('synced','Synced');
     var cs=document.getElementById('cloud-status');
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
@@ -160,6 +167,7 @@ async function pushToCloud(){
     syncFailed=true;
     setSyncStatus('offline','⚠ Cambios sin sincronizar');
     console.warn('push failed:',e.message);
+    scheduleRetry();
   }
 }
 
@@ -197,8 +205,19 @@ async function pullFromCloud(){
 }
 
 window.addEventListener('online', function(){
-  if(syncFailed){ syncFailed=false; pushToCloud(); }
+  setSyncStatus('syncing','Reconnecting...');
+  syncFailed=false;
+  pullFromCloud().then(function(){ pushToCloud(); });
 });
+window.addEventListener('offline', function(){
+  setSyncStatus('offline','Offline');
+});
+
+var _retryTimer=null;
+function scheduleRetry(){
+  clearTimeout(_retryTimer);
+  _retryTimer=setTimeout(function(){ if(syncFailed) pushToCloud(); }, 15000);
+}
 
 function save(){
   saveLocal();
@@ -628,6 +647,99 @@ function addTx(){
 
 function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
 
+// ── Quick-add presets ──────────────────────────────────────────────────
+var _suggestCache=[];
+function suggestedPresets(){
+  var existing={};
+  (S.presets||[]).forEach(function(p){ existing[(p.note||'')+'|'+(p.category||'')+'|'+(p.wallet||'')]=true; });
+  var counts={};
+  (S.transactions||[]).forEach(function(t){
+    if(!t.desc) return;
+    var key=t.desc+'|'+(t.category||'')+'|'+(t.wallet||'');
+    if(!counts[key]) counts[key]={key:key,note:t.desc,category:t.category||'',wallet:t.wallet||'',type:t.type||'Debit',currency:t.originalCurrency||'USD',n:0};
+    counts[key].n++;
+  });
+  return Object.keys(counts).map(function(k){ return counts[k]; })
+    .filter(function(c){ return c.n>=2 && !existing[c.key]; })
+    .sort(function(a,b){ return b.n-a.n; })
+    .slice(0,4);
+}
+function renderPresets(){
+  var wrap=document.getElementById('tx-presets'); if(!wrap) return;
+  if(editingTxId){ wrap.innerHTML=''; return; }
+  var html=(S.presets||[]).map(function(p){
+    var amt=(p.amount!=null&&p.amount!=='')?' <b>'+(p.currency==='VES'?'Bs ':'$')+p.amount+'</b>':'';
+    return '<span class="preset-chip"><span class="preset-lbl" onclick="applyPreset('+p.id+')">'+escHtml(p.label)+amt+'</span><span class="preset-x" onclick="deletePreset('+p.id+')" title="Borrar">✕</span></span>';
+  }).join('');
+  _suggestCache=suggestedPresets();
+  html+=_suggestCache.map(function(s,i){
+    return '<button class="preset-chip suggested" onclick="applySuggestion('+i+')" title="Usar">'+escHtml(s.note)+'</button>';
+  }).join('');
+  html+='<button class="preset-chip preset-save" onclick="saveAsPreset()">💾 Guardar</button>';
+  wrap.innerHTML=html;
+}
+function applyPreset(id){
+  var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
+  document.getElementById('tx-desc').value=p.note||'';
+  if(p.wallet) document.getElementById('tx-wallet').value=p.wallet;
+  document.getElementById('tx-type').value=p.type||'Debit';
+  document.getElementById('tx-cat').value=p.category||'';
+  document.getElementById('tx-cur').value=p.currency||'USD';
+  toggleVesHint();
+  if(p.amount!=null&&p.amount!==''){
+    document.getElementById('tx-amount').value=p.amount;
+    addTx();
+  }else{
+    document.getElementById('tx-amount').value='';
+    var a=document.getElementById('tx-amount'); if(a) a.focus();
+  }
+}
+async function saveAsPreset(){
+  var note=document.getElementById('tx-desc').value.trim();
+  var amtRaw=document.getElementById('tx-amount').value;
+  var r=await appPrompt('Guardar como preset','Nombre del preset',note||'',{inputType:'text'});
+  if(!r||!r.value||!r.value.trim()) return;
+  var p={id:Date.now(),label:r.value.trim(),note:note,
+    wallet:document.getElementById('tx-wallet').value,
+    type:document.getElementById('tx-type').value,
+    category:document.getElementById('tx-cat').value,
+    currency:document.getElementById('tx-cur').value,
+    amount:amtRaw!==''?parseFloat(amtRaw):null};
+  if(!S.presets) S.presets=[];
+  S.presets.push(p); S.presetsUpdatedAt=Date.now();
+  save(); renderPresets(); renderPresetsManage();
+}
+function applySuggestion(i){
+  var s=_suggestCache[i]; if(!s) return;
+  document.getElementById('tx-desc').value=s.note||'';
+  if(s.wallet) document.getElementById('tx-wallet').value=s.wallet;
+  document.getElementById('tx-type').value=s.type||'Debit';
+  document.getElementById('tx-cat').value=s.category||'';
+  document.getElementById('tx-cur').value=s.currency||'USD';
+  toggleVesHint();
+  var a=document.getElementById('tx-amount'); if(a){ a.value=''; a.focus(); }
+}
+function deletePreset(id){
+  S.presets=(S.presets||[]).filter(function(x){ return x.id!==id; }); S.presetsUpdatedAt=Date.now();
+  save(); renderPresets(); renderPresetsManage();
+}
+async function renamePreset(id){
+  var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
+  var r=await appPrompt('Renombrar preset',escHtml(p.label),p.label,{inputType:'text'});
+  if(!r||!r.value||!r.value.trim()) return;
+  p.label=r.value.trim(); S.presetsUpdatedAt=Date.now();
+  save(); renderPresets(); renderPresetsManage();
+}
+function renderPresetsManage(){
+  var wrap=document.getElementById('presets-manage'); if(!wrap) return;
+  if(!(S.presets||[]).length){ wrap.innerHTML='<p style="font-size:13px;color:var(--txt3);padding:6px 2px">No hay presets. Crealos con "Guardar como preset" en el form de transaccion.</p>'; return; }
+  wrap.innerHTML=S.presets.map(function(p){
+    var kind=(p.amount!=null&&p.amount!=='')?'instant · '+(p.currency==='VES'?'Bs ':'$')+p.amount:'template';
+    return '<div class="preset-mrow"><div class="preset-mrid"><span class="preset-mname">'+escHtml(p.label)+'</span><span class="preset-mmeta">'+kind+' · '+escHtml(p.category||'-')+' · '+escHtml(p.wallet||'-')+'</span></div>'
+      +'<div class="preset-macts"><button class="wico" onclick="renamePreset('+p.id+')">'+ '✎' +'</button><button class="wico del" onclick="deletePreset('+p.id+')">✕</button></div></div>';
+  }).join('');
+}
+
 var editingTxId = null;
 function editTx(id){
   var t=S.transactions.find(function(x){ return x.id===id; }); if(!t) return;
@@ -657,6 +769,7 @@ function setDefaultWallet(){
 }
 function openTxForm(){
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
+  renderPresets();
   document.getElementById('tx-form-panel').classList.add('open');
   document.getElementById('tx-overlay').classList.add('open');
   document.getElementById('fab-add').style.display='none';
@@ -1886,6 +1999,7 @@ function showPage(id,btn,arg){
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools') renderToolToggles();
   else if(id==='history') renderHistory(arg||'snapshots');
+  else if(id==='settings') renderPresetsManage();
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
   var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -2020,6 +2134,11 @@ window.onReceiptPick = onReceiptPick;
 window.removeReceipt = removeReceipt;
 window.toggleReceiptMenu = toggleReceiptMenu;
 window.pickReceipt = pickReceipt;
+window.applyPreset = applyPreset;
+window.saveAsPreset = saveAsPreset;
+window.applySuggestion = applySuggestion;
+window.deletePreset = deletePreset;
+window.renamePreset = renamePreset;
 window.openReceipt = function(url){
   var ov=document.getElementById('receipt-lightbox');
   if(!ov){
@@ -2234,6 +2353,7 @@ async function init(){
   document.getElementById('tf-month').value=today.slice(0,7); // default: current month
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
+  if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   // Migration: all Zelle wallet transactions → category Emily
