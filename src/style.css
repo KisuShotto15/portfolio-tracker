@@ -855,11 +855,12 @@ input::placeholder{color:var(--txt3)}
   .wm-hero-val{font-size:32px}
   .wm-row{padding:11px 14px;gap:12px}
   .wm-group-head{padding:12px 14px 10px}
-  .wm-group-sum{margin-right:62px}
-  /* Mobile: edit/delete buttons appear only when the wallet row is tapped (like transactions) */
-  .wm-acts{opacity:0;pointer-events:none;min-width:48px}
+  .wm-group-sum{margin-right:0}
+  /* Mobile: no reserved space — amount sits at the edge; tapping the row reveals the
+     edit/delete buttons which push the amount left (like transactions). */
+  .wm-acts{display:none;min-width:0}
   .wm-row.wm-sel{background:rgba(255,255,255,.06)}
-  .wm-row.wm-sel .wm-acts{opacity:1;pointer-events:auto}
+  .wm-row.wm-sel .wm-acts{display:flex;opacity:1;pointer-events:auto}
 
   /* Budget + Holdings hero font */
   .bdg-hero-val{font-size:38px}
