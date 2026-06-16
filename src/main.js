@@ -1433,6 +1433,13 @@ function renderInsights(month){
     .sort(function(a,b){ return Math.abs(b.delta)-Math.abs(a.delta); })
     .slice(0,4);
   var isCurrent=month===localToday().slice(0,7);
+  var prevSpent=catNetSpend(prev, EXPENSE_CATS_DASH);
+  var prevLabel=new Date(prev+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
+  function tile(lbl,val,col,sub){ return '<div class="ins-stat"><span class="ins-stat-lbl">'+lbl+'</span><span class="ins-stat-val"'+(col?' style="color:'+col+'"':'')+'>'+val+'</span><span class="ins-stat-sub">'+sub+'</span></div>'; }
+  // vs last month total
+  var vsCol=prevSpent<=0?'var(--txt3)':(spent>prevSpent?'#E24B4A':'#5DCAA5');
+  var vsVal=prevSpent<=0?(spent>0?'New':'—'):(spent>=prevSpent?'+':'')+Math.round((spent-prevSpent)/prevSpent*100)+'%';
+  var vsTile=tile('vs '+prevLabel, vsVal, vsCol, 'spent '+fmtUSD(prevSpent)+' last mo');
   var blocks='';
   if(isCurrent){
     var now=new Date();
@@ -1444,9 +1451,14 @@ function renderInsights(month){
     var perDay=remaining>0?remaining/daysLeft:0;
     var projected=dayOfMonth>0?spent/dayOfMonth*daysInMonth:0;
     var overBudget=projected>budget;
+    var dailyAvg=dayOfMonth>0?spent/dayOfMonth:0;
     blocks=''
-      +'<div class="ins-stat"><span class="ins-stat-lbl">Left per day</span><span class="ins-stat-val" style="color:'+(remaining>0?'#5DCAA5':'#E24B4A')+'">'+(remaining>0?fmtUSD(perDay):'—')+'</span><span class="ins-stat-sub">'+daysLeft+' days left · '+fmtUSD(Math.max(0,remaining))+' of '+fmtUSD(budget)+'</span></div>'
-      +'<div class="ins-stat"><span class="ins-stat-lbl">Projected spend</span><span class="ins-stat-val" style="color:'+(overBudget?'#E24B4A':'#5DCAA5')+'">'+fmtUSD(projected)+'</span><span class="ins-stat-sub">'+(overBudget?'over budget by '+fmtUSD(projected-budget):'under budget by '+fmtUSD(budget-projected))+'</span></div>';
+      +tile('Daily average', fmtUSD(dailyAvg), '', 'over '+dayOfMonth+(dayOfMonth===1?' day':' days'))
+      +tile('Left per day', remaining>0?fmtUSD(perDay):'—', remaining>0?'#5DCAA5':'#E24B4A', daysLeft+' days left · '+fmtUSD(Math.max(0,remaining))+' left')
+      +tile('Projected spend', fmtUSD(projected), overBudget?'#E24B4A':'#5DCAA5', overBudget?'over by '+fmtUSD(projected-budget):'under by '+fmtUSD(budget-projected))
+      +vsTile;
+  }else{
+    blocks=tile('Spent', fmtUSD(spent), '', 'in '+new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'long'}))+vsTile;
   }
   var moverRows=movers.length?movers.map(function(m){
     var up=m.delta>0;
@@ -2375,7 +2387,7 @@ function calcProfit(){
   var isPos = profit >= 0;
   renderCalcCards('pc-cards','pc-result',[
     { label:'Received', value: usdt > 0 ? usdt.toFixed(2) : '—', sub:'in USDT' },
-    { label:'Recharge', value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2)+' after fee' },
+    { label:'Recharge', value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2) },
     { label:'Profit',   value:(isPos?'+':'')+'$'+profit.toFixed(2), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
   ], true);
 }
