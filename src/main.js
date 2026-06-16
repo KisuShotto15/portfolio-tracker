@@ -52,6 +52,22 @@ var S = {
   presets:[], presetsUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
+
+// Lazy-load Chart.js (205KB) only when a chart actually needs to render.
+var _chartPromise=null;
+function ensureChart(){
+  if(window.Chart) return Promise.resolve();
+  if(!_chartPromise){
+    _chartPromise=new Promise(function(resolve,reject){
+      var s=document.createElement('script');
+      s.src='/chart.umd.js?v=4.4.1';
+      s.onload=function(){ resolve(); };
+      s.onerror=function(){ _chartPromise=null; reject(new Error('Chart.js load failed')); };
+      document.head.appendChild(s);
+    });
+  }
+  return _chartPromise;
+}
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
 var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
@@ -454,7 +470,8 @@ function renderWalletHoldings(){
 }
 var whDonutChart=null;
 function drawHoldingsDonut(assets, tokenColor){
-  var el=document.getElementById('hld-donut'); if(!el||!window.Chart) return;
+  var el=document.getElementById('hld-donut'); if(!el||el.offsetParent===null) return;
+  if(!window.Chart){ ensureChart().then(function(){ drawHoldingsDonut(assets,tokenColor); }).catch(function(){}); return; }
   if(whDonutChart){ whDonutChart.destroy(); whDonutChart=null; }
   whDonutChart=new Chart(el,{type:'doughnut',data:{labels:assets.map(function(a){ return a.symbol; }),datasets:[{data:assets.map(function(a){ return parseFloat(a.balanceUsd.toFixed(2)); }),backgroundColor:assets.map(function(a){ return tokenColor(a.symbol); }),borderWidth:0,spacing:2}]},options:{cutout:'72%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},animation:{animateRotate:true,duration:600},responsive:true,maintainAspectRatio:false}});
 }
@@ -1287,8 +1304,29 @@ function renderAlerts(){
     var clickAttr=a.onClick?' onclick="'+a.onClick+'" style="cursor:pointer"':'';
     return '<div class="alert-item alert-'+a.sev+'"'+clickAttr+'><div class="alert-icon">'+icon+'</div><div class="alert-body"><div class="alert-msg">'+a.msg+'</div><div class="alert-action">'+a.action+'</div></div></div>';
   }).join('');
-  el.innerHTML=hdr+'<div class="alert-list">'+items+'</div>';
+  var hasCrit=alerts.some(function(a){ return a.sev==='crit'; });
+  var label=alerts.length===1?'1 alerta':alerts.length+' alertas';
+  el.innerHTML=hdr+'<div class="alerts-pop-wrap">'
+    +'<button class="alerts-trigger '+(hasCrit?'crit':'warn')+'" onclick="toggleAlertsPopup(event)">'
+      +'<span class="alerts-dot"></span>'+label
+      +'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l5 5 5-5"/></svg>'
+    +'</button>'
+    +'<div class="alerts-popup" id="alerts-popup"><div class="alert-list">'+items+'</div></div>'
+  +'</div>';
 }
+function toggleAlertsPopup(e){
+  if(e) e.stopPropagation();
+  var p=document.getElementById('alerts-popup'); if(!p) return;
+  var open=p.classList.toggle('open');
+  if(open){
+    setTimeout(function(){
+      document.addEventListener('click',function close(ev){
+        if(!ev.target.closest('.alerts-pop-wrap')){ p.classList.remove('open'); document.removeEventListener('click',close); }
+      });
+    },0);
+  }
+}
+window.toggleAlertsPopup=toggleAlertsPopup;
 
 function renderSnapshotPnL(){
   var el=document.getElementById('snap-pnl-wrap'); if(!el) return;
@@ -1383,9 +1421,52 @@ function renderSummary(){
   renderEquityChart(); renderMonthlyChart();
 }
 
+function renderInsights(month){
+  var el=document.getElementById('insights-wrap'); if(!el) return;
+  var spent=catNetSpend(month, EXPENSE_CATS_DASH);
+  var prev=prevMonth(month);
+  // MoM per category — biggest movers
+  var movers=EXPENSE_CATS_DASH.map(function(c){
+    var cur=catNetSpend(month,[c]), pre=catNetSpend(prev,[c]);
+    return {cat:c, cur:cur, delta:cur-pre};
+  }).filter(function(m){ return m.cur>0||m.delta!==0; })
+    .sort(function(a,b){ return Math.abs(b.delta)-Math.abs(a.delta); })
+    .slice(0,4);
+  var isCurrent=month===localToday().slice(0,7);
+  var blocks='';
+  if(isCurrent){
+    var now=new Date();
+    var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+    var dayOfMonth=now.getDate();
+    var daysLeft=Math.max(1,daysInMonth-dayOfMonth+1);
+    var budget=S.budgetTotal||600;
+    var remaining=budget-spent;
+    var perDay=remaining>0?remaining/daysLeft:0;
+    var projected=dayOfMonth>0?spent/dayOfMonth*daysInMonth:0;
+    var overBudget=projected>budget;
+    blocks=''
+      +'<div class="ins-stat"><span class="ins-stat-lbl">Left per day</span><span class="ins-stat-val" style="color:'+(remaining>0?'#5DCAA5':'#E24B4A')+'">'+(remaining>0?fmtUSD(perDay):'—')+'</span><span class="ins-stat-sub">'+daysLeft+' days left · '+fmtUSD(Math.max(0,remaining))+' of '+fmtUSD(budget)+'</span></div>'
+      +'<div class="ins-stat"><span class="ins-stat-lbl">Projected spend</span><span class="ins-stat-val" style="color:'+(overBudget?'#E24B4A':'#5DCAA5')+'">'+fmtUSD(projected)+'</span><span class="ins-stat-sub">'+(overBudget?'over budget by '+fmtUSD(projected-budget):'under budget by '+fmtUSD(budget-projected))+'</span></div>';
+  }
+  var moverRows=movers.length?movers.map(function(m){
+    var up=m.delta>0;
+    var arrow=m.delta===0?'·':(up?'▲':'▼');
+    var col=m.delta===0?'var(--txt3)':(up?'#E24B4A':'#5DCAA5');
+    var deltaTxt=m.delta===0?'no change':(up?'+':'-')+fmtUSD(Math.abs(m.delta));
+    return '<div class="ins-row"><span class="ins-cat"><span class="tag '+tagCat(m.cat)+'">'+escHtml(m.cat)+'</span></span>'
+      +'<span class="ins-cur">'+fmtUSD(m.cur)+'</span>'
+      +'<span class="ins-delta" style="color:'+col+'">'+arrow+' '+deltaTxt+'</span></div>';
+  }).join(''):'<div style="font-size:13px;color:var(--txt3);padding:6px 2px">No expenses this month.</div>';
+  el.innerHTML='<div class="ins-head"><span class="cleg" style="margin:0">Insights</span><span class="ins-head-sub">vs '+new Date(prev+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'})+'</span></div>'
+    +(blocks?'<div class="ins-stats">'+blocks+'</div>':'')
+    +'<div class="ins-list">'+moverRows+'</div>';
+}
+
 function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
 
 function renderMonthlyChart(){
+  var cv=document.getElementById('chart-monthly'); if(!cv||cv.offsetParent===null) return;
+  if(!window.Chart){ ensureChart().then(renderMonthlyChart).catch(function(){}); return; }
   var months=getLast6();
   var SPEND_CATS=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
   var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
@@ -1401,6 +1482,8 @@ function renderMonthlyChart(){
 }
 
 function renderCatChart(month){
+  var cv=document.getElementById('chart-cat'); if(!cv||cv.offsetParent===null) return;
+  if(!window.Chart){ ensureChart().then(function(){ renderCatChart(month); }).catch(function(){}); return; }
   var map={};
   var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'&&c!=='Investments'; });
   S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&DONUT_CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
@@ -1418,8 +1501,9 @@ function renderCatChart(month){
 }
 
 function renderEquityChart(){
+  var el=document.getElementById('chart-equity'); if(!el||el.offsetParent===null) return;
+  if(!window.Chart){ ensureChart().then(renderEquityChart).catch(function(){}); return; }
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  var el=document.getElementById('chart-equity'); if(!el) return;
   var wrap=document.getElementById('equity-wrap');
   if(!snaps.length){
     if(eChart){ eChart.destroy(); eChart=null; }
@@ -1678,6 +1762,9 @@ function renderBudget(){
     +'</div>'
   +'</div>';
 
+  // Monthly insights
+  html+='<div class="cw bdg-insights" id="insights-wrap"></div>';
+
   // Categories grid
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span><span class="bdg-cat-meta">'+BUDGET_CATS.length+' tracked</span></div>';
   html+='<div class="bdg-cats">';
@@ -1749,6 +1836,7 @@ function renderBudget(){
   html+='</div>';
 
   document.getElementById('bud-wrap').innerHTML=html;
+  renderInsights(month);
   renderCatChart(month);
 }
 
@@ -2397,7 +2485,16 @@ async function init(){
 }
 init();
 
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js'); }
+if('serviceWorker' in navigator){
+  var _isLocal=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  if(_isLocal){
+    // Dev: never let a cached SW serve a stale bundle. Unregister + drop caches.
+    navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); });
+    if(window.caches) caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); });
+  } else {
+    navigator.serviceWorker.register('/sw.js');
+  }
+}
 
 // PWA install prompt
 var _pwaPrompt=null;

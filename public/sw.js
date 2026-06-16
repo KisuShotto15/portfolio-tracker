@@ -1,4 +1,4 @@
-const CACHE = 'portfolio-v6';
+const CACHE = 'portfolio-v7';
 
 // Precache the app shell + hashed JS/CSS on install, reading the asset URLs out
 // of index.html. This guarantees offline works even on the first load after a
@@ -13,6 +13,8 @@ self.addEventListener('install', e => {
         const html = await res.text();
         const urls = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css)(?:\?[^"]*)?)"/g)]
           .map(m => m[1]).filter(u => u.startsWith('/'));
+        // Chart.js is lazy-loaded (not in the HTML), so precache it explicitly for offline.
+        urls.push('/chart.umd.js?v=4.4.1');
         await Promise.all(urls.map(u => cache.add(u).catch(() => {})));
       }
     } catch (err) { /* offline at install — runtime caching will fill in */ }

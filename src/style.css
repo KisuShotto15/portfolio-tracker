@@ -136,9 +136,9 @@ input,select,textarea,button{font-family:inherit}
 #kpi-strip .kpi-card:nth-child(5){display:none}
 #kpi-strip .kpi-strip{grid-template-columns:repeat(3,1fr)}
 .dash-grid > .span12{grid-column:1/-1}
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0;align-items:stretch}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0;align-items:stretch;position:relative;z-index:50}
 .kpi-row #kpi-strip{display:contents}
-.kpi-row #alerts-wrap{padding:4px 22px;margin:0;display:flex;flex-direction:column;justify-content:center}
+.kpi-row #alerts-wrap{padding:4px 22px;margin:0;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:50}
 
 /* KPI strip → centered borderless stat row */
 #kpi-strip .kpi-strip{display:contents}
@@ -155,6 +155,22 @@ input,select,textarea,button{font-family:inherit}
 .kpi-delta{font-size:14px;font-weight:500;padding:2px 9px;border-radius:999px}
 .kpi-delta.up{color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
 .kpi-delta.down{color:var(--red);background:color-mix(in srgb,var(--red) 13%,transparent)}
+
+/* Monthly insights card */
+.ins-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.ins-head-sub{font-size:12px;color:var(--txt3)}
+.ins-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.ins-stat{display:flex;flex-direction:column;gap:3px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:12px}
+.ins-stat-lbl{font-size:12px;color:var(--txt3)}
+.ins-stat-val{font-family:var(--font-num);font-size:24px;font-weight:600;letter-spacing:-.02em}
+.ins-stat-sub{font-size:12px;color:var(--txt3)}
+.bdg-insights{margin:22px 0}
+.ins-list{display:flex;flex-direction:column}
+.ins-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line-soft)}
+.ins-row:last-child{border-bottom:none}
+.ins-cur{font-family:var(--font-num);font-size:15px;font-weight:500;color:var(--txt)}
+.ins-delta{font-family:var(--font-num);font-size:13px;font-weight:500;white-space:nowrap;min-width:96px;text-align:right}
+@media(max-width:720px){ .ins-stats{grid-template-columns:1fr} }
 
 /* Monthly breakdown mini-cards */
 #sum-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;margin:0 0 30px}
@@ -217,6 +233,16 @@ input,select,textarea,button{font-family:inherit}
 .alert-warn .alert-icon{background:color-mix(in srgb,var(--amber) 16%,transparent);color:var(--amber)}
 .alert-msg{font-size:16px;font-weight:500}
 .alert-action{font-size:14px;color:var(--txt3);margin-top:2px}
+/* Alerts compact trigger + popup (keeps the KPI row a fixed height) */
+.alerts-pop-wrap{position:relative;display:inline-flex}
+.alerts-trigger{display:inline-flex;align-items:center;gap:9px;font-size:15px;font-weight:500;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid var(--line-soft);border-radius:999px;padding:8px 15px;color:var(--txt);transition:background .12s}
+.alerts-trigger:hover{background:rgba(255,255,255,.08)}
+.alerts-trigger.crit{color:var(--red)}
+.alerts-trigger.warn{color:var(--amber)}
+.alerts-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
+.alerts-trigger svg{color:var(--txt3)}
+.alerts-popup{position:absolute;right:0;top:calc(100% + 8px);width:330px;max-width:84vw;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px;display:none;z-index:40;box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:320px;overflow-y:auto}
+.alerts-popup.open{display:block}
 
 /* Goal */
 .pb{background:rgba(255,255,255,.08)!important;overflow:hidden}
