@@ -1768,6 +1768,7 @@ function renderBudget(){
   // Categories grid
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span><span class="bdg-cat-meta">'+BUDGET_CATS.length+' tracked</span></div>';
   html+='<div class="bdg-cats">';
+  var insMonth=prevMonth(month);
   BUDGET_CATS.forEach(function(cat){
     var s=catNetSpend(month, [cat]);
     var catLim=(S.categoryBudgets||{})[cat]||0;
@@ -1775,11 +1776,15 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
+    // Change vs last month (shown inside the card on desktop)
+    var dPrev=catNetSpend(insMonth, [cat]); var dD=s-dPrev; var dShow=s>0||dPrev>0;
+    var dCol=dD===0?'var(--txt3)':(dD>0?'#E24B4A':'#5DCAA5');
+    var dTxt=!dShow?'':(dD===0?'· no change':(dD>0?'▲ +':'▼ -')+fmtUSD(Math.abs(dD)));
     html+='<div class="bdg-cat">'
       +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span><span class="bdg-cat-pct">'+cp+'%</span></div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-lim">'+(catLim>0?'of '+fmtUSD(catLim)+' limit':'no limit set')+'</div>'
+      +'<div class="bdg-cat-lim"><span>'+(catLim>0?'of '+fmtUSD(catLim):'no limit')+'</span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
       +'</div>';
   });
   html+='</div>';
@@ -1902,7 +1907,8 @@ function renderWallets(){
   function wmRow(color,mono,statusClass,name,meta,right,acts,logo){
     var st=statusClass?'<i class="wm-status '+statusClass+'"></i>':'';
     var chipInner=logo?'<img class="wm-logo" src="'+logo+'" alt="">':mono;
-    return '<div class="wm-row"><span class="wm-chip'+(logo?' has-logo':'')+'" style="--c:'+color+'">'+chipInner+st+'</span>'
+    var sel=acts?' onclick="selectWmRow(this)"':'';
+    return '<div class="wm-row'+(acts?' has-acts':'')+'"'+sel+'><span class="wm-chip'+(logo?' has-logo':'')+'" style="--c:'+color+'">'+chipInner+st+'</span>'
       +'<div class="wm-rid"><span class="wm-name">'+name+'</span>'+(meta?'<span class="wm-meta">'+meta+'</span>':'')+'</div>'
       +right+'<span class="wm-acts" onclick="event.stopPropagation()">'+(acts||'')+'</span>'+'</div>';
   }
@@ -1929,7 +1935,7 @@ function renderWallets(){
     var isZelle=name==='Zelle';
     var meta='<span class="wm-badge">tracker</span>';
     var right=isZelle
-      ?'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span class="wm-meta" style="white-space:nowrap;font-size:14px">+5%: '+fmtUSD(total*1.05)+'</span>'+balHtml(total)+'</div>'
+      ?'<div class="wm-bal-stack">'+balHtml(total)+'<span class="wm-bal-sub">+5%: '+fmtUSD(total*1.05)+'</span></div>'
       :balHtml(total);
     var acts='';
     if(mw){
@@ -2200,6 +2206,14 @@ window.selectTxRow = function(el){
 if(!window._txSelListener){
   window._txSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
+}
+window.selectWmRow = function(el){
+  document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){ if(r!==el) r.classList.remove('wm-sel'); });
+  el.classList.toggle('wm-sel');
+};
+if(!window._wmSelListener){
+  window._wmSelListener=true;
+  document.addEventListener('click',function(e){ if(!e.target.closest('.wm-row')) document.querySelectorAll('.wm-sel').forEach(function(r){ r.classList.remove('wm-sel'); }); });
 }
 // Touch: tapping an already-open base-select reopens it after light-dismiss; close instead
 if(!window._selToggleFix){
