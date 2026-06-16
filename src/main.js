@@ -1888,6 +1888,7 @@ function renderWallets(){
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var grand=apiTotal+trackerTotal+manualNormal;
   // ── allocation bar data ──────────────────────────────────────────────
+  var _otherTrackers=Math.max(0, trackerTotal - calcTrackerBal('Zelle'));
   var wvA=[
     {nm:'Binance',v:S.binanceBalance||0,col:'#9B70F0'},
     {nm:'Bybit',v:S.bybitBalance||0,col:'#4ED9A4'},
@@ -1895,6 +1896,7 @@ function renderWallets(){
     {nm:'Bibi Binance',v:S.bibiBinanceBalance||0,col:'#FB923C'},
     {nm:'OKX',v:S.okxBalance||0,col:'#FBBF24'},
     {nm:'Zelle',v:calcTrackerBal('Zelle'),col:'#A78BFA'},
+    {nm:'Trackers',v:_otherTrackers,col:'#2DD4BF'},
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
   ].filter(function(a){return a.v>0;});
   var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
