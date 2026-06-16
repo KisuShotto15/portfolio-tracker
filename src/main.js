@@ -967,16 +967,29 @@ function getAvgMonthlyContribution(){
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
 
+// Investment flows attributed to the period (prevSnap, curSnap].
+// Only counts txs created at/before curSnap was recorded (by timestamp id), so an
+// investment added *after* the snapshot — even same day — isn't wrongly counted,
+// since curSnap's total doesn't reflect it yet (it belongs to the next period).
+function investmentFlow(prevSnap, curSnap){
+  var lo=prevSnap?prevSnap.date:'';
+  var txs=(S.transactions||[]).filter(function(t){
+    return t.category==='Investments'
+      && t.date>lo && t.date<=curSnap.date
+      && (curSnap.id==null||t.id==null||t.id<=curSnap.id);
+  });
+  var invOut=txs.filter(function(t){ return t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+  var invIn=txs.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+  return {invOut:invOut,invIn:invIn};
+}
 function getSnapshotPnL(){
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(snaps.length<2) return [];
   var results=[];
   for(var i=1;i<snaps.length;i++){
     var s1=snaps[i-1],s2=snaps[i];
-    var txBetween=S.transactions.filter(function(t){ return t.date>=s1.date&&t.date<=s2.date&&t.category==='Investments'; });
-    var invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:invOut,invIn:invIn,profit:(s2.total-s1.total)+invOut-invIn });
+    var f=investmentFlow(s1,s2);
+    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:f.invOut,invIn:f.invIn,profit:(s2.total-s1.total)+f.invOut-f.invIn });
   }
   return results;
 }
@@ -1415,14 +1428,17 @@ function renderEquityChart(){
   }
   var labels=snaps.map(function(s){ return s.date; });
   var vals=snaps.map(function(s){ return s.total; });
-  // O(n) two-pointer — both arrays sorted by date
-  var invTx=S.transactions.filter(function(t){ return t.category==='Investments'; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
-  var cumOut=0,cumIn=0,ti=0;
+  // Cumulative deployed capital per snapshot. Only counts investments recorded
+  // at/before each snapshot (by timestamp id), so an investment added after a
+  // snapshot isn't folded into it — matching the Snapshot P&L logic.
+  var invTx=S.transactions.filter(function(t){ return t.category==='Investments'; });
   var adjVals=snaps.map(function(s){
-    while(ti<invTx.length&&invTx[ti].date<=s.date){
-      if(invTx[ti].type==='Debit') cumOut+=invTx[ti].amountUSD; else cumIn+=invTx[ti].amountUSD;
-      ti++;
-    }
+    var cumOut=0,cumIn=0;
+    invTx.forEach(function(t){
+      if(t.date<=s.date&&(s.id==null||t.id==null||t.id<=s.id)){
+        if(t.type==='Debit') cumOut+=t.amountUSD; else cumIn+=t.amountUSD;
+      }
+    });
     return parseFloat((s.total+cumOut-cumIn).toFixed(2));
   });
   // Skip rebuild when snapshots + investment flows are unchanged (adjVals folds in both).
@@ -1536,10 +1552,9 @@ async function recordSnapshot(){
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(sorted.length>=2){
     var prev=sorted[sorted.length-2];
-    var txBetween=S.transactions.filter(function(t){ return t.date>=prev.date&&t.date<=today&&t.category==='Investments'; });
-    var invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    var invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    var profit=Math.round(((val-prev.total)+invOut-invIn)*100)/100;
+    var cur=S.snapshots[S.snapshots.length-1];
+    var f=investmentFlow(prev,cur);
+    var profit=Math.round(((val-prev.total)+f.invOut-f.invIn)*100)/100;
     var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
     if(res.checked){
       var txId=Date.now()+1;
@@ -1999,9 +2014,8 @@ function renderHistory(view){
     var prev=i>0?snaps[i-1]:null;
     var profit=null, pct=null, invOut=0, invIn=0;
     if(prev){
-      var txBetween=S.transactions.filter(function(t){ return t.date>prev.date&&t.date<=s.date&&t.category==='Investments'; });
-      invOut=txBetween.filter(function(t){ return t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
-      invIn=txBetween.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
+      var f=investmentFlow(prev,s);
+      invOut=f.invOut; invIn=f.invIn;
       profit=(s.total-prev.total)+invOut-invIn;
       pct=prev.total>0?(profit/prev.total)*100:null;
     }
