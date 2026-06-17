@@ -1909,14 +1909,13 @@ function renderWallets(){
     return {nm:n,v:v,col:TRK_COLORS[i%TRK_COLORS.length]};
   });
   var wvA=[
-    {nm:'Binance',v:S.binanceBalance||0,col:'#9B70F0'},
+    {nm:'Binance',v:(S.binanceBalance||0)+(S.bibiBinanceBalance||0),col:'#9B70F0'},
     {nm:'Bybit',v:S.bybitBalance||0,col:'#4ED9A4'},
     {nm:'Trezor',v:S.trezorBalance||0,col:'#60A5FA'},
-    {nm:'Bibi Binance',v:S.bibiBinanceBalance||0,col:'#FB923C'},
     {nm:'OKX',v:S.okxBalance||0,col:'#FBBF24'}
   ].concat(trkEntries).concat([
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
-  ]).filter(function(a){return a.v>0;});
+  ]).filter(function(a){return a.v>0;}).sort(function(a,b){return b.v-a.v;});
   var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
   var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i>'+a.nm+' <b>'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</b></span>';}).join('');
 
@@ -1993,7 +1992,10 @@ function renderWallets(){
         +'</div>'
       +'</div>'
       +'<div class="wm-alloc">'+wvBar+'</div>'
-      +'<div class="wm-legend">'+wvLeg+'</div>'
+      +'<div class="wm-viz">'
+        +'<div class="wm-donut-wrap"><canvas id="wm-donut"></canvas></div>'
+        +'<div class="wm-legend">'+wvLeg+'</div>'
+      +'</div>'
     +'</div>'
     +'<div class="wm-cols wm-cols-3">'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>'
@@ -2002,6 +2004,15 @@ function renderWallets(){
     +'</div>';
   // Skip re-render when unchanged → no flicker / re-animation on tab return.
   if(wHtml!==_walletsSig){ grid.innerHTML=wHtml; _walletsSig=wHtml; }
+  // Draw outside the signature guard: the first render happens while the page is
+  // hidden (offsetParent null), so the donut must be (re)attempted on every visible render.
+  drawWalletDonut(wvA, grand);
+}
+function drawWalletDonut(data, grand){
+  var el=document.getElementById('wm-donut'); if(!el||el.offsetParent===null) return;
+  if(!window.Chart){ ensureChart().then(function(){ drawWalletDonut(data,grand); }).catch(function(){}); return; }
+  if(window.Chart.getChart(el)) return; // already drawn for this canvas (data unchanged)
+  new Chart(el,{type:'doughnut',data:{labels:data.map(function(a){return a.nm;}),datasets:[{data:data.map(function(a){return parseFloat(a.v.toFixed(2));}),backgroundColor:data.map(function(a){return a.col;}),borderWidth:0,spacing:2}]},options:{cutout:'70%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+fmtUSD(ctx.raw)+' ('+(grand>0?(ctx.raw/grand*100).toFixed(1):0)+'%)';}}}},animation:{animateRotate:true,duration:600},responsive:true,maintainAspectRatio:false}});
 }
 
 

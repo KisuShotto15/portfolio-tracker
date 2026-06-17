@@ -510,6 +510,7 @@ input,select,textarea,button{font-family:inherit}
 .whtile-val{font-family:var(--font-num);font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--txt)}
 .whtile-sub{font-size:12px;color:var(--txt3);font-family:var(--font-num)}
 .wm-alloc{display:flex;gap:3px;height:11px;margin:20px 0 15px}
+.wm-donut-wrap{display:none}
 .wm-alloc i{display:block;height:100%;border-radius:3px}
 .wm-legend{display:flex;flex-wrap:wrap;gap:9px 20px}
 .wm-key{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--txt2)}
@@ -855,6 +856,11 @@ input::placeholder{color:var(--txt3)}
   /* Wallets mobile layout */
   .wm-cols{grid-template-columns:1fr;gap:15px}
   .wm-hero-tiles{display:none}
+  /* Mobile: donut (left) + legend (right column, fits more wallets) */
+  .wm-alloc{display:none}
+  .wm-viz{display:flex;align-items:center;gap:16px;margin-top:18px}
+  .wm-donut-wrap{display:block;width:150px;height:165px;flex-shrink:0;margin:0}
+  .wm-legend{flex-direction:column;gap:11px;flex:1;min-width:0}
   /* Holdings header mobile: Updated centered between title and Refresh */
   #page-holdings .dash-head{justify-content:space-between;align-items:center}
   .hld-head-right{display:contents}
