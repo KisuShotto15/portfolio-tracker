@@ -453,12 +453,31 @@
 /* Mirror the Net Worth KPI (and its delta) into the dashboard hero.
    Additive only — does not touch main.js. */
 (function(){
+  var prefersReduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* Count-up tween for the hero Net Worth value. Parses "$12,345.67" → number,
+     animates from the last shown value with easeOutCubic. */
+  function countUp(el,text){
+    var target=parseFloat(String(text).replace(/[^0-9.-]/g,''));
+    if(isNaN(target)||prefersReduced){ el.textContent=text; return; }
+    var from=(typeof el._nwVal==='number')?el._nwVal:0;
+    if(Math.abs(target-from)<0.005){ el.textContent=text; el._nwVal=target; return; }
+    var neg=target<0, dur=900, start=null;
+    if(el._nwRaf) cancelAnimationFrame(el._nwRaf);
+    var step=function(ts){
+      if(start===null) start=ts;
+      var p=Math.min((ts-start)/dur,1), e=1-Math.pow(1-p,3);
+      var cur=from+(target-from)*e;
+      el.textContent=(neg&&cur<0?'-':'')+'$'+Math.abs(cur).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      if(p<1){ el._nwRaf=requestAnimationFrame(step); } else { el.textContent=text; el._nwVal=target; el._nwRaf=0; }
+    };
+    el._nwRaf=requestAnimationFrame(step);
+  }
   function sync(){
     var strip=document.getElementById('kpi-strip'); if(!strip) return;
     var first=strip.querySelector('.kpi-card'); if(!first) return;
     var hv=document.getElementById('nw-hero-val'), hm=document.getElementById('nw-hero-meta');
     var val=first.querySelector('.kpi-val'), sub=first.querySelector('.kpi-sub');
-    if(hv&&val) hv.textContent=val.textContent;
+    if(hv&&val&&hv.textContent!==val.textContent) countUp(hv,val.textContent);
     if(hm&&sub) hm.innerHTML=sub.innerHTML;
   }
   function attach(){

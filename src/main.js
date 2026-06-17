@@ -1879,6 +1879,7 @@ function calcTrackerBal(name){
 window.refreshAllWallets=async function(){
   var btn=document.getElementById('refresh-all-btn');
   if(btn){ btn.disabled=true; btn.textContent='Refreshing...'; }
+  document.querySelectorAll('#page-wallets .wm-bal').forEach(function(b){ b.classList.add('skeleton'); });
   var fns=[
     S.binanceBalance!==null?fetchBinanceBalance().then(function(){save();}).catch(function(){}):Promise.resolve(),
     S.bibiBinanceBalance!==null?fetchBibiBinanceBalance().then(function(){save();}).catch(function(){}):Promise.resolve(),
@@ -2115,25 +2116,31 @@ function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ loc
 function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
-  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.nb,#mob-settings-btn').forEach(function(b){ b.classList.remove('active'); });
-  document.getElementById('page-'+id).classList.add('active');
-  document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
-  if(btn) btn.classList.add('active');
-  window.location.hash = id;
-  var fab=document.getElementById('fab-add');
-  if(fab) fab.style.display=(id==='transactions'?'flex':'none');
-  if(id==='summary') renderSummary();
-  else if(id==='transactions') renderTx();
-  else if(id==='budget') renderBudget();
-  else if(id==='wallets') renderWallets();
-  else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools') renderToolToggles();
-  else if(id==='history') renderHistory(arg||'snapshots');
-  else if(id==='settings') renderPresetsManage();
-  var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
-  var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
-  document.body.classList.remove('nav-open');
+  var alreadyActive=document.getElementById('page-'+id).classList.contains('active');
+  var doNav=function(){
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+    document.querySelectorAll('.nb,#mob-settings-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.getElementById('page-'+id).classList.add('active');
+    document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
+    if(btn) btn.classList.add('active');
+    window.location.hash = id;
+    var fab=document.getElementById('fab-add');
+    if(fab) fab.style.display=(id==='transactions'?'flex':'none');
+    if(id==='summary') renderSummary();
+    else if(id==='transactions') renderTx();
+    else if(id==='budget') renderBudget();
+    else if(id==='wallets') renderWallets();
+    else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
+    else if(id==='tools') renderToolToggles();
+    else if(id==='history') renderHistory(arg||'snapshots');
+    else if(id==='settings') renderPresetsManage();
+    var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
+    var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
+    document.body.classList.remove('nav-open');
+  };
+  // Animate cross-page navigation only; re-rendering the same page shouldn't flash.
+  if(document.startViewTransition && !alreadyActive){ document.startViewTransition(doNav); }
+  else { doNav(); }
 }
 window._historyView='snapshots';
 function renderHistory(view){
