@@ -727,7 +727,7 @@ input::placeholder{color:var(--txt3)}
   position:fixed;left:50%;bottom:0;transform:translate3d(-50%,110%,0);
   width:min(620px,94vw);background:var(--surface);border:1px solid var(--line);
   border-radius:24px 24px 0 0;padding:24px 28px 34px;z-index:60;
-  transition:transform .4s cubic-bezier(.22,1,.36,1);
+  transition:transform .4s cubic-bezier(.32,.72,0,1);
   will-change:transform;backface-visibility:hidden;contain:layout paint;
   box-shadow:0 -8px 30px rgba(0,0,0,.45);
 }
@@ -855,7 +855,7 @@ input::placeholder{color:var(--txt3)}
   .td-orig-m{display:block}
   .date-sep{display:block}
   .date-sep td{display:block;padding:18px 0 6px;border:none;background:none}
-  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transition-duration:.28s;transition-timing-function:cubic-bezier(.22,1,.36,1)}
+  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transition-duration:.28s;transition-timing-function:cubic-bezier(.32,.72,0,1)}
   .tx-form-panel .field-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   /* Note full-width on top; Date + Wallet share one row to save space */
   .tx-form-panel .field-row .field[style*="span 2"]{order:-1}
