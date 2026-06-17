@@ -157,7 +157,7 @@ input,select,textarea,button{font-family:inherit}
 .kpi-delta.down{color:var(--red);background:color-mix(in srgb,var(--red) 13%,transparent)}
 
 /* Monthly insights card */
-.ins-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.ins-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;padding:0 10px}
 .ins-head-sub{font-size:12px;color:var(--txt3)}
 .ins-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
 .ins-stat{display:flex;flex-direction:column;align-items:center;text-align:center;gap:3px;padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:12px}
@@ -390,10 +390,10 @@ input,select,textarea,button{font-family:inherit}
 .pb,#bud-bar-,.pbf{border-radius:99px}
 
 /* Budget redesign */
-.bdg-top{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;margin-bottom:34px}
+.bdg-top{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;margin-bottom:22px}
 .bdg-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:28px 32px;display:flex;flex-direction:column;min-width:0}
-.bdg-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
-.bdg-hero-val{font-family:var(--font-num);font-size:56px;font-weight:500;letter-spacing:-.03em;margin:8px 0 22px;line-height:1}
+.bdg-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);text-align:center}
+.bdg-hero-val{font-family:var(--font-num);font-size:56px;font-weight:500;letter-spacing:-.03em;margin:8px 0 22px;line-height:1;text-align:center}
 .bdg-pb{height:12px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
 .bdg-pb.sm{height:6px}
 .bdg-pf{height:100%;border-radius:99px}
@@ -405,6 +405,7 @@ input,select,textarea,button{font-family:inherit}
 .bdg-stat-l{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
 .bdg-stat-v{font-family:var(--font-num);font-size:23px;font-weight:500;letter-spacing:-.01em}
 .bdg-donut-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 26px;display:flex;flex-direction:column;min-width:0}
+.bdg-donut-card>.cleg{text-align:center}
 .bdg-donut-wrap{display:flex;align-items:center;gap:20px;margin-top:auto;padding-top:14px}
 .bdg-donut{position:relative;width:148px;height:148px;flex-shrink:0}
 .bdg-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
@@ -415,7 +416,7 @@ input,select,textarea,button{font-family:inherit}
 .bdg-leg-item i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .bdg-leg-name{color:var(--txt2);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bdg-leg-val{font-family:var(--font-num);color:var(--txt3);font-size:13px}
-.bdg-cat-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px}
+.bdg-cat-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;padding:0 10px}
 .bdg-cat-meta{font-size:13px;color:var(--txt3)}
 .bdg-cats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px}
 .bdg-cat{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:17px 19px;transition:border-color .15s;min-width:0;text-align:center}
@@ -857,10 +858,15 @@ input::placeholder{color:var(--txt3)}
   .wm-cols{grid-template-columns:1fr;gap:15px}
   .wm-hero-tiles{display:none}
   /* Mobile: donut (left) + legend (right column, fits more wallets) */
+  .wm-hero-top{display:block}
+  .wm-hero-id{text-align:center}
   .wm-alloc{display:none}
   .wm-viz{display:flex;align-items:center;gap:16px;margin-top:18px}
   .wm-donut-wrap{display:block;width:150px;height:165px;flex-shrink:0;margin:0}
   .wm-legend{flex-direction:column;gap:11px;flex:1;min-width:0}
+  /* % pushed to the right of each row (Budget-donut style) */
+  .wm-legend .wm-key{width:100%}
+  .wm-legend .wm-key-nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Holdings header mobile: Updated centered between title and Refresh */
   #page-holdings .dash-head{justify-content:space-between;align-items:center}
   .hld-head-right{display:contents}

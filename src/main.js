@@ -1917,7 +1917,7 @@ function renderWallets(){
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
   ]).filter(function(a){return a.v>0;}).sort(function(a,b){return b.v-a.v;});
   var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
-  var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i>'+a.nm+' <b>'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</b></span>';}).join('');
+  var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i><span class="wm-key-nm">'+a.nm+'</span><b>'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</b></span>';}).join('');
 
   // ── icon helpers ─────────────────────────────────────────────────────
   var icP='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
