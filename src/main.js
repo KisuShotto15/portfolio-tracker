@@ -780,9 +780,10 @@ function openTxForm(){
   updateDateDisplay();
   renderPresets();
   document.getElementById('fab-add').style.display='none';
-  // Let the browser paint the populated form off-screen, then animate on a clean frame.
+  // Double rAF: rasterize the populated form off-screen on frame 1, then start the
+  // transform transition on frame 2 so it never collides with the layer's first paint (mobile stutter).
   var panel=document.getElementById('tx-form-panel'), ov=document.getElementById('tx-overlay');
-  requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); }); });
   _sheetPush('tx');
 }
 function closeTxForm(fromPop){
@@ -807,7 +808,7 @@ function closeTxForm(fromPop){
 function openWalletForm(type){
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
-  requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); }); });
   _sheetPush('wallet');
 }
 function closeWalletForm(fromPop){
