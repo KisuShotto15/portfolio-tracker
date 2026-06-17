@@ -765,9 +765,10 @@ function openTxForm(){
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
   updateDateDisplay();
   renderPresets();
-  document.getElementById('tx-form-panel').classList.add('open');
-  document.getElementById('tx-overlay').classList.add('open');
   document.getElementById('fab-add').style.display='none';
+  // Let the browser paint the populated form off-screen, then animate on a clean frame.
+  var panel=document.getElementById('tx-form-panel'), ov=document.getElementById('tx-overlay');
+  requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
 }
 function closeTxForm(){
   editingTxId=null;
@@ -789,9 +790,10 @@ function closeTxForm(){
 }
 function openWalletForm(type){
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
-  document.getElementById('wv-form-panel').classList.add('open');
-  document.getElementById('wv-overlay').classList.add('open');
-  setTimeout(function(){ var d=document.getElementById('wm-name'); if(d) d.focus(); },120);
+  var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
+  requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
+  // Focus after the panel settles, so the mobile keyboard doesn't reflow mid-animation.
+  setTimeout(function(){ var d=document.getElementById('wm-name'); if(d) d.focus(); },300);
 }
 function closeWalletForm(){
   document.getElementById('wv-form-panel').classList.remove('open');
