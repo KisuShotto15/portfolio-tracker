@@ -2141,7 +2141,9 @@ function showPage(id,btn,arg){
   target.classList.remove('page-in'); void target.offsetWidth; target.classList.add('active','page-in');
   document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
   if(btn) btn.classList.add('active');
-  window.location.hash = id;
+  // Reflect the tab in the URL WITHOUT stacking history entries, so the back
+  // button is reserved for closing an open sheet (not bouncing between tabs).
+  try{ history.replaceState(null,'','#'+id); }catch(e){ window.location.hash=id; }
   var fab=document.getElementById('fab-add');
   if(fab) fab.style.display=(id==='transactions'?'flex':'none');
   if(id==='summary') renderSummary();
@@ -2306,9 +2308,12 @@ if(!window._txScrollListener){
 if(!window._sheetBackListener){
   window._sheetBackListener=true;
   window.addEventListener('popstate',function(){
-    var s=window._activeSheet; if(!s) return;
+    var s=window._activeSheet;
     window._activeSheet=null;
-    if(s==='tx') closeTxForm(true); else if(s==='wallet') closeWalletForm(true);
+    var txOpen=document.getElementById('tx-form-panel').classList.contains('open');
+    var wvOpen=document.getElementById('wv-form-panel').classList.contains('open');
+    if(s==='tx'||txOpen) closeTxForm(true);
+    else if(s==='wallet'||wvOpen) closeWalletForm(true);
   });
 }
 // Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
