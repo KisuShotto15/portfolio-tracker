@@ -803,8 +803,6 @@ function openWalletForm(type){
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
   requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
-  // Focus after the panel settles, so the mobile keyboard doesn't reflow mid-animation.
-  setTimeout(function(){ var d=document.getElementById('wm-name'); if(d) d.focus(); },300);
 }
 function closeWalletForm(){
   document.getElementById('wv-form-panel').classList.remove('open');
