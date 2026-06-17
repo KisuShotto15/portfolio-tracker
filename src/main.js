@@ -772,6 +772,9 @@ function updateDateDisplay(){
   var v=i.value; if(!v){ d.textContent=''; return; }
   var p=v.split('-'); d.textContent=p[2]+'/'+p[1]+'/'+p[0];
 }
+// ── Bottom-sheet history coordination (back button closes the sheet) ──
+function _sheetPush(name){ window._activeSheet=name; try{ history.pushState({sheet:name},''); }catch(e){} }
+function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(history.state&&history.state.sheet){ try{ history.back(); }catch(e){} } } }
 function openTxForm(){
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
   updateDateDisplay();
@@ -780,8 +783,9 @@ function openTxForm(){
   // Let the browser paint the populated form off-screen, then animate on a clean frame.
   var panel=document.getElementById('tx-form-panel'), ov=document.getElementById('tx-overlay');
   requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
+  _sheetPush('tx');
 }
-function closeTxForm(){
+function closeTxForm(fromPop){
   editingTxId=null;
   var btn=document.querySelector('.btn-add'); if(btn) btn.textContent='Add';
   var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='none';
@@ -798,19 +802,22 @@ function closeTxForm(){
   document.getElementById('tx-form-panel').classList.remove('open');
   document.getElementById('tx-overlay').classList.remove('open');
   document.getElementById('fab-add').style.display='flex';
+  if(fromPop!==true) _sheetPop();
 }
 function openWalletForm(type){
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
   requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); });
+  _sheetPush('wallet');
 }
-function closeWalletForm(){
+function closeWalletForm(fromPop){
   document.getElementById('wv-form-panel').classList.remove('open');
   document.getElementById('wv-overlay').classList.remove('open');
   document.getElementById('wm-name').value='';
   document.getElementById('wm-bal').value='';
   document.getElementById('wm-type').value='tracker';
   toggleWmBalField();
+  if(fromPop!==true) _sheetPop();
 }
 function toggleWmBalField(){
   var f=document.getElementById('wm-bal-field');
@@ -2295,6 +2302,44 @@ if(!window._txScrollListener){
     }
   });
 }
+// Back button / system back closes an open bottom-sheet instead of leaving the page
+if(!window._sheetBackListener){
+  window._sheetBackListener=true;
+  window.addEventListener('popstate',function(){
+    var s=window._activeSheet; if(!s) return;
+    window._activeSheet=null;
+    if(s==='tx') closeTxForm(true); else if(s==='wallet') closeWalletForm(true);
+  });
+}
+// Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
+function attachSheetDrag(panel, closeFn){
+  if(!panel||panel._dragBound) return; panel._dragBound=true;
+  var startY=0, lastY=0, dragging=false;
+  panel.addEventListener('touchstart',function(e){
+    var t=e.target;
+    if(panel.scrollTop>0 || (t.closest&&t.closest('input,select,textarea,button,.preset-chip,.date-field,.receipt-attach'))){ dragging=false; return; }
+    startY=lastY=e.touches[0].clientY; dragging=true;
+    panel.style.transition='none';
+  },{passive:true});
+  panel.addEventListener('touchmove',function(e){
+    if(!dragging) return;
+    lastY=e.touches[0].clientY;
+    var dy=lastY-startY;
+    if(dy<=0 || panel.scrollTop>0){ panel.style.transform=''; return; }
+    panel.style.transform='translate3d(-50%,'+dy+'px,0)';
+  },{passive:true});
+  function end(){
+    if(!dragging) return; dragging=false;
+    var dy=lastY-startY;
+    panel.style.transition='';
+    panel.style.transform='';
+    if(dy>120) closeFn();
+  }
+  panel.addEventListener('touchend',end);
+  panel.addEventListener('touchcancel',end);
+}
+attachSheetDrag(document.getElementById('tx-form-panel'), function(){ closeTxForm(); });
+attachSheetDrag(document.getElementById('wv-form-panel'), function(){ closeWalletForm(); });
 window.selectWvRow = function(el){
   document.querySelectorAll('.wv-row.wv-exp').forEach(function(r){ if(r!==el) r.classList.remove('wv-exp'); });
   el.classList.toggle('wv-exp');
