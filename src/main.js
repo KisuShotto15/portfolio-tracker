@@ -2127,31 +2127,27 @@ function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ loc
 function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
-  var alreadyActive=document.getElementById('page-'+id).classList.contains('active');
-  var doNav=function(){
-    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
-    document.querySelectorAll('.nb,#mob-settings-btn').forEach(function(b){ b.classList.remove('active'); });
-    document.getElementById('page-'+id).classList.add('active');
-    document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
-    if(btn) btn.classList.add('active');
-    window.location.hash = id;
-    var fab=document.getElementById('fab-add');
-    if(fab) fab.style.display=(id==='transactions'?'flex':'none');
-    if(id==='summary') renderSummary();
-    else if(id==='transactions') renderTx();
-    else if(id==='budget') renderBudget();
-    else if(id==='wallets') renderWallets();
-    else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-    else if(id==='tools'){ renderToolToggles(); renderBdvLimits(); }
-    else if(id==='history') renderHistory(arg||'snapshots');
-    else if(id==='settings') renderPresetsManage();
-    var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
-    var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
-    document.body.classList.remove('nav-open');
-  };
-  // Animate cross-page navigation only; re-rendering the same page shouldn't flash.
-  if(document.startViewTransition && !alreadyActive){ document.startViewTransition(doNav); }
-  else { doNav(); }
+  document.querySelectorAll('.page.active').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nb.active,#mob-settings-btn.active').forEach(function(b){ b.classList.remove('active'); });
+  var target=document.getElementById('page-'+id);
+  // Restart the cheap CSS enter animation each navigation (no View Transition snapshot cost).
+  target.classList.remove('page-in'); void target.offsetWidth; target.classList.add('active','page-in');
+  document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
+  if(btn) btn.classList.add('active');
+  window.location.hash = id;
+  var fab=document.getElementById('fab-add');
+  if(fab) fab.style.display=(id==='transactions'?'flex':'none');
+  if(id==='summary') renderSummary();
+  else if(id==='transactions') renderTx();
+  else if(id==='budget') renderBudget();
+  else if(id==='wallets') renderWallets();
+  else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
+  else if(id==='tools'){ renderToolToggles(); renderBdvLimits(); }
+  else if(id==='history') renderHistory(arg||'snapshots');
+  else if(id==='settings') renderPresetsManage();
+  var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
+  var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
+  document.body.classList.remove('nav-open');
 }
 window._historyView='snapshots';
 function renderHistory(view){
