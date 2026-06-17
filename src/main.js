@@ -787,7 +787,8 @@ function closeTxForm(){
   document.getElementById('tx-overlay').classList.remove('open');
   document.getElementById('fab-add').style.display='flex';
 }
-function openWalletForm(){
+function openWalletForm(type){
+  if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   document.getElementById('wv-form-panel').classList.add('open');
   document.getElementById('wv-overlay').classList.add('open');
   setTimeout(function(){ var d=document.getElementById('wm-name'); if(d) d.focus(); },120);
@@ -1900,17 +1901,22 @@ function renderWallets(){
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   var grand=apiTotal+trackerTotal+manualNormal;
   // ── allocation bar data ──────────────────────────────────────────────
-  var _otherTrackers=Math.max(0, trackerTotal - calcTrackerBal('Zelle'));
+  // Each tracker wallet gets its own segment (palette avoids the exchange hues).
+  var TRK_COLORS=['#A78BFA','#2DD4BF','#F472B6','#22D3EE','#84CC16','#F59E0B','#EC4899','#14B8A6'];
+  var trkEntries=trackerNames.map(function(n,i){
+    var mw=S.manualWallets.find(function(w){return w.name===n;});
+    var v=mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n);
+    return {nm:n,v:v,col:TRK_COLORS[i%TRK_COLORS.length]};
+  });
   var wvA=[
     {nm:'Binance',v:S.binanceBalance||0,col:'#9B70F0'},
     {nm:'Bybit',v:S.bybitBalance||0,col:'#4ED9A4'},
     {nm:'Trezor',v:S.trezorBalance||0,col:'#60A5FA'},
     {nm:'Bibi Binance',v:S.bibiBinanceBalance||0,col:'#FB923C'},
-    {nm:'OKX',v:S.okxBalance||0,col:'#FBBF24'},
-    {nm:'Zelle',v:calcTrackerBal('Zelle'),col:'#A78BFA'},
-    {nm:'Trackers',v:_otherTrackers,col:'#2DD4BF'},
+    {nm:'OKX',v:S.okxBalance||0,col:'#FBBF24'}
+  ].concat(trkEntries).concat([
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
-  ].filter(function(a){return a.v>0;});
+  ]).filter(function(a){return a.v>0;});
   var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
   var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i>'+a.nm+' <b>'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</b></span>';}).join('');
 
@@ -1968,17 +1974,31 @@ function renderWallets(){
   var walletCount=5+trackerNames.length+manualNormalCount;
   var notConn=[S.binanceBalance,S.bibiBinanceBalance,S.bybitBalance,S.okxBalance].filter(function(b){return b===null;}).length;
 
+  function htile(lbl,val,col){
+    var pct=grand>0?(val/grand*100).toFixed(1):'0';
+    return '<div class="whtile"><span class="whtile-lbl"><i style="background:'+col+'"></i>'+lbl+'</span><span class="whtile-val">'+fmtUSD(val)+'</span><span class="whtile-sub">'+pct+'% of total</span></div>';
+  }
   var wHtml=
     '<div class="wm-hero">'
-      +'<div class="wm-hero-lbl">Total · All Wallets</div>'
-      +'<div class="wm-hero-val">'+fmtUSD(grand)+'</div>'
-      +'<div class="wm-hero-meta">'+walletCount+' wallets'+(notConn>0?' · '+notConn+' not connected':'')+'</div>'
+      +'<div class="wm-hero-top">'
+        +'<div class="wm-hero-id">'
+          +'<div class="wm-hero-lbl">Total · All Wallets</div>'
+          +'<div class="wm-hero-val">'+fmtUSD(grand)+'</div>'
+          +'<div class="wm-hero-meta">'+walletCount+' wallets'+(notConn>0?' · '+notConn+' not connected':'')+'</div>'
+        +'</div>'
+        +'<div class="wm-hero-tiles">'
+          +htile('Exchanges',apiTotal,'#9B70F0')
+          +htile('Trackers',trackerTotal,'#2DD4BF')
+          +htile('Manual',manualNormal,'#6B7280')
+        +'</div>'
+      +'</div>'
       +'<div class="wm-alloc">'+wvBar+'</div>'
       +'<div class="wm-legend">'+wvLeg+'</div>'
     +'</div>'
-    +'<div class="wm-cols">'
+    +'<div class="wm-cols wm-cols-3">'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>'
-      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers &amp; Manual</span><span class="wm-group-sum">'+fmtUSD(trackerTotal+manualNormal)+'</span></div><div class="wm-rows">'+trRows+mnRows+'</div><button class="wm-add" onclick="openWalletForm()">+ Add wallet</button></div>'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
     +'</div>';
   // Skip re-render when unchanged → no flicker / re-animation on tab return.
   if(wHtml!==_walletsSig){ grid.innerHTML=wHtml; _walletsSig=wHtml; }
