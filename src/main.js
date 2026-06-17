@@ -49,7 +49,8 @@ var S = {
   transactionsUpdatedAt:null,
   dashGoal:0,
   categoryBudgets:{},
-  presets:[], presetsUpdatedAt:null
+  presets:[], presetsUpdatedAt:null,
+  bdvLimits:[], bdvLimitsUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 
@@ -164,7 +165,13 @@ async function pushToCloud(){
             S.presetsUpdatedAt=cd.data.presetsUpdatedAt;
             needRender=true;
           }
-          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); }
+          // BDV Monthly Limits: cloud wins unless local is strictly newer (LWW)
+          if(cd.data.bdvLimits&&(cd.data.bdvLimitsUpdatedAt||0)>=(S.bdvLimitsUpdatedAt||0)){
+            S.bdvLimits=cd.data.bdvLimits;
+            S.bdvLimitsUpdatedAt=cd.data.bdvLimitsUpdatedAt;
+            needRender=true;
+          }
+          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits(); }
         }
       }
     }catch(e){ /* continue with push even if merge-pull fails */ }
@@ -206,6 +213,10 @@ async function pullFromCloud(){
       var rest=Object.assign({},cloud);
       delete rest.transactions;
       delete rest.deletedTxIds;
+      // bdvLimits: keep local if it is strictly newer than cloud (don't clobber an unsynced edit)
+      if((cloud.bdvLimitsUpdatedAt||0)<(S.bdvLimitsUpdatedAt||0)){
+        delete rest.bdvLimits; delete rest.bdvLimitsUpdatedAt;
+      }
       S=Object.assign({},S,rest);
       saveLocal();
       setSyncStatus('synced','Synced');
@@ -2133,7 +2144,7 @@ function showPage(id,btn,arg){
     else if(id==='budget') renderBudget();
     else if(id==='wallets') renderWallets();
     else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-    else if(id==='tools') renderToolToggles();
+    else if(id==='tools'){ renderToolToggles(); renderBdvLimits(); }
     else if(id==='history') renderHistory(arg||'snapshots');
     else if(id==='settings') renderPresetsManage();
     var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
@@ -2383,7 +2394,45 @@ var TOOLS = [
   { id:'bdvbpay',  label:'BDV→Bpay'      },
   { id:'bdvwally', label:'BDV→Wally'     },
   { id:'bdvzinli', label:'BDV→Zinli'     },
+  { id:'bdvlimits',label:'BDV Limits'    },
 ];
+
+// ── BDV Monthly Limits ───────────────────────────────────────────────
+function bdvLimitsState(){ if(!Array.isArray(S.bdvLimits)) S.bdvLimits=[]; return S.bdvLimits; }
+function bdvInitVirtual(){ return 10000; }
+function bdvInitFisica(name){ return String(name).trim().toLowerCase()==='jesusg'?10000:5000; }
+function _bdvFind(id){ return bdvLimitsState().filter(function(n){ return n.id===id; })[0]; }
+function renderBdvLimits(){
+  var wrap=document.getElementById('bdvl-list'); if(!wrap) return;
+  var list=bdvLimitsState();
+  if(!list.length){ wrap.innerHTML='<div class="bdvl-empty">No names yet. Add one below.</div>'; return; }
+  function stepper(id,key,val,on){
+    if(!on) return '<span class="bdvl-off">Off</span>';
+    return '<div class="bdvl-step">'
+      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',-500)">&#8722;</button>'
+      +'<input class="bdvl-amt" type="number" step="500" value="'+(val||0)+'" onchange="bdvSet('+id+',\''+key+'\',this.value)">'
+      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',500)">+</button>'
+    +'</div>';
+  }
+  wrap.innerHTML=list.map(function(n){
+    return '<div class="bdvl-card">'
+      +'<div class="bdvl-card-head"><span class="bdvl-name" onclick="renameBdvLimit('+n.id+')">'+escHtml(n.name)+'</span>'
+        +'<button class="wico del" onclick="deleteBdvLimit('+n.id+')" title="Delete">&#10005;</button></div>'
+      +'<div class="bdvl-opt"><span class="bdvl-opt-lbl">Virtual</span>'+stepper(n.id,'virtual',n.virtual,true)+'</div>'
+      +'<div class="bdvl-opt"><button class="bdvl-toggle'+(n.fisicaOn?' on':'')+'" onclick="toggleBdvFisica('+n.id+')">Fisica</button>'+stepper(n.id,'fisica',n.fisica,!!n.fisicaOn)+'</div>'
+    +'</div>';
+  }).join('');
+}
+window.renderBdvLimits=renderBdvLimits;
+// Every mutation stamps bdvLimitsUpdatedAt so cloud sync does correct last-writer-wins.
+function bdvSave(){ S.bdvLimitsUpdatedAt=Date.now(); save(); renderBdvLimits(); }
+window.bdvAdj=function(id,key,delta){ var n=_bdvFind(id); if(!n) return; n[key]=Math.max(0,(n[key]||0)+delta); bdvSave(); };
+window.bdvSet=function(id,key,val){ var n=_bdvFind(id); if(!n) return; var v=parseFloat(val); n[key]=isNaN(v)?0:Math.max(0,v); bdvSave(); };
+window.toggleBdvFisica=function(id){ var n=_bdvFind(id); if(!n) return; n.fisicaOn=!n.fisicaOn; bdvSave(); };
+window.addBdvLimit=async function(){ var r=await appPrompt('Add name','Name for the new entry','',{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; var nm=r.value.trim(); bdvLimitsState().push({id:Date.now(),name:nm,virtual:bdvInitVirtual(),fisica:bdvInitFisica(nm),fisicaOn:true}); bdvSave(); };
+window.resetBdvLimits=async function(){ var list=bdvLimitsState(); if(!list.length) return; var ok=await appConfirm('Reset all limits?','Sets every Virtual to '+fmtUSD(bdvInitVirtual())+' and Fisica to its initial amount.','Reset'); if(!ok) return; list.forEach(function(n){ n.virtual=bdvInitVirtual(); n.fisica=bdvInitFisica(n.name); }); bdvSave(); };
+window.renameBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var r=await appPrompt('Rename',escHtml(n.name),n.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; n.name=r.value.trim(); bdvSave(); };
+window.deleteBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var ok=await appConfirm('Delete name?',escHtml(n.name),'Delete'); if(!ok) return; S.bdvLimits=bdvLimitsState().filter(function(x){ return x.id!==id; }); bdvSave(); };
 
 function renderToolToggles(){
   if(!S.hiddenTools) S.hiddenTools={};
@@ -2539,7 +2588,7 @@ async function init(){
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; if(_pc.buy) document.getElementById('pc-buy').value=_pc.buy; if(_pc.card) document.getElementById('pc-card').value=_pc.card; }catch(e){}
-  renderToolToggles(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
+  renderToolToggles(); renderBdvLimits(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
   autoFetchBinance(); autoFetchBibiBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
   setInterval(function(){ autoFetchBinance(); autoFetchBibiBinance(); }, BINANCE_AUTO_MS);

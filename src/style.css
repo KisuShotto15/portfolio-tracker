@@ -612,6 +612,32 @@ input::placeholder{color:var(--txt3)}
 .tool-card .field-row{justify-content:center;max-width:520px;margin-left:auto;margin-right:auto}
 .tool-card .field-row .field{flex:1 1 auto;min-width:0}
 .tool-card [id$="-cards"]{margin-left:auto;margin-right:auto}
+/* BDV Monthly Limits (full-width tool) */
+.tool-wide{grid-column:1/-1}
+.bdvl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;text-align:left}
+.bdvl-empty{color:var(--txt3);font-size:14px;padding:8px 2px;text-align:center}
+.bdvl-card{background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.bdvl-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bdvl-name{font-size:15px;font-weight:600;color:var(--txt);cursor:pointer}
+.bdvl-name:hover{color:var(--accent)}
+.bdvl-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:32px}
+.bdvl-opt-lbl{font-size:13px;color:var(--txt2);font-weight:500}
+.bdvl-toggle{font-size:13px;font-weight:500;color:var(--txt3);background:rgba(255,255,255,.04);border:1px solid var(--line-soft);border-radius:999px;padding:4px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.bdvl-toggle::before{content:"";width:7px;height:7px;border-radius:99px;background:var(--txt3)}
+.bdvl-toggle:hover{color:var(--txt2)}
+.bdvl-toggle.on{color:var(--txt);background:var(--accent-soft);border-color:transparent}
+.bdvl-toggle.on::before{background:var(--green)}
+.bdvl-step{display:flex;align-items:center;gap:6px}
+.bdvl-pm{width:28px;height:28px;border-radius:8px;border:1px solid var(--line-soft);background:rgba(255,255,255,.04);color:var(--txt);font-size:16px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0}
+.bdvl-pm:hover{background:rgba(255,255,255,.1)}
+.bdvl-off{font-size:13px;color:var(--txt3)}
+.bdvl-actions{display:flex;gap:12px;margin-top:14px}
+.bdvl-actions .wm-add{width:auto;flex:1;margin:0}
+.bdvl-reset{flex:0 0 auto!important;padding-left:24px;padding-right:24px}
+.bdvl-reset:hover{color:var(--red);border-color:rgba(226,75,74,.4)}
+#tc-bdvlimits .bdvl-amt{width:84px;text-align:center;background:var(--surface2);border:1px solid var(--line-soft);border-radius:8px;color:var(--txt);font-family:var(--font-num);font-size:14px;padding:6px 4px}
+#tc-bdvlimits .bdvl-amt::-webkit-inner-spin-button,#tc-bdvlimits .bdvl-amt::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+#tc-bdvlimits .bdvl-amt{-moz-appearance:textfield;appearance:textfield}
 #tc-bcvemily{display:flex;flex-direction:column;justify-content:space-between}
 
 /* Tools — calc result chips */
