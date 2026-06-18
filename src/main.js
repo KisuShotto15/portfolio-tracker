@@ -781,11 +781,10 @@ function openTxForm(){
   renderPresets();
   document.getElementById('fab-add').style.display='none';
   var panel=document.getElementById('tx-form-panel'), ov=document.getElementById('tx-overlay');
-  // Flush layout now (absorbs the innerHTML/value writes above), then double rAF: frame 1
-  // paints the off-screen layer, frame 2 starts the transform — so no paint work lands on
-  // the animated frames. Translate-only transform stays on the GPU compositor end to end.
+  // Flush layout now (commits the value/innerHTML writes above with the closed transform),
+  // then start the slide on the same tick — no deferred frames, so no perceived open delay.
   void panel.offsetHeight;
-  requestAnimationFrame(function(){ requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); }); });
+  panel.classList.add('open'); ov.classList.add('open');
   _sheetPush('tx');
 }
 function closeTxForm(fromPop){
@@ -812,7 +811,7 @@ function openWalletForm(type){
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
   void panel.offsetHeight;
-  requestAnimationFrame(function(){ requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); }); });
+  panel.classList.add('open'); ov.classList.add('open');
   _sheetPush('wallet');
 }
 function closeWalletForm(fromPop){
