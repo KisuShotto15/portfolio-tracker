@@ -802,7 +802,8 @@ function closeTxForm(fromPop){
   document.getElementById('tx-cur').value='USD';
   removeReceipt();
   toggleVesHint();
-  document.getElementById('tx-form-panel').classList.remove('open');
+  var _txp=document.getElementById('tx-form-panel');
+  _txp.classList.remove('open'); _txp.style.bottom=''; _txp.style.maxHeight='';
   document.getElementById('tx-overlay').classList.remove('open');
   document.getElementById('fab-add').style.display='flex';
   if(fromPop!==true) _sheetPop();
@@ -815,7 +816,8 @@ function openWalletForm(type){
   _sheetPush('wallet');
 }
 function closeWalletForm(fromPop){
-  document.getElementById('wv-form-panel').classList.remove('open');
+  var _wvp=document.getElementById('wv-form-panel');
+  _wvp.classList.remove('open'); _wvp.style.bottom=''; _wvp.style.maxHeight='';
   document.getElementById('wv-overlay').classList.remove('open');
   document.getElementById('wm-name').value='';
   document.getElementById('wm-bal').value='';
@@ -2349,6 +2351,20 @@ function attachSheetDrag(panel, closeFn){
 }
 attachSheetDrag(document.getElementById('tx-form-panel'), function(){ closeTxForm(); });
 attachSheetDrag(document.getElementById('wv-form-panel'), function(){ closeWalletForm(); });
+// Keep the open bottom-sheet above the on-screen keyboard so the whole form stays scrollable
+if(window.visualViewport && !window._vvSheetBound){
+  window._vvSheetBound=true;
+  var _vv=window.visualViewport;
+  function adjustSheetForKeyboard(){
+    var panel=document.querySelector('.tx-form-panel.open');
+    if(!panel) return;
+    var overlap=Math.max(0, window.innerHeight-(_vv.height+_vv.offsetTop));
+    if(overlap>80){ panel.style.bottom=overlap+'px'; panel.style.maxHeight=(_vv.height-12)+'px'; }
+    else { panel.style.bottom=''; panel.style.maxHeight=''; }
+  }
+  _vv.addEventListener('resize',adjustSheetForKeyboard);
+  _vv.addEventListener('scroll',adjustSheetForKeyboard);
+}
 window.selectWvRow = function(el){
   document.querySelectorAll('.wv-row.wv-exp').forEach(function(r){ if(r!==el) r.classList.remove('wv-exp'); });
   el.classList.toggle('wv-exp');
