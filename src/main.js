@@ -1376,7 +1376,7 @@ function renderSnapshotPnL(){
   }
   var last3=pnls.slice(-3).reverse();
   var hasMore=pnls.length>3;
-  var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'pnl\')">'+HIST_ICON+' History</button>':'')+'</div>';
+  var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'snapshots\')">'+HIST_ICON+' History</button>':'')+'</div>';
   el.innerHTML=hdr+last3.map(makePnlRow).join('');
 }
 
@@ -2191,12 +2191,9 @@ function renderHistory(view){
     return {s:s,prev:prev,profit:profit,pct:pct,invOut:invOut,invIn:invIn,cumDelta:cumDelta,cumPct:cumPct};
   });
 
-  if(view==='pnl'){
-    rows=rows.filter(function(r){ return r.prev!==null; });
-  }
   rows.reverse();
 
-  if(titleEl) titleEl.textContent=view==='pnl'?'Snapshot P&L History':'Snapshot History';
+  if(titleEl) titleEl.textContent='Snapshot History';
 
   function cls(v){ return v>0?'up':v<0?'down':'flat'; }
   function sgn(v){ return v>0?'+':v<0?'-':''; }
@@ -2210,7 +2207,7 @@ function renderHistory(view){
   var XICO='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg>';
 
   var html='';
-  if(view!=='pnl'){
+  {
     var latest=snaps[snaps.length-1];
     var totDelta=latest.total-firstTotal;
     var totPct=firstTotal>0?(totDelta/firstTotal)*100:0;
@@ -2224,28 +2221,34 @@ function renderHistory(view){
     +'</div>';
   }
 
+  function fmtMd(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
   html+='<div class="snap-list">';
+  html+='<div class="snap-row snap-head-row">'
+    +'<div class="snap-col-date">Date</div>'
+    +'<div class="snap-col-nw">Net Worth</div>'
+    +'<div class="snap-col-pnl">P&L</div>'
+    +'<div class="snap-col-pct">P&L %</div>'
+    +'<div class="snap-col-cum">Cumulative</div>'
+    +'<div class="snap-col-acts"></div>'
+  +'</div>';
   rows.forEach(function(r){
-    var periodChip=r.profit!==null
-      ?'<span class="snap-chip '+cls(r.profit)+'">'+sgn(r.profit)+fmtUSD(Math.abs(r.profit))+' · '+sgn(r.pct)+Math.abs(r.pct).toFixed(2)+'%</span>'
-      :'<span class="snap-chip flat">Baseline</span>';
-    if(view==='pnl'){
-      html+='<div class="snap-row">'
-        +'<div class="snap-date"><span class="snap-d">'+r.prev.date+' → '+r.s.date+'</span>'+adjLine(r)+'</div>'
-        +'<div class="snap-spacer"></div>'
-        +'<div class="snap-figs"><span class="snap-total" style="font-size:14px;color:var(--txt2)">'+fmtUSD(r.prev.total)+' → '+fmtUSD(r.s.total)+'</span><div class="snap-deltas">'+periodChip+'</div></div>'
-      +'</div>';
+    var pnlCell,pctCell;
+    if(r.profit!==null){
+      pnlCell='<span class="snap-chip '+cls(r.profit)+'">'+sgn(r.profit)+fmtUSD(Math.abs(r.profit))+'</span>';
+      pctCell='<span class="snap-pct '+cls(r.profit)+'">'+sgn(r.pct)+Math.abs(r.pct).toFixed(2)+'%</span>';
     } else {
-      html+='<div class="snap-row">'
-        +'<div class="snap-date"><span class="snap-d">'+r.s.date+'</span>'+adjLine(r)+'</div>'
-        +'<div class="snap-spacer"></div>'
-        +'<div class="snap-figs">'
-          +'<span class="snap-total">'+fmtUSD(r.s.total)+'</span>'
-          +'<div class="snap-deltas">'+periodChip+'<span class="snap-cum">Cum '+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' ('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></div>'
-        +'</div>'
-        +'<div class="snap-acts"><button class="wico" title="Edit" onclick="editSnapshot('+r.s.id+')">'+PENCIL+'</button><button class="wico del" title="Delete" onclick="deleteSnapshotFromHistory('+r.s.id+')">'+XICO+'</button></div>'
-      +'</div>';
+      pnlCell='<span class="snap-chip flat">Baseline</span>';
+      pctCell='<span class="snap-pct flat">—</span>';
     }
+    var cumCell='<span class="snap-cum '+cls(r.cumDelta)+'">'+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' <span class="snap-cum-pct">('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></span>';
+    html+='<div class="snap-row">'
+      +'<div class="snap-col-date"><span class="snap-d">'+fmtMd(r.s.date)+'</span>'+adjLine(r)+'</div>'
+      +'<div class="snap-col-nw"><span class="snap-total">'+fmtUSD(r.s.total)+'</span></div>'
+      +'<div class="snap-col-pnl">'+pnlCell+'</div>'
+      +'<div class="snap-col-pct">'+pctCell+'</div>'
+      +'<div class="snap-col-cum">'+cumCell+'</div>'
+      +'<div class="snap-col-acts snap-acts"><button class="wico" title="Edit" onclick="editSnapshot('+r.s.id+')">'+PENCIL+'</button><button class="wico del" title="Delete" onclick="deleteSnapshotFromHistory('+r.s.id+')">'+XICO+'</button></div>'
+    +'</div>';
   });
   html+='</div>';
   wrap.innerHTML=html;
