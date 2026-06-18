@@ -1013,11 +1013,23 @@ function getAvgMonthlyContribution(){
 // investment added *after* the snapshot — even same day — isn't wrongly counted,
 // since curSnap's total doesn't reflect it yet (it belongs to the next period).
 function investmentFlow(prevSnap, curSnap){
+  // Attribution by record time (id/timestamp) on BOTH ends: a tx belongs to the
+  // period (prevSnap, curSnap] if it was recorded after prevSnap and at/before
+  // curSnap. Falls back to date bounds for legacy snapshots/txs without ids.
   var lo=prevSnap?prevSnap.date:'';
   var txs=(S.transactions||[]).filter(function(t){
-    return t.category==='Investments'
-      && t.date>lo && t.date<=curSnap.date
-      && (curSnap.id==null||t.id==null||t.id<=curSnap.id);
+    if(t.category!=='Investments') return false;
+    // Upper bound: recorded at/before this snapshot.
+    if(curSnap.id!=null && t.id!=null && t.id>curSnap.id) return false;
+    // Lower bound: recorded after the previous snapshot (id), else by date.
+    if(prevSnap && prevSnap.id!=null && t.id!=null){
+      if(t.id<=prevSnap.id) return false;
+    } else {
+      if(!(t.date>lo)) return false;
+    }
+    // Date upper bound only when id upper bound unavailable.
+    if((curSnap.id==null||t.id==null) && !(t.date<=curSnap.date)) return false;
+    return true;
   });
   var invOut=txs.filter(function(t){ return t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
   var invIn=txs.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
