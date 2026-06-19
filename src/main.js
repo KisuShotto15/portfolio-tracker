@@ -119,68 +119,23 @@ function mergeTxArrays(localTxs, cloudTxs, deletedSet){
 async function pushToCloud(){
   try{
     setSyncStatus('syncing','Syncing...');
-    // Merge-first: fetch cloud state and merge transactions before pushing.
-    // Prevents a stale open tab from overwriting changes made on another device.
-    try{
-      var cr=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
-      if(cr.ok){
-        var cd=await cr.json();
-        if(cd.data){
-          var needRender=false;
-          // transactions: per-tx last-writer-wins merge
-          if(cd.data.transactions){
-            var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cd.data.deletedTxIds||[]));
-            S.deletedTxIds=Array.from(mergedDeleted);
-            var before=JSON.stringify(S.transactions);
-            S.transactions=mergeTxArrays(S.transactions,cd.data.transactions,mergedDeleted);
-            S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cd.data.transactionsUpdatedAt||0)||null;
-            if(JSON.stringify(S.transactions)!==before) needRender=true;
-          }
-          // snapshots: timestamp-based (local wins if newer, cloud wins if newer)
-          if(cd.data.snapshots&&(cd.data.snapshotsUpdatedAt||0)>(S.snapshotsUpdatedAt||0)){
-            S.snapshots=cd.data.snapshots;
-            S.snapshotsUpdatedAt=cd.data.snapshotsUpdatedAt;
-            needRender=true;
-          }
-          // manualWallets: cloud wins when equal or newer (>= handles null==null case
-          // where stale local state would otherwise overwrite cloud changes)
-          if(cd.data.manualWallets&&(cd.data.manualWalletsUpdatedAt||0)>=(S.manualWalletsUpdatedAt||0)){
-            S.manualWallets=cd.data.manualWallets;
-            S.manualWalletsUpdatedAt=cd.data.manualWalletsUpdatedAt;
-            needRender=true;
-          }
-          // portfolio: same
-          if(cd.data.portfolio&&(cd.data.portfolioUpdatedAt||0)>=(S.portfolioUpdatedAt||0)){
-            S.portfolio=cd.data.portfolio;
-            S.portfolioUpdatedAt=cd.data.portfolioUpdatedAt;
-            needRender=true;
-          }
-          if(cd.data.onchainWallets&&(cd.data.onchainWalletsUpdatedAt||0)>=(S.onchainWalletsUpdatedAt||0)){
-            S.onchainWallets=cd.data.onchainWallets;
-            S.onchainWalletsUpdatedAt=cd.data.onchainWalletsUpdatedAt;
-            needRender=true;
-          }
-          if(cd.data.presets&&(cd.data.presetsUpdatedAt||0)>=(S.presetsUpdatedAt||0)){
-            S.presets=cd.data.presets;
-            S.presetsUpdatedAt=cd.data.presetsUpdatedAt;
-            needRender=true;
-          }
-          // BDV Monthly Limits: cloud wins unless local is strictly newer (LWW)
-          if(cd.data.bdvLimits&&(cd.data.bdvLimitsUpdatedAt||0)>=(S.bdvLimitsUpdatedAt||0)){
-            S.bdvLimits=cd.data.bdvLimits;
-            S.bdvLimitsUpdatedAt=cd.data.bdvLimitsUpdatedAt;
-            needRender=true;
-          }
-          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits(); }
-        }
-      }
-    }catch(e){ /* continue with push even if merge-pull fails */ }
+    // The server performs the authoritative read-merge-write and returns the
+    // merged document. This makes a stale device structurally unable to clobber
+    // fresher edits made elsewhere, regardless of this device's network state.
     var r=await fetch(SYNC_PROXY,{
       method:'POST',
       headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},
       body:JSON.stringify(S)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
+    var res=await r.json().catch(function(){ return null; });
+    if(res&&res.data){
+      var before=JSON.stringify(S);
+      S=Object.assign({},S,res.data);
+      if(JSON.stringify(S)!==before){
+        saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
+      }
+    }
     syncFailed=false;
     if(typeof _retryTimer!=='undefined') clearTimeout(_retryTimer);
     setSyncStatus('synced','Synced');
