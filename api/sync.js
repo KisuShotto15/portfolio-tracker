@@ -27,9 +27,11 @@ function mergeDocs(cloud, incoming) {
   incoming = incoming || {};
   var out = Object.assign({}, cloud, incoming);
 
-  // transactions: per-tx LWW + union of tombstones
+  // transactions: per-tx LWW + union of tombstones (pruned past 90d to cap growth)
   var deletedSet = new Set((incoming.deletedTxIds || []).concat(cloud.deletedTxIds || []));
-  out.deletedTxIds = Array.from(deletedSet);
+  var tombCut = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  out.deletedTxIds = Array.from(deletedSet).filter(function (id) { return (parseInt(id, 10) || 0) > tombCut; });
+  deletedSet = new Set(out.deletedTxIds);
   out.transactions = mergeTxArrays(incoming.transactions || [], cloud.transactions || [], deletedSet);
   out.transactionsUpdatedAt = Math.max(incoming.transactionsUpdatedAt || 0, cloud.transactionsUpdatedAt || 0) || null;
 
