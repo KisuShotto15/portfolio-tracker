@@ -86,6 +86,9 @@ var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0;
 // ordering is preserved regardless of wall-clock drift.
 function stamp(){ _ts=Math.max(Date.now(), _ts+1); return _ts; }
 var _TS_FIELDS=['transactionsUpdatedAt','snapshotsUpdatedAt','manualWalletsUpdatedAt','portfolioUpdatedAt','onchainWalletsUpdatedAt','presetsUpdatedAt','bdvLimitsUpdatedAt'];
+// [dataField, timestampField] pairs for last-writer-wins on pull (transactions
+// are handled separately via per-tx merge).
+var _LWW_PAIRS=[['snapshots','snapshotsUpdatedAt'],['manualWallets','manualWalletsUpdatedAt'],['portfolio','portfolioUpdatedAt'],['onchainWallets','onchainWalletsUpdatedAt'],['presets','presetsUpdatedAt'],['bdvLimits','bdvLimitsUpdatedAt']];
 function seedClock(o){
   if(!o) return;
   _TS_FIELDS.forEach(function(k){ if((o[k]||0)>_ts) _ts=o[k]; });
@@ -151,7 +154,10 @@ async function pushToCloud(){
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
     var res=await r.json().catch(function(){ return null; });
-    if(res&&res.data){
+    // Adopt the server's merged doc ONLY if no edit landed while the push was in
+    // flight. Otherwise this stale response would clobber the newer local edit
+    // (e.g. typing 1->2->3 fast, or deleting a wallet, reverts on slow networks).
+    if(res&&res.data&&_saveSeq===_pushSeq){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
@@ -192,10 +198,11 @@ async function pullFromCloud(quiet){
       var rest=Object.assign({},cloud);
       delete rest.transactions;
       delete rest.deletedTxIds;
-      // bdvLimits: keep local if it is strictly newer than cloud (don't clobber an unsynced edit)
-      if((cloud.bdvLimitsUpdatedAt||0)<(S.bdvLimitsUpdatedAt||0)){
-        delete rest.bdvLimits; delete rest.bdvLimitsUpdatedAt;
-      }
+      // For every timestamped field, keep local when it is strictly newer than
+      // cloud — never clobber an edit this device made but hasn't pushed yet.
+      _LWW_PAIRS.forEach(function(p){
+        if((cloud[p[1]]||0)<(S[p[1]]||0)){ delete rest[p[0]]; delete rest[p[1]]; }
+      });
       S=Object.assign({},S,rest);
       saveLocal();
       if(!quiet) setSyncStatus('synced','Synced');
