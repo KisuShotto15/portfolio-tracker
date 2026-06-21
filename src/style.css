@@ -280,13 +280,15 @@ input,select,textarea,button{font-family:inherit}
   padding:10px 16px;color:var(--txt2);font-size:16px;cursor:pointer;
 }
 
-.tx-table{width:100%;border-collapse:collapse}
+.tx-table{width:100%;border-collapse:collapse;table-layout:fixed}
+/* Icon + actions get fixed widths; the 5 content columns split the rest evenly
+   (table-layout:fixed) so all header labels sit at symmetric intervals. */
+.tx-table thead th:first-child{width:56px}
+.tx-table thead th:last-child{width:112px}
 .tx-table thead th{
   font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);
-  text-align:left;padding:0 15px 15px;border-bottom:1px solid var(--line-soft);
+  text-align:center;padding:0 15px 15px;border-bottom:1px solid var(--line-soft);
 }
-.tx-table thead th:nth-child(6),.tx-table thead th:nth-child(7){text-align:right}
-.tx-table thead th:nth-child(5),.td-cat{padding-left:34px}
 .date-sep td{padding:27px 0 7px}
 .dsep-inner{display:flex;align-items:baseline;gap:11px}
 .dsep-lbl{font-size:15px;font-weight:600;color:var(--accent);letter-spacing:.02em}
@@ -296,14 +298,19 @@ input,select,textarea,button{font-family:inherit}
 .tx-row:active{transform:scale(.992)}
 .tx-row td{padding:14px 15px;border-bottom:1px solid var(--line-soft);font-size:16px;vertical-align:middle}
 .tx-row:hover td{background:rgba(255,255,255,.025)}
-.td-desc{font-weight:500;max-width:0;width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.td-orig{text-align:right;font-size:14px;color:var(--txt3)}
-.td-amt{text-align:right;font-weight:500;white-space:nowrap}
+.td-desc{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-wallet,.td-cat{text-align:center}
+.td-orig{text-align:center;font-size:14px;color:var(--txt3)}
+.td-amt{text-align:center;font-weight:500;white-space:nowrap}
 .td-act{text-align:right;width:76px;white-space:nowrap}
+/* Wider actions column so the buttons fit without overflowing, with a right
+   inset that matches the category icon's left inset (~15px). */
+.tx-row td.td-act{padding-right:16px}
 .tx-row.tx-tracker .td-amt{color:var(--accent)!important}
 .btn-edit-tx{background:rgba(255,255,255,.06);border:none;color:var(--txt2);width:32px;height:32px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s}
 .tx-row:hover .btn-edit-tx,.tx-row:focus-within .btn-edit-tx{opacity:1}
 .btn-edit-tx:hover{color:var(--txt)}
+.btn-edit-tx + .btn-edit-tx{margin-left:7px}
 .tx-presets{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
 .tx-presets:empty{display:none}
 .preset-chip{display:inline-flex;align-items:center;font-size:13px;font-weight:500;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line-soft);cursor:pointer;white-space:nowrap;transition:background .12s}

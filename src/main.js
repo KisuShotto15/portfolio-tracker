@@ -295,7 +295,7 @@ function showManualRate(){
   b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; save(); updateRateUI(); inp.remove(); b.remove(); } };
   bar.appendChild(inp); bar.appendChild(b);
 }
-function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; document.getElementById('rate-date').textContent=S.rateDate||''; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
+function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
 
 async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
@@ -937,7 +937,7 @@ function renderTx(){
   }
   var rows=groupOrder.map(function(date){
     var dayTotal=groups[date].reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
-    var sep='<tr class="date-sep"><td colspan="8"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
+    var sep='<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
     var txRows=groups[date].map(function(t){
       var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
@@ -954,7 +954,6 @@ function renderTx(){
         +  '<span class="td-sub">'+sub+'</span>'
         +'</td>'
         +'<td class="td-wallet"><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td>'
-        +'<td class="td-type"><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td>'
         +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
         +'<td class="td-orig">'+orig+'</td>'
         +'<td class="td-amt">'
@@ -970,7 +969,7 @@ function renderTx(){
   var remaining=data.length-shown.length;
   var moreBtn=remaining>0?'<div style="text-align:center;margin-top:18px"><button class="btn btns" onclick="loadMoreTx()">Mostrar '+Math.min(_txBase,remaining)+' mas · '+remaining+' restantes</button></div>':'';
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
+    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
