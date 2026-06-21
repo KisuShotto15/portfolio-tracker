@@ -363,6 +363,7 @@ input,select,textarea,button{font-family:inherit}
 .tag.tP{color:#d6c5ff;background:rgba(124,58,237,.28)}
 .tag.tBinance{color:#f0b90b;background:rgba(240,185,11,.15)}
 .tag.tZ{color:#c3abf6;background:var(--accent-soft)}
+.tag.tT{color:#8fdede;background:rgba(13,148,136,.26)}
 .tag.tX{color:var(--txt2);background:rgba(255,255,255,.06)}
 .badge-t{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:2.5px 7.5px;margin-left:6px}
 
