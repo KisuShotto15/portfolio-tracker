@@ -270,8 +270,18 @@ async function forcePush(){
 }
 
 function snapshot(){ undoStack.push(JSON.stringify(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
-function doUndo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+// Marca con updatedAt fresco solo las tx que el undo/redo realmente cambio, para que
+// gane el merge last-writer-wins contra la nube (si no, la nube revierte el undo).
+function _bumpChangedUpdatedAt(prevTxs,newTxs){
+  var now=Date.now(), prevById={};
+  prevTxs.forEach(function(t){ prevById[t.id]=t; });
+  newTxs.forEach(function(t){
+    var p=prevById[t.id];
+    if(!p||JSON.stringify(p)!==JSON.stringify(t)) t.updatedAt=now;
+  });
+}
+function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
 
@@ -840,12 +850,21 @@ function updateTx(){
   var cur=document.getElementById('tx-cur').value;
   var amt=parseFloat(document.getElementById('tx-amount').value);
   if(!date||!desc||isNaN(amt)||amt<=0){ alert('Date, note and amount are required'); return; }
-  var amtUSD=amt, amtVES=null;
-  if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
-  snapshot();
   var t=S.transactions.find(function(x){ return x.id===editingTxId; });
+  var amtUSD=amt, amtVES=null, rateUsed=null;
+  if(cur==='VES'){
+    amtVES=amt;
+    if(t&&t.originalCurrency==='VES'&&t.amountVES===amt){
+      // Monto en Bs sin cambios: conserva el USD/tasa originales, no recalcules con la tasa de hoy
+      amtUSD=t.amountUSD; rateUsed=t.rateUsed;
+    }else{
+      if(!S.rate){ alert('Rate not available'); return; }
+      amtUSD=parseFloat((amt/S.rate).toFixed(4)); rateUsed=S.rate;
+    }
+  }
+  snapshot();
   var _now=Date.now();
-  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=cur==='VES'?S.rate:null; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
+  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
