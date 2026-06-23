@@ -867,8 +867,10 @@ input::placeholder{color:var(--txt3)}
   .tx-row{display:flex;align-items:center;gap:12px;padding:11px 10px;border-bottom:none;background:none;cursor:pointer;border-radius:12px;margin:0 -10px}
   .tx-row.tx-sel{background:rgba(255,255,255,.06)}
   .tx-row:hover td{background:none}
-  .tx-row.tx-sel .td-act{display:flex!important;flex-direction:row;align-items:center;gap:4px;flex-shrink:0}
+  .tx-row.tx-sel .td-act{display:flex!important;flex-direction:row;align-items:center;gap:4px;flex-shrink:0;width:auto}
   .tx-row.tx-sel .btn-edit-tx{opacity:1;width:26px;height:26px;border-radius:7px}
+  .tx-row.tx-sel .btn-edit-tx+.btn-edit-tx{margin-left:0}
+  .tx-row.tx-sel .tx-receipt-thumb{width:24px;height:24px;margin-right:6px}
   .tx-row td{display:none;padding:0;border:none;font-size:14px;vertical-align:middle}
   .td-icon{display:flex!important;align-items:center;flex-shrink:0}
   .td-desc{display:flex!important;flex-direction:column;flex:1;overflow:hidden;padding:0;max-width:100%;width:auto}
