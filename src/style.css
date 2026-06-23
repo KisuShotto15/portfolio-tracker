@@ -867,6 +867,7 @@ input::placeholder{color:var(--txt3)}
   .tx-row{display:flex;align-items:center;gap:12px;padding:11px 10px;border-bottom:none;background:none;cursor:pointer;border-radius:12px;margin:0 -10px}
   .tx-row.tx-sel{background:rgba(255,255,255,.06)}
   .tx-row:hover td{background:none}
+  .tx-row td.td-act{padding-right:0}
   .tx-row.tx-sel .td-act{display:flex!important;flex-direction:row;align-items:center;gap:4px;flex-shrink:0;width:auto}
   .tx-row.tx-sel .btn-edit-tx{opacity:1;width:26px;height:26px;border-radius:7px}
   .tx-row.tx-sel .btn-edit-tx+.btn-edit-tx{margin-left:0}
