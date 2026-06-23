@@ -328,7 +328,8 @@ input,select,textarea,button{font-family:inherit}
 .receipt-attach{position:relative;display:inline-block}
 .receipt-menu{display:none;position:absolute;bottom:calc(100% + 6px);right:0;flex-direction:row;gap:8px;padding:8px;background:var(--card,#1a1a1f);border:1px solid var(--line-soft);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:20}
 .receipt-menu.open{display:flex}
-.receipt-menu-btn{width:44px;height:44px;padding:0;justify-content:center}
+.receipt-menu-btn{width:52px;height:52px;padding:0;justify-content:center}
+.receipt-menu-btn svg{width:52px;height:52px}
 .tx-receipt-thumb{width:28px;height:28px;border-radius:6px;object-fit:cover;cursor:pointer;vertical-align:middle;margin-right:14px;border:1px solid var(--line-soft)}
 #tx-receipt-img{width:40px;height:40px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid var(--line-soft)}
 .receipt-lightbox{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out}
@@ -985,8 +986,8 @@ input::placeholder{color:var(--txt3)}
   #btn-undo{order:10}
   #btn-redo{order:11}
   #receipt-cam-btn{display:none}
-  .receipt-menu-btn{width:52px;height:52px}
-  .receipt-menu-btn svg{width:44px;height:44px}
+  .receipt-menu-btn{width:54px;height:54px}
+  .receipt-menu-btn svg{width:54px;height:54px}
 }
 
 /* ───────────────── Loading placeholder + spinner ───────────────── */
