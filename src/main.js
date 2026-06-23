@@ -2229,8 +2229,14 @@ function importJSON(file){
       if(!parsed.transactions&&!parsed.portfolio){ st.textContent='Invalid backup file.'; st.style.color='#E24B4A'; return; }
       if(!confirm('This will replace ALL current data with the backup. Continue?')) return;
       S=Object.assign({},S,parsed);
-      save(); populateWalletSelects(); updateRateUI(); renderSummary();
-      st.textContent='Restored: '+S.transactions.length+' transactions, '+S.portfolio.length+' holdings.';
+      // Re-estampar todo con un timestamp fresco para que el restore GANE el
+      // last-writer-wins del servidor; si no, el merge autoritativo conserva la
+      // nube (mas nueva) y el restore se revierte solo en el siguiente pull.
+      var n=stamp();
+      _TS_FIELDS.forEach(function(f){ S[f]=n; });
+      if(Array.isArray(S.transactions)) S.transactions.forEach(function(t){ t.updatedAt=n; });
+      save(); populateWalletSelects(); updateRateUI(); renderRecurringManage(); renderSummary();
+      st.textContent='Restored: '+(S.transactions||[]).length+' transactions, '+(S.portfolio||[]).length+' holdings.';
       st.style.color='#5DCAA5';
       document.getElementById('json-inp').value='';
     }catch(err){ st.textContent='Error: '+err.message; st.style.color='#E24B4A'; }
