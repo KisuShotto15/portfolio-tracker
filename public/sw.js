@@ -1,4 +1,4 @@
-const CACHE = 'portfolio-v7';
+const CACHE = 'portfolio-v8';
 
 // Precache the app shell + hashed JS/CSS on install, reading the asset URLs out
 // of index.html. This guarantees offline works even on the first load after a
