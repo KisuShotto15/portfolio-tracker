@@ -984,6 +984,9 @@ input::placeholder{color:var(--txt3)}
 @media(min-width:721px){
   #btn-undo{order:10}
   #btn-redo{order:11}
+  #receipt-cam-btn{display:none}
+  .receipt-menu-btn{width:52px;height:52px}
+  .receipt-menu-btn svg{width:44px;height:44px}
 }
 
 /* ───────────────── Loading placeholder + spinner ───────────────── */
