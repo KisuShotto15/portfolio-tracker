@@ -372,11 +372,34 @@
   </div>
 
   <div id="page-settings" class="page">
+    <div class="set-section">
+    <span class="set-sec-lbl">Automatizacion</span>
     <div class="fc">
-      <h3>Quick-add presets</h3>
-      <p class="hint">Atajos de 1 toque para transacciones frecuentes. Crealos con "Guardar" en el form de transaccion.</p>
-      <div id="presets-manage"></div>
+      <h3>Transacciones recurrentes</h3>
+      <p class="hint">Se agregan solas cada mes el dia indicado. Veras un aviso en Alertas del dashboard cuando ocurra.</p>
+      <div id="recurring-manage"></div>
+      <div class="rec-form">
+        <input id="rec-label" placeholder="Nombre (ej. Alquiler)">
+        <div class="rec-form-row">
+          <select id="rec-wallet"></select>
+          <select id="rec-type"><option value="Debit">Debit</option><option value="Credit">Credit</option></select>
+        </div>
+        <div class="rec-form-row">
+          <select id="rec-cat"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Emily</option></select>
+          <select id="rec-cur"><option value="USD">USD</option><option value="VES">VES</option></select>
+        </div>
+        <div class="rec-form-row">
+          <input id="rec-day" type="number" min="1" max="31" placeholder="Dia del mes">
+          <input id="rec-amount" type="number" step="0.01" placeholder="Monto">
+        </div>
+        <button class="btn btnp" onclick="addRecurringRule()">Agregar regla</button>
+      </div>
     </div>
+    </div>
+
+    <div class="set-section">
+    <span class="set-sec-lbl">Exchanges</span>
+    <div class="set-grid">
     <div class="fc">
       <h3>Binance API</h3>
       <p class="hint">Keys stored locally in browser. Requests go directly to Binance using your VPN. Use read-only keys (no withdrawal or trading permissions).</p>
@@ -421,6 +444,12 @@
       </div>
       <div id="okx-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
+    </div>
+    </div>
+
+    <div class="set-section">
+    <span class="set-sec-lbl">Datos y sync</span>
+    <div class="set-grid">
     <div class="fc">
       <h3>Cloud sync</h3>
       <p class="hint">Data syncs automatically to Cloudflare KV on every change.</p>
@@ -441,6 +470,8 @@
         <button class="btn btns" style="color:#E24B4A" onclick="clearAll()">Delete all data</button>
       </div>
       <div id="json-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
+    </div>
+    </div>
     </div>
   </div>
 
