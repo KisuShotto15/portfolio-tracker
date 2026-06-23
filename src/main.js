@@ -7,7 +7,7 @@ var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
-var VERCEL_SECRET = 'ptk-2025-kisu';
+var VERCEL_SECRET = 'ptk_SvIW6dOiXxy_WtusJ322FjH6ijC1WB-D';
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
@@ -78,6 +78,22 @@ var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
 var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={};
+var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0;
+
+// Monotonic logical clock for last-writer-wins. Using a plain Date.now() lets a
+// device with a skewed clock silently lose its newer edit; stamp() only ever moves
+// forward relative to everything this device has observed (local + cloud), so edit
+// ordering is preserved regardless of wall-clock drift.
+function stamp(){ _ts=Math.max(Date.now(), _ts+1); return _ts; }
+var _TS_FIELDS=['transactionsUpdatedAt','snapshotsUpdatedAt','manualWalletsUpdatedAt','portfolioUpdatedAt','onchainWalletsUpdatedAt','presetsUpdatedAt','bdvLimitsUpdatedAt'];
+// [dataField, timestampField] pairs for last-writer-wins on pull (transactions
+// are handled separately via per-tx merge).
+var _LWW_PAIRS=[['snapshots','snapshotsUpdatedAt'],['manualWallets','manualWalletsUpdatedAt'],['portfolio','portfolioUpdatedAt'],['onchainWallets','onchainWalletsUpdatedAt'],['presets','presetsUpdatedAt'],['bdvLimits','bdvLimitsUpdatedAt']];
+function seedClock(o){
+  if(!o) return;
+  _TS_FIELDS.forEach(function(k){ if((o[k]||0)>_ts) _ts=o[k]; });
+  if(Array.isArray(o.transactions)) o.transactions.forEach(function(t){ if((t.updatedAt||0)>_ts) _ts=t.updatedAt; });
+}
 
 function setSyncStatus(state, msg){
   var dot=document.getElementById('sync-dot');
@@ -88,8 +104,16 @@ function setSyncStatus(state, msg){
   var sw=document.querySelector('.sb-sync'); if(sw) sw.title=msg||state;
 }
 
-function saveLocal(){ try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
-function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} }
+var TOMBSTONE_TTL=90*24*60*60*1000; // 90d: by then every device has applied the deletion
+// Tx ids are timestamps; drop tombstones older than the TTL so the sync payload
+// doesn't grow without bound. Safe because the matching cloud tx is long gone.
+function pruneTombstones(){
+  if(!Array.isArray(S.deletedTxIds)||!S.deletedTxIds.length) return;
+  var cut=Date.now()-TOMBSTONE_TTL;
+  S.deletedTxIds=S.deletedTxIds.filter(function(id){ return (parseInt(id,10)||0)>cut; });
+}
+function saveLocal(){ pruneTombstones(); try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
+function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); }
 
 
 // Merge two transaction arrays using per-transaction last-writer-wins (updatedAt).
@@ -117,91 +141,52 @@ function mergeTxArrays(localTxs, cloudTxs, deletedSet){
 }
 
 async function pushToCloud(){
+  var _pushSeq=_saveSeq;
   try{
     setSyncStatus('syncing','Syncing...');
-    // Merge-first: fetch cloud state and merge transactions before pushing.
-    // Prevents a stale open tab from overwriting changes made on another device.
-    try{
-      var cr=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
-      if(cr.ok){
-        var cd=await cr.json();
-        if(cd.data){
-          var needRender=false;
-          // transactions: per-tx last-writer-wins merge
-          if(cd.data.transactions){
-            var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cd.data.deletedTxIds||[]));
-            S.deletedTxIds=Array.from(mergedDeleted);
-            var before=JSON.stringify(S.transactions);
-            S.transactions=mergeTxArrays(S.transactions,cd.data.transactions,mergedDeleted);
-            S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cd.data.transactionsUpdatedAt||0)||null;
-            if(JSON.stringify(S.transactions)!==before) needRender=true;
-          }
-          // snapshots: timestamp-based (local wins if newer, cloud wins if newer)
-          if(cd.data.snapshots&&(cd.data.snapshotsUpdatedAt||0)>(S.snapshotsUpdatedAt||0)){
-            S.snapshots=cd.data.snapshots;
-            S.snapshotsUpdatedAt=cd.data.snapshotsUpdatedAt;
-            needRender=true;
-          }
-          // manualWallets: cloud wins when equal or newer (>= handles null==null case
-          // where stale local state would otherwise overwrite cloud changes)
-          if(cd.data.manualWallets&&(cd.data.manualWalletsUpdatedAt||0)>=(S.manualWalletsUpdatedAt||0)){
-            S.manualWallets=cd.data.manualWallets;
-            S.manualWalletsUpdatedAt=cd.data.manualWalletsUpdatedAt;
-            needRender=true;
-          }
-          // portfolio: same
-          if(cd.data.portfolio&&(cd.data.portfolioUpdatedAt||0)>=(S.portfolioUpdatedAt||0)){
-            S.portfolio=cd.data.portfolio;
-            S.portfolioUpdatedAt=cd.data.portfolioUpdatedAt;
-            needRender=true;
-          }
-          if(cd.data.onchainWallets&&(cd.data.onchainWalletsUpdatedAt||0)>=(S.onchainWalletsUpdatedAt||0)){
-            S.onchainWallets=cd.data.onchainWallets;
-            S.onchainWalletsUpdatedAt=cd.data.onchainWalletsUpdatedAt;
-            needRender=true;
-          }
-          if(cd.data.presets&&(cd.data.presetsUpdatedAt||0)>=(S.presetsUpdatedAt||0)){
-            S.presets=cd.data.presets;
-            S.presetsUpdatedAt=cd.data.presetsUpdatedAt;
-            needRender=true;
-          }
-          // BDV Monthly Limits: cloud wins unless local is strictly newer (LWW)
-          if(cd.data.bdvLimits&&(cd.data.bdvLimitsUpdatedAt||0)>=(S.bdvLimitsUpdatedAt||0)){
-            S.bdvLimits=cd.data.bdvLimits;
-            S.bdvLimitsUpdatedAt=cd.data.bdvLimitsUpdatedAt;
-            needRender=true;
-          }
-          if(needRender){ saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits(); }
-        }
-      }
-    }catch(e){ /* continue with push even if merge-pull fails */ }
+    // The server performs the authoritative read-merge-write and returns the
+    // merged document. This makes a stale device structurally unable to clobber
+    // fresher edits made elsewhere, regardless of this device's network state.
     var r=await fetch(SYNC_PROXY,{
       method:'POST',
       headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},
       body:JSON.stringify(S)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
+    var res=await r.json().catch(function(){ return null; });
+    // Adopt the server's merged doc ONLY if no edit landed while the push was in
+    // flight. Otherwise this stale response would clobber the newer local edit
+    // (e.g. typing 1->2->3 fast, or deleting a wallet, reverts on slow networks).
+    if(res&&res.data&&_saveSeq===_pushSeq){
+      var before=JSON.stringify(S);
+      S=Object.assign({},S,res.data);
+      if(JSON.stringify(S)!==before){
+        saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
+      }
+    }
     syncFailed=false;
+    if(_saveSeq===_pushSeq) _dirty=false; // no edit landed during the push
     if(typeof _retryTimer!=='undefined') clearTimeout(_retryTimer);
     setSyncStatus('synced','Synced');
     var cs=document.getElementById('cloud-status');
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true;
-    setSyncStatus('offline','⚠ Cambios sin sincronizar');
+    setSyncStatus('offline','⚠ Unsynced changes');
     console.warn('push failed:',e.message);
     scheduleRetry();
   }
 }
 
-async function pullFromCloud(){
+async function pullFromCloud(quiet){
   try{
-    setSyncStatus('syncing','Loading...');
+    if(!quiet) setSyncStatus('syncing','Loading...');
     var r=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
     if(!r.ok) throw new Error('HTTP '+r.status);
     var res=await r.json();
     if(res.data){
       var cloud=res.data;
+      seedClock(cloud); // advance our logical clock past anything the cloud has seen
       // Transactions: per-tx last-writer-wins merge
       if(cloud.transactions){
         var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cloud.deletedTxIds||[]));
@@ -213,22 +198,38 @@ async function pullFromCloud(){
       var rest=Object.assign({},cloud);
       delete rest.transactions;
       delete rest.deletedTxIds;
-      // bdvLimits: keep local if it is strictly newer than cloud (don't clobber an unsynced edit)
-      if((cloud.bdvLimitsUpdatedAt||0)<(S.bdvLimitsUpdatedAt||0)){
-        delete rest.bdvLimits; delete rest.bdvLimitsUpdatedAt;
-      }
+      // For every timestamped field, keep local when it is strictly newer than
+      // cloud — never clobber an edit this device made but hasn't pushed yet.
+      _LWW_PAIRS.forEach(function(p){
+        if((cloud[p[1]]||0)<(S[p[1]]||0)){ delete rest[p[0]]; delete rest[p[1]]; }
+      });
       S=Object.assign({},S,rest);
       saveLocal();
-      setSyncStatus('synced','Synced');
+      if(!quiet) setSyncStatus('synced','Synced');
       return true;
     }
-    setSyncStatus('synced','Synced (no cloud data yet)');
+    if(!quiet) setSyncStatus('synced','Synced (no cloud data yet)');
     return false;
   }catch(e){
     setSyncStatus('offline','Offline (local only)');
     console.warn('pull failed:',e.message);
     return false;
   }
+}
+
+// Re-render the surfaces that a fresh cloud pull can change.
+function afterPull(){
+  populateWalletSelects(); updateRateUI(); sortTx(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
+}
+
+// Background pull so an open, focused tab reflects edits from other devices
+// without needing a reload or tab switch. Skipped while there are unsynced
+// local edits (would clobber them) or while offline/in-flight.
+async function autoPull(){
+  if(_pullInFlight||_dirty||syncFailed||document.hidden||!navigator.onLine) return;
+  _pullInFlight=true;
+  try{ var ok=await pullFromCloud(true); if(ok) afterPull(); }
+  finally{ _pullInFlight=false; }
 }
 
 window.addEventListener('online', function(){
@@ -247,6 +248,7 @@ function scheduleRetry(){
 }
 
 function save(){
+  _saveSeq++; _dirty=true;
   saveLocal();
   clearTimeout(syncTimer);
   syncTimer=setTimeout(pushToCloud, 1500);
@@ -257,7 +259,7 @@ async function forcePull(){
   if(cs) cs.textContent='Pulling...';
   var ok=await pullFromCloud();
   if(ok){
-    populateWalletSelects(); updateRateUI(); sortTx(); renderTx(); renderSummary(); renderWallets();
+    afterPull();
     if(cs) cs.textContent='Pulled from cloud at '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   } else {
     if(cs) cs.textContent='No cloud data found.';
@@ -273,17 +275,17 @@ function snapshot(){ undoStack.push(JSON.stringify(S.transactions)); if(undoStac
 // Marca con updatedAt fresco solo las tx que el undo/redo realmente cambio, para que
 // gane el merge last-writer-wins contra la nube (si no, la nube revierte el undo).
 function _bumpChangedUpdatedAt(prevTxs,newTxs){
-  var now=Date.now(), prevById={};
+  var now=stamp(), prevById={};
   prevTxs.forEach(function(t){ prevById[t.id]=t; });
   newTxs.forEach(function(t){
     var p=prevById[t.id];
     if(!p||JSON.stringify(p)!==JSON.stringify(t)) t.updatedAt=now;
   });
 }
-function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
-function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
+function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return true; return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
@@ -303,7 +305,7 @@ function showManualRate(){
   b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; save(); updateRateUI(); inp.remove(); b.remove(); } };
   bar.appendChild(inp); bar.appendChild(b);
 }
-function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; document.getElementById('rate-date').textContent=S.rateDate||''; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
+function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
 
 async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
@@ -538,14 +540,14 @@ function saveOnchainWallet(){
   if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ alert('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
   if(chain==='btc'&&!/^([xyz]pub[A-Za-z0-9]{100,}|(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87})$/.test(addr)){ alert('Invalid Bitcoin address or xpub/zpub/ypub'); return; }
   S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr}]);
-  S.onchainWalletsUpdatedAt=Date.now();
+  S.onchainWalletsUpdatedAt=stamp();
   document.getElementById('ow-label').value='';
   document.getElementById('ow-addr').value='';
   save(); renderOnchainWallets();
 }
 function deleteOnchainWallet(id){
   S.onchainWallets=(S.onchainWallets||[]).filter(function(w){ return w.id!==id; });
-  S.onchainWalletsUpdatedAt=Date.now();
+  S.onchainWalletsUpdatedAt=stamp();
   save(); renderOnchainWallets();
 }
 function copyAddr(a){
@@ -617,8 +619,9 @@ function renderReceiptPreview(){
   if(pendingReceiptUrl){ img.src=pendingReceiptUrl; prev.style.display='flex'; }
   else{ img.src=''; prev.style.display='none'; }
 }
+var _receiptFile=null;
 function removeReceipt(){
-  pendingReceiptUrl=null;
+  pendingReceiptUrl=null; _receiptFile=null;
   document.getElementById('tx-receipt').value='';
   document.getElementById('tx-receipt-status').textContent='';
   renderReceiptPreview();
@@ -643,8 +646,14 @@ function compressImage(file){
 }
 async function onReceiptPick(input){
   var file=input.files&&input.files[0]; if(!file) return;
+  _receiptFile=file;
+  await _uploadReceipt();
+}
+// Retains the picked file so a failed upload can be retried instead of lost.
+async function _uploadReceipt(){
+  var file=_receiptFile; if(!file) return;
   var status=document.getElementById('tx-receipt-status');
-  status.textContent='Subiendo...';
+  if(status) status.innerHTML='<span class="spin"></span> Uploading…';
   receiptUploading=true;
   try{
     var dataUrl=await compressImage(file);
@@ -653,15 +662,15 @@ async function onReceiptPick(input){
     if(!r.ok) throw new Error('upload failed');
     var j=await r.json();
     pendingReceiptUrl=j.url;
-    status.textContent='';
+    if(status) status.textContent='';
     renderReceiptPreview();
   }catch(e){
-    status.textContent='Error al subir';
-    input.value='';
+    if(status) status.innerHTML='<span style="color:#E24B4A">Upload failed.</span> <button type="button" class="btn btns" onclick="retryReceipt()">Retry</button>';
   }finally{
     receiptUploading=false;
   }
 }
+window.retryReceipt=function(){ _uploadReceipt(); };
 
 function addTx(){
   var date=document.getElementById('tx-date').value;
@@ -671,19 +680,19 @@ function addTx(){
   var cat=document.getElementById('tx-cat').value;
   var cur=document.getElementById('tx-cur').value;
   var amt=parseFloat(document.getElementById('tx-amount').value);
-  if(!date||!desc||isNaN(amt)||amt<=0){ alert('Date, note and amount are required'); return; }
+  if(!date||!desc||isNaN(amt)||amt<=0){ txMsg('Date, note and amount are required'); return; }
   var amtUSD=amt, amtVES=null;
-  if(cur==='VES'){ if(!S.rate){ alert('Rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
+  if(cur==='VES'){ if(!S.rate){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=parseFloat((amt/S.rate).toFixed(4)); }
   snapshot();
-  var _now=Date.now();
-  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_now});
-  S.transactionsUpdatedAt=_now;
+  var _now=Date.now(), _ut=stamp();
+  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
+  S.transactionsUpdatedAt=_ut;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
   closeTxForm();
 }
 
-function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=Date.now(); save(); renderTx(); renderSummary(); }
+function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
 // ── Quick-add presets ──────────────────────────────────────────────────
 function renderPresets(){
@@ -699,7 +708,7 @@ function renderPresets(){
 }
 function applyPreset(id){
   var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
-  p.uses=(p.uses||0)+1; S.presetsUpdatedAt=Date.now(); save();
+  p.uses=(p.uses||0)+1; S.presetsUpdatedAt=stamp(); save();
   document.getElementById('tx-desc').value=p.note||'';
   if(p.wallet) document.getElementById('tx-wallet').value=p.wallet;
   document.getElementById('tx-type').value=p.type||'Debit';
@@ -726,18 +735,18 @@ async function saveAsPreset(){
     currency:document.getElementById('tx-cur').value,
     amount:amtRaw!==''?parseFloat(amtRaw):null};
   if(!S.presets) S.presets=[];
-  S.presets.push(p); S.presetsUpdatedAt=Date.now();
+  S.presets.push(p); S.presetsUpdatedAt=stamp();
   save(); renderPresets(); renderPresetsManage();
 }
 function deletePreset(id){
-  S.presets=(S.presets||[]).filter(function(x){ return x.id!==id; }); S.presetsUpdatedAt=Date.now();
+  S.presets=(S.presets||[]).filter(function(x){ return x.id!==id; }); S.presetsUpdatedAt=stamp();
   save(); renderPresets(); renderPresetsManage();
 }
 async function renamePreset(id){
   var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
   var r=await appPrompt('Renombrar preset',escHtml(p.label),p.label,{inputType:'text'});
   if(!r||!r.value||!r.value.trim()) return;
-  p.label=r.value.trim(); S.presetsUpdatedAt=Date.now();
+  p.label=r.value.trim(); S.presetsUpdatedAt=stamp();
   save(); renderPresets(); renderPresetsManage();
 }
 function renderPresetsManage(){
@@ -785,17 +794,18 @@ function updateDateDisplay(){
 // ── Bottom-sheet history coordination (back button closes the sheet) ──
 function _sheetPush(name){ window._activeSheet=name; try{ history.pushState({sheet:name},''); }catch(e){} }
 function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(history.state&&history.state.sheet){ try{ history.back(); }catch(e){} } } }
+function txMsg(text){ var el=document.getElementById('tx-form-msg'); if(el) el.textContent=text||''; }
 function openTxForm(){
+  txMsg('');
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
   updateDateDisplay();
   renderPresets();
   document.getElementById('fab-add').style.display='none';
   var panel=document.getElementById('tx-form-panel'), ov=document.getElementById('tx-overlay');
-  // Flush layout now (absorbs the innerHTML/value writes above), then double rAF: frame 1
-  // paints the off-screen layer, frame 2 starts the transform — so no paint work lands on
-  // the animated frames. Translate-only transform stays on the GPU compositor end to end.
+  // Flush layout now (commits the value/innerHTML writes above with the closed transform),
+  // then start the slide on the same tick — no deferred frames, so no perceived open delay.
   void panel.offsetHeight;
-  requestAnimationFrame(function(){ requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); }); });
+  panel.classList.add('open'); ov.classList.add('open');
   _sheetPush('tx');
 }
 function closeTxForm(fromPop){
@@ -812,7 +822,8 @@ function closeTxForm(fromPop){
   document.getElementById('tx-cur').value='USD';
   removeReceipt();
   toggleVesHint();
-  document.getElementById('tx-form-panel').classList.remove('open');
+  var _txp=document.getElementById('tx-form-panel');
+  _txp.classList.remove('open'); _txp.style.bottom=''; _txp.style.maxHeight='';
   document.getElementById('tx-overlay').classList.remove('open');
   document.getElementById('fab-add').style.display='flex';
   if(fromPop!==true) _sheetPop();
@@ -821,11 +832,12 @@ function openWalletForm(type){
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
   void panel.offsetHeight;
-  requestAnimationFrame(function(){ requestAnimationFrame(function(){ panel.classList.add('open'); ov.classList.add('open'); }); });
+  panel.classList.add('open'); ov.classList.add('open');
   _sheetPush('wallet');
 }
 function closeWalletForm(fromPop){
-  document.getElementById('wv-form-panel').classList.remove('open');
+  var _wvp=document.getElementById('wv-form-panel');
+  _wvp.classList.remove('open'); _wvp.style.bottom=''; _wvp.style.maxHeight='';
   document.getElementById('wv-overlay').classList.remove('open');
   document.getElementById('wm-name').value='';
   document.getElementById('wm-bal').value='';
@@ -838,7 +850,7 @@ function toggleWmBalField(){
   if(f) f.style.display=document.getElementById('wm-type').value==='normal'?'flex':'none';
 }
 function addTxOrUpdate(){
-  if(receiptUploading){ alert('Espera a que termine de subir la factura'); return; }
+  if(receiptUploading){ txMsg('Wait for the receipt to finish uploading'); return; }
   if(editingTxId) updateTx(); else addTx();
 }
 function updateTx(){
@@ -849,7 +861,7 @@ function updateTx(){
   var cat=document.getElementById('tx-cat').value;
   var cur=document.getElementById('tx-cur').value;
   var amt=parseFloat(document.getElementById('tx-amount').value);
-  if(!date||!desc||isNaN(amt)||amt<=0){ alert('Date, note and amount are required'); return; }
+  if(!date||!desc||isNaN(amt)||amt<=0){ txMsg('Date, note and amount are required'); return; }
   var t=S.transactions.find(function(x){ return x.id===editingTxId; });
   var amtUSD=amt, amtVES=null, rateUsed=null;
   if(cur==='VES'){
@@ -858,22 +870,22 @@ function updateTx(){
       // Monto en Bs sin cambios: conserva el USD/tasa originales, no recalcules con la tasa de hoy
       amtUSD=t.amountUSD; rateUsed=t.rateUsed;
     }else{
-      if(!S.rate){ alert('Rate not available'); return; }
+      if(!S.rate){ txMsg('Exchange rate not available'); return; }
       amtUSD=parseFloat((amt/S.rate).toFixed(4)); rateUsed=S.rate;
     }
   }
   snapshot();
-  var _now=Date.now();
+  var _now=stamp();
   if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
-async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
-async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w.name=r.value.trim(); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); populateWalletSelects(); }
+async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
+async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w.name=r.value.trim(); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('New balance',escHtml(w.name),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
-async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Override balance',escHtml(w.name),cur); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balanceOverride=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=Date.now(); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('New balance',escHtml(w.name),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Override balance',escHtml(w.name),cur); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w.balanceOverride=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
 
@@ -884,7 +896,8 @@ function localToday(){ var d=new Date(); return d.getFullYear()+'-'+String(d.get
 function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''))||0; }
 function fmtUSD(v){ return '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function tagCat(cat){ var m={Income:'tG',Home:'tP',Groceries:'tG',Transport:'tB',Health:'tG',Business:'tA',Discretionary:'tB','Eating Out':'tA',Support:'tA',Investments:'tA',Savings:'tG',
+// Pill hue mirrors the category icon background (CAT_META[cat].bg) so both stay consistent.
+function tagCat(cat){ var m={Income:'tG',Home:'tB',Groceries:'tG',Transport:'tB',Health:'tP',Business:'tT',Discretionary:'tP','Eating Out':'tA',Support:'tR',Investments:'tA',Savings:'tB',Emily:'tP',
   Services:'tP','Help others':'tA',Emergency:'tR',Zelle:'tZ',Other:'tX'}; return m[cat]||'tX'; }
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
 
@@ -944,7 +957,7 @@ function renderTx(){
   }
   var rows=groupOrder.map(function(date){
     var dayTotal=groups[date].reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
-    var sep='<tr class="date-sep"><td colspan="8"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
+    var sep='<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
     var txRows=groups[date].map(function(t){
       var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
       var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
@@ -961,7 +974,6 @@ function renderTx(){
         +  '<span class="td-sub">'+sub+'</span>'
         +'</td>'
         +'<td class="td-wallet"><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td>'
-        +'<td class="td-type"><span class="tag '+(t.type==='Debit'?'tR':'tG')+'">'+t.type+'</span></td>'
         +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
         +'<td class="td-orig">'+orig+'</td>'
         +'<td class="td-amt">'
@@ -977,7 +989,7 @@ function renderTx(){
   var remaining=data.length-shown.length;
   var moreBtn=remaining>0?'<div style="text-align:center;margin-top:18px"><button class="btn btns" onclick="loadMoreTx()">Mostrar '+Math.min(_txBase,remaining)+' mas · '+remaining+' restantes</button></div>':'';
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>In/Out</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
+    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
 }
 
 function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
@@ -1031,11 +1043,23 @@ function getAvgMonthlyContribution(){
 // investment added *after* the snapshot — even same day — isn't wrongly counted,
 // since curSnap's total doesn't reflect it yet (it belongs to the next period).
 function investmentFlow(prevSnap, curSnap){
+  // Attribution by record time (id/timestamp) on BOTH ends: a tx belongs to the
+  // period (prevSnap, curSnap] if it was recorded after prevSnap and at/before
+  // curSnap. Falls back to date bounds for legacy snapshots/txs without ids.
   var lo=prevSnap?prevSnap.date:'';
   var txs=(S.transactions||[]).filter(function(t){
-    return t.category==='Investments'
-      && t.date>lo && t.date<=curSnap.date
-      && (curSnap.id==null||t.id==null||t.id<=curSnap.id);
+    if(t.category!=='Investments') return false;
+    // Upper bound: recorded at/before this snapshot.
+    if(curSnap.id!=null && t.id!=null && t.id>curSnap.id) return false;
+    // Lower bound: recorded after the previous snapshot (id), else by date.
+    if(prevSnap && prevSnap.id!=null && t.id!=null){
+      if(t.id<=prevSnap.id) return false;
+    } else {
+      if(!(t.date>lo)) return false;
+    }
+    // Date upper bound only when id upper bound unavailable.
+    if((curSnap.id==null||t.id==null) && !(t.date<=curSnap.date)) return false;
+    return true;
   });
   var invOut=txs.filter(function(t){ return t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
   var invIn=txs.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
@@ -1394,7 +1418,7 @@ function renderSnapshotPnL(){
   }
   var last3=pnls.slice(-3).reverse();
   var hasMore=pnls.length>3;
-  var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'pnl\')">'+HIST_ICON+' History</button>':'')+'</div>';
+  var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'snapshots\')">'+HIST_ICON+' History</button>':'')+'</div>';
   el.innerHTML=hdr+last3.map(makePnlRow).join('');
 }
 
@@ -1686,7 +1710,7 @@ async function recordSnapshot(){
     S.snapshots.splice(existing,1);
   }
   S.snapshots.push({id:Date.now(),date:today,total:val});
-  S.snapshotsUpdatedAt=Date.now();
+  S.snapshotsUpdatedAt=stamp();
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(sorted.length>=2){
     var prev=sorted[sorted.length-2];
@@ -1697,7 +1721,7 @@ async function recordSnapshot(){
     if(res.checked){
       var txId=Date.now()+1;
       S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
-      S.transactionsUpdatedAt=Date.now();
+      S.transactionsUpdatedAt=stamp();
       S.snapshots[S.snapshots.length-1].txId=txId;
     }
   }
@@ -1711,7 +1735,7 @@ async function deleteSnapshot(id){
   if(!ok) return;
   var snap=S.snapshots.find(function(s){ return s.id===id; });
   S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; });
-  S.snapshotsUpdatedAt=Date.now();
+  S.snapshotsUpdatedAt=stamp();
   if(snap&&snap.txId){
     var linked=S.transactions.find(function(t){ return t.id===snap.txId; });
     var delLinked=linked&&await appConfirm('Delete linked transaction?',escHtml(linked.desc)+' <span style="color:#5DCAA5">'+fmtUSD(linked.amountUSD)+'</span>','Delete');
@@ -1719,12 +1743,12 @@ async function deleteSnapshot(id){
       if(!S.deletedTxIds) S.deletedTxIds=[];
       S.deletedTxIds.push(snap.txId);
       S.transactions=S.transactions.filter(function(t){ return t.id!==snap.txId; });
-      S.transactionsUpdatedAt=Date.now();
+      S.transactionsUpdatedAt=stamp();
     }
   }
   save(); renderEquityChart(); renderSnapshotPnL();
 }
-async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=Date.now(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
+async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=stamp(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
@@ -1905,7 +1929,7 @@ function saveManualWallet(){
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker'};
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
-  S.manualWalletsUpdatedAt=Date.now();
+  S.manualWalletsUpdatedAt=stamp();
   closeWalletForm();
   save(); renderWallets(); populateWalletSelects();
 }
@@ -2113,10 +2137,10 @@ function _parseCSV(file){
       var isNotImported=String(r['Tracker']||r['tracker']||'')==='1';
       if(!date||!desc||!amt) return;
       var k=date+'|'+desc+'|'+amt; if(keys[k]){ skipped++; return; } keys[k]=1;
-      S.transactions.push({id:Date.now()+Math.random(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported});
+      S.transactions.push({id:Date.now()+Math.random(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported,updatedAt:stamp()});
       added++;
     });
-    if(added>0) S.transactionsUpdatedAt=Date.now();
+    if(added>0) S.transactionsUpdatedAt=stamp();
     save();
     result.innerHTML='<div style="background:var(--color-background-secondary);border-radius:7px;padding:1rem;margin-top:1rem;font-size:13px"><div style="color:#5DCAA5;margin-bottom:5px">Imported: '+added+'</div><div style="color:var(--color-text-secondary)">Skipped duplicates: '+skipped+'</div><button class="btn btnp btns" style="margin-top:9px" onclick="showPage(\'transactions\',null)">View transactions</button></div>';
     renderSummary();
@@ -2209,12 +2233,9 @@ function renderHistory(view){
     return {s:s,prev:prev,profit:profit,pct:pct,invOut:invOut,invIn:invIn,cumDelta:cumDelta,cumPct:cumPct};
   });
 
-  if(view==='pnl'){
-    rows=rows.filter(function(r){ return r.prev!==null; });
-  }
   rows.reverse();
 
-  if(titleEl) titleEl.textContent=view==='pnl'?'Snapshot P&L History':'Snapshot History';
+  if(titleEl) titleEl.textContent='Snapshot History';
 
   function cls(v){ return v>0?'up':v<0?'down':'flat'; }
   function sgn(v){ return v>0?'+':v<0?'-':''; }
@@ -2228,7 +2249,7 @@ function renderHistory(view){
   var XICO='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg>';
 
   var html='';
-  if(view!=='pnl'){
+  {
     var latest=snaps[snaps.length-1];
     var totDelta=latest.total-firstTotal;
     var totPct=firstTotal>0?(totDelta/firstTotal)*100:0;
@@ -2242,28 +2263,34 @@ function renderHistory(view){
     +'</div>';
   }
 
+  function fmtMd(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
   html+='<div class="snap-list">';
+  html+='<div class="snap-row snap-head-row">'
+    +'<div class="snap-col-date">Date</div>'
+    +'<div class="snap-col-nw">Net Worth</div>'
+    +'<div class="snap-col-pnl">P&L</div>'
+    +'<div class="snap-col-pct">P&L %</div>'
+    +'<div class="snap-col-cum">Cumulative</div>'
+    +'<div class="snap-col-acts"></div>'
+  +'</div>';
   rows.forEach(function(r){
-    var periodChip=r.profit!==null
-      ?'<span class="snap-chip '+cls(r.profit)+'">'+sgn(r.profit)+fmtUSD(Math.abs(r.profit))+' · '+sgn(r.pct)+Math.abs(r.pct).toFixed(2)+'%</span>'
-      :'<span class="snap-chip flat">Baseline</span>';
-    if(view==='pnl'){
-      html+='<div class="snap-row">'
-        +'<div class="snap-date"><span class="snap-d">'+r.prev.date+' → '+r.s.date+'</span>'+adjLine(r)+'</div>'
-        +'<div class="snap-spacer"></div>'
-        +'<div class="snap-figs"><span class="snap-total" style="font-size:14px;color:var(--txt2)">'+fmtUSD(r.prev.total)+' → '+fmtUSD(r.s.total)+'</span><div class="snap-deltas">'+periodChip+'</div></div>'
-      +'</div>';
+    var pnlCell,pctCell;
+    if(r.profit!==null){
+      pnlCell='<span class="snap-chip '+cls(r.profit)+'">'+sgn(r.profit)+fmtUSD(Math.abs(r.profit))+'</span>';
+      pctCell='<span class="snap-pct '+cls(r.profit)+'">'+sgn(r.pct)+Math.abs(r.pct).toFixed(2)+'%</span>';
     } else {
-      html+='<div class="snap-row">'
-        +'<div class="snap-date"><span class="snap-d">'+r.s.date+'</span>'+adjLine(r)+'</div>'
-        +'<div class="snap-spacer"></div>'
-        +'<div class="snap-figs">'
-          +'<span class="snap-total">'+fmtUSD(r.s.total)+'</span>'
-          +'<div class="snap-deltas">'+periodChip+'<span class="snap-cum">Cum '+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' ('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></div>'
-        +'</div>'
-        +'<div class="snap-acts"><button class="wico" title="Edit" onclick="editSnapshot('+r.s.id+')">'+PENCIL+'</button><button class="wico del" title="Delete" onclick="deleteSnapshotFromHistory('+r.s.id+')">'+XICO+'</button></div>'
-      +'</div>';
+      pnlCell='<span class="snap-chip flat">Baseline</span>';
+      pctCell='<span class="snap-pct flat">—</span>';
     }
+    var cumCell='<span class="snap-cum '+cls(r.cumDelta)+'">'+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' <span class="snap-cum-pct">('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></span>';
+    html+='<div class="snap-row">'
+      +'<div class="snap-col-date"><span class="snap-d">'+fmtMd(r.s.date)+'</span>'+adjLine(r)+'</div>'
+      +'<div class="snap-col-nw"><span class="snap-total">'+fmtUSD(r.s.total)+'</span></div>'
+      +'<div class="snap-col-pnl">'+pnlCell+'</div>'
+      +'<div class="snap-col-pct">'+pctCell+'</div>'
+      +'<div class="snap-col-cum">'+cumCell+'</div>'
+      +'<div class="snap-col-acts snap-acts"><button class="wico" title="Edit" onclick="editSnapshot('+r.s.id+')">'+PENCIL+'</button><button class="wico del" title="Delete" onclick="deleteSnapshotFromHistory('+r.s.id+')">'+XICO+'</button></div>'
+    +'</div>';
   });
   html+='</div>';
   wrap.innerHTML=html;
@@ -2368,6 +2395,20 @@ function attachSheetDrag(panel, closeFn){
 }
 attachSheetDrag(document.getElementById('tx-form-panel'), function(){ closeTxForm(); });
 attachSheetDrag(document.getElementById('wv-form-panel'), function(){ closeWalletForm(); });
+// Keep the open bottom-sheet above the on-screen keyboard so the whole form stays scrollable
+if(window.visualViewport && !window._vvSheetBound){
+  window._vvSheetBound=true;
+  var _vv=window.visualViewport;
+  function adjustSheetForKeyboard(){
+    var panel=document.querySelector('.tx-form-panel.open');
+    if(!panel) return;
+    var overlap=Math.max(0, window.innerHeight-(_vv.height+_vv.offsetTop));
+    if(overlap>80){ panel.style.bottom=overlap+'px'; panel.style.maxHeight=(_vv.height-12)+'px'; }
+    else { panel.style.bottom=''; panel.style.maxHeight=''; }
+  }
+  _vv.addEventListener('resize',adjustSheetForKeyboard);
+  _vv.addEventListener('scroll',adjustSheetForKeyboard);
+}
 window.selectWvRow = function(el){
   document.querySelectorAll('.wv-row.wv-exp').forEach(function(r){ if(r!==el) r.classList.remove('wv-exp'); });
   el.classList.toggle('wv-exp');
@@ -2492,7 +2533,7 @@ function renderBdvLimits(){
 }
 window.renderBdvLimits=renderBdvLimits;
 // Every mutation stamps bdvLimitsUpdatedAt so cloud sync does correct last-writer-wins.
-function bdvSave(){ S.bdvLimitsUpdatedAt=Date.now(); save(); renderBdvLimits(); }
+function bdvSave(){ S.bdvLimitsUpdatedAt=stamp(); save(); renderBdvLimits(); }
 window.bdvAdj=function(id,key,delta){ var n=_bdvFind(id); if(!n) return; n[key]=Math.max(0,(n[key]||0)+delta); bdvSave(); };
 window.bdvSet=function(id,key,val){ var n=_bdvFind(id); if(!n) return; var v=parseFloat(val); n[key]=isNaN(v)?0:Math.max(0,v); bdvSave(); };
 window.toggleBdvFisica=function(id){ var n=_bdvFind(id); if(!n) return; n.fisicaOn=!n.fisicaOn; bdvSave(); };
@@ -2642,7 +2683,7 @@ async function init(){
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   // Migration: all Zelle wallet transactions → category Emily
   var migrated=S.transactions.filter(function(t){ return t.wallet==='Zelle'&&t.category!=='Emily'; });
-  if(migrated.length){ migrated.forEach(function(t){ t.category='Emily'; t.updatedAt=Date.now(); }); S.transactionsUpdatedAt=Date.now(); save(); }
+  if(migrated.length){ migrated.forEach(function(t){ t.category='Emily'; t.updatedAt=stamp(); }); S.transactionsUpdatedAt=stamp(); save(); }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
   if(S.bibiBinanceKey){ var bbk=document.getElementById('bbn-key'); if(bbk) bbk.value=S.bibiBinanceKey; }
@@ -2659,12 +2700,13 @@ async function init(){
   autoFetchBinance(); autoFetchBibiBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
   setInterval(function(){ autoFetchBinance(); autoFetchBibiBinance(); }, BINANCE_AUTO_MS);
-  // Pull fresh cloud state whenever user returns to this tab
-  // Prevents stale open tabs from overwriting changes made on other devices
+  // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
+  // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
+  _pullTimer=setInterval(autoPull, 25000);
+  // Pull immediately whenever the tab regains focus or visibility.
+  window.addEventListener('focus', autoPull);
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) pullFromCloud().then(function(pulled){
-      if(pulled){ populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); }
-    }).then(function(){ autoFetchBinance(); autoFetchBibiBinance(); });
+    if(!document.hidden) autoPull().then(function(){ autoFetchBinance(); autoFetchBibiBinance(); });
   });
 }
 init();
