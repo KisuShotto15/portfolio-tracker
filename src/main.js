@@ -36,7 +36,7 @@ var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transpor
 var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
-  budgetTotal:600,
+  budgetTotal:600, budgetTotalUpdatedAt:null,
   binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
@@ -50,8 +50,9 @@ var S = {
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
   transactionsUpdatedAt:null,
-  dashGoal:0,
-  categoryBudgets:{},
+  dashGoal:0, dashGoalUpdatedAt:null,
+  categoryBudgets:{}, categoryBudgetsUpdatedAt:null,
+  rateUpdatedAt:null,
   presets:[], presetsUpdatedAt:null,
   bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
@@ -90,13 +91,16 @@ var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0;
 // forward relative to everything this device has observed (local + cloud), so edit
 // ordering is preserved regardless of wall-clock drift.
 function stamp(){ _ts=nextStamp(_ts, Date.now()); return _ts; }
-var _TS_FIELDS=['transactionsUpdatedAt','snapshotsUpdatedAt','manualWalletsUpdatedAt','portfolioUpdatedAt','onchainWalletsUpdatedAt','presetsUpdatedAt','bdvLimitsUpdatedAt','recurringUpdatedAt','recurringLogUpdatedAt'];
-// [dataField, timestampField] pairs for last-writer-wins on pull (transactions
-// are handled separately via per-tx merge).
-var _LWW_PAIRS=[['snapshots','snapshotsUpdatedAt'],['manualWallets','manualWalletsUpdatedAt'],['portfolio','portfolioUpdatedAt'],['onchainWallets','onchainWalletsUpdatedAt'],['presets','presetsUpdatedAt'],['bdvLimits','bdvLimitsUpdatedAt'],['recurring','recurringUpdatedAt'],['recurringLog','recurringLogUpdatedAt']];
+// Convencion: cualquier campo con un hermano "<campo>UpdatedAt" participa del
+// last-writer-wins automaticamente, sin lista hardcodeada que pueda desincronizarse
+// del server (api/sync.js usa la misma convencion). Para agregar un campo nuevo al
+// sync basta declararlo en los defaults de S con su sibling UpdatedAt.
+function tsFields(){ return Object.keys(S).filter(function(k){ return /UpdatedAt$/.test(k); }); }
+// [dataField, timestampField] pares para LWW en pull (transactions va aparte via per-tx merge).
+function lwwPairs(){ return tsFields().filter(function(k){ return k!=='transactionsUpdatedAt'; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
 function seedClock(o){
   if(!o) return;
-  var m=maxObservedStamp(o,_TS_FIELDS); if(m>_ts) _ts=m;
+  var m=maxObservedStamp(o,tsFields()); if(m>_ts) _ts=m;
 }
 
 function setSyncStatus(state, msg){
@@ -182,7 +186,7 @@ async function pullFromCloud(quiet){
       delete rest.deletedTxIds;
       // For every timestamped field, keep local when it is strictly newer than
       // cloud — never clobber an edit this device made but hasn't pushed yet.
-      _LWW_PAIRS.forEach(function(p){
+      lwwPairs().forEach(function(p){
         if(localFieldWins(cloud[p[1]], S[p[1]])){ delete rest[p[0]]; delete rest[p[1]]; }
       });
       S=Object.assign({},S,rest);
@@ -264,10 +268,13 @@ function _bumpChangedUpdatedAt(prevTxs,newTxs){
     if(!p||JSON.stringify(p)!==JSON.stringify(t)) t.updatedAt=now;
   });
 }
-function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+// Cualquier tx que vuelve a existir tras un undo/redo NO debe seguir tombstoneada,
+// si no el merge (cliente/servidor) la filtra y el undo de un borrado se revierte solo.
+function _untombstoneExisting(){ if(!S.deletedTxIds||!S.deletedTxIds.length) return; var ids={}; S.transactions.forEach(function(t){ ids[t.id]=1; }); S.deletedTxIds=S.deletedTxIds.filter(function(id){ return !ids[id]; }); }
+function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
-function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
+function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.transactions.forEach(function(t){ S.deletedTxIds.push(t.id); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return true; return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
@@ -276,7 +283,7 @@ async function fetchRate(force){
   var stale=S.rateFetchedAt&&(Date.now()-S.rateFetchedAt>60*60*1000);
   if(!force&&S.rate&&S.rateDate&&!stale){ updateRateUI(); return; }
   document.getElementById('rate-display').textContent='...';
-  try{ var r=await fetch(RATE_URL); var d=await r.json(); if(d.rate&&parseFloat(d.rate)>10){ S.rate=parseFloat(parseFloat(d.rate).toFixed(2)); S.rateDate='today ('+d.source+')'; S.rateFetchedAt=Date.now(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
+  try{ var r=await fetch(RATE_URL); var d=await r.json(); if(d.rate&&parseFloat(d.rate)>10){ S.rate=parseFloat(parseFloat(d.rate).toFixed(2)); S.rateDate='today ('+d.source+')'; S.rateFetchedAt=Date.now(); S.rateUpdatedAt=stamp(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
   if(!S.rate) showManualRate(); else updateRateUI();
 }
 function showManualRate(){
@@ -284,7 +291,7 @@ function showManualRate(){
   var inp=document.createElement('input'); inp.id='mr'; inp.type='number'; inp.placeholder='Manual rate'; inp.step='0.01';
   inp.style='padding:5px 8px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:#1e1e1e;color:#fff;font-size:13px;width:120px';
   var b=document.createElement('button'); b.className='btn btns'; b.textContent='OK';
-  b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; save(); updateRateUI(); inp.remove(); b.remove(); } };
+  b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; S.rateUpdatedAt=stamp(); save(); updateRateUI(); inp.remove(); b.remove(); } };
   bar.appendChild(inp); bar.appendChild(b);
 }
 function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
@@ -1514,7 +1521,7 @@ function renderGoal(){
   if(gHtml!==_goalSig){ el.innerHTML=gHtml; _goalSig=gHtml; }
 }
 
-function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; save(); renderSummary(); } }
+function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').value); if(v>0){ S.dashGoal=v; S.dashGoalUpdatedAt=stamp(); save(); renderSummary(); } }
 
 function renderSummary(){
   populateSumMonth();
@@ -1812,11 +1819,12 @@ async function deleteSnapshot(id){
 async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=stamp(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
 window.editSnapshot=editSnapshot;
 
-function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; save(); renderBudget(); } }
+function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; S.budgetTotalUpdatedAt=stamp(); save(); renderBudget(); } }
 function saveCategoryBudget(cat,val){
   if(!S.categoryBudgets) S.categoryBudgets={};
   var v=parseFloat(val);
   if(v>0) S.categoryBudgets[cat]=v; else delete S.categoryBudgets[cat];
+  S.categoryBudgetsUpdatedAt=stamp();
   save(); renderBudget();
 }
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
@@ -2232,7 +2240,7 @@ function importJSON(file){
       // last-writer-wins del servidor; si no, el merge autoritativo conserva la
       // nube (mas nueva) y el restore se revierte solo en el siguiente pull.
       var n=stamp();
-      _TS_FIELDS.forEach(function(f){ S[f]=n; });
+      tsFields().forEach(function(f){ S[f]=n; });
       if(Array.isArray(S.transactions)) S.transactions.forEach(function(t){ t.updatedAt=n; });
       save(); populateWalletSelects(); updateRateUI(); renderRecurringManage(); renderSummary();
       st.textContent='Restored: '+(S.transactions||[]).length+' transactions, '+(S.portfolio||[]).length+' holdings.';

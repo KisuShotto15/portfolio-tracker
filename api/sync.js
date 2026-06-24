@@ -1,6 +1,6 @@
 // Per-transaction last-writer-wins merge (mirror of the client helper).
 // Cloud version of a tx wins unless the incoming side has a strictly higher updatedAt.
-function mergeTxArrays(incomingTxs, cloudTxs, deletedSet) {
+export function mergeTxArrays(incomingTxs, cloudTxs, deletedSet) {
   var incomingById = {};
   incomingTxs.forEach(function (t) { if (!deletedSet.has(t.id)) incomingById[t.id] = t; });
   var cloudById = {};
@@ -22,7 +22,7 @@ function mergeTxArrays(incomingTxs, cloudTxs, deletedSet) {
 // Untimestamped fields take the incoming value (preserves prior whole-blob behavior).
 // Fields with a `<field>UpdatedAt` use last-writer-wins by timestamp so a stale
 // device can never overwrite a fresher edit made elsewhere.
-function mergeDocs(cloud, incoming) {
+export function mergeDocs(cloud, incoming) {
   cloud = cloud || {};
   incoming = incoming || {};
   var out = Object.assign({}, cloud, incoming);
@@ -35,17 +35,19 @@ function mergeDocs(cloud, incoming) {
   out.transactions = mergeTxArrays(incoming.transactions || [], cloud.transactions || [], deletedSet);
   out.transactionsUpdatedAt = Math.max(incoming.transactionsUpdatedAt || 0, cloud.transactionsUpdatedAt || 0) || null;
 
-  // timestamped fields: keep whichever side has the higher <field>UpdatedAt (cloud wins ties)
-  var FIELDS = [
-    ['snapshots', 'snapshotsUpdatedAt'],
-    ['manualWallets', 'manualWalletsUpdatedAt'],
-    ['portfolio', 'portfolioUpdatedAt'],
-    ['onchainWallets', 'onchainWalletsUpdatedAt'],
-    ['presets', 'presetsUpdatedAt'],
-    ['bdvLimits', 'bdvLimitsUpdatedAt'],
-  ];
-  FIELDS.forEach(function (pair) {
-    var key = pair[0], ts = pair[1];
+  // Generic last-writer-wins by convention: ANY field with a sibling
+  // "<field>UpdatedAt" timestamp participates automatically. Keep whichever side
+  // has the higher timestamp (cloud wins ties). No hardcoded field list to drift
+  // from the client — add a field with an UpdatedAt sibling and it Just Works on
+  // both sides. transactions is special (per-tx merge above).
+  var seen = {};
+  Object.keys(cloud).concat(Object.keys(incoming)).forEach(function (k) {
+    var m = /^(.+)UpdatedAt$/.exec(k);
+    if (!m) return;
+    var key = m[1];
+    if (key === 'transactions' || seen[key]) return;
+    seen[key] = 1;
+    var ts = key + 'UpdatedAt';
     var cloudTs = cloud[ts] || 0, incTs = incoming[ts] || 0;
     if (cloudTs >= incTs && cloud[key] !== undefined) {
       out[key] = cloud[key];
