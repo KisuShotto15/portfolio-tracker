@@ -392,7 +392,8 @@
           <input id="rec-day" type="number" min="1" max="31" placeholder="Dia del mes">
           <input id="rec-amount" type="number" step="0.01" placeholder="Monto">
         </div>
-        <button class="btn btnp" onclick="addRecurringRule()">Agregar regla</button>
+        <button class="btn btnp" id="rec-submit" onclick="addRecurringRule()">Agregar regla</button>
+        <button class="btn btns" id="rec-cancel" style="display:none" onclick="cancelEditRecurring()">Cancelar</button>
       </div>
     </div>
     </div>

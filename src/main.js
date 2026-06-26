@@ -78,7 +78,7 @@ function ensureChart(){
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
 var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
-var _budMonth=null, _budLimitsOpen=false;
+var _budMonth=null, _budLimitsOpen=false, _budCompareOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
@@ -150,15 +150,16 @@ async function pushToCloud(){
         saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
       }
     }
-    syncFailed=false;
-    if(_saveSeq===_pushSeq) _dirty=false; // no edit landed during the push
+    syncFailed=false; _pushFailCount=0; showSyncBanner(false);
+    if(_saveSeq===_pushSeq){ _dirty=false; try{ localStorage.removeItem('ft13_dirty'); }catch(e){} } // no edit landed during the push
     if(typeof _retryTimer!=='undefined') clearTimeout(_retryTimer);
     setSyncStatus('synced','Synced');
     var cs=document.getElementById('cloud-status');
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
-    syncFailed=true;
+    syncFailed=true; _pushFailCount++;
     setSyncStatus('offline','⚠ Unsynced changes');
+    if(_pushFailCount>=2&&navigator.onLine) showSyncBanner(true); // offline real ya tiene su propio aviso
     console.warn('push failed:',e.message);
     scheduleRetry();
   }
@@ -227,14 +228,28 @@ window.addEventListener('offline', function(){
   setSyncStatus('offline','Offline');
 });
 
-var _retryTimer=null;
+var _retryTimer=null, _pushFailCount=0;
+// Banner visible cuando el sync falla repetido (el dot del sidebar es facil de no ver).
+function showSyncBanner(show){
+  var b=document.getElementById('sync-banner');
+  if(!b&&show){
+    b=document.createElement('div'); b.id='sync-banner'; b.className='sync-banner';
+    b.innerHTML='<span>⚠ No se pudo sincronizar. Tus cambios estan guardados solo en este dispositivo.</span><button onclick="window.retrySyncNow()">Reintentar</button>';
+    document.body.appendChild(b);
+  }
+  if(b) b.classList.toggle('show', !!show);
+}
+window.retrySyncNow=function(){ _pushFailCount=0; showSyncBanner(false); setSyncStatus('syncing','Syncing...'); pushToCloud(); };
 function scheduleRetry(){
   clearTimeout(_retryTimer);
-  _retryTimer=setTimeout(function(){ if(syncFailed) pushToCloud(); }, 15000);
+  // backoff exponencial: 15s, 30s, 60s, 120s (tope)
+  var delay=Math.min(15000*Math.pow(2,Math.max(0,_pushFailCount-1)), 120000);
+  _retryTimer=setTimeout(function(){ if(syncFailed) pushToCloud(); }, delay);
 }
 
 function save(){
   _saveSeq++; _dirty=true;
+  try{ localStorage.setItem('ft13_dirty','1'); }catch(e){} // marca que hay cambios sin pushear (sobrevive reload)
   saveLocal();
   clearTimeout(syncTimer);
   syncTimer=setTimeout(pushToCloud, 1500);
@@ -1397,7 +1412,17 @@ window.toggleAlertsPopup=toggleAlertsPopup;
 // El id de la tx es deterministico (fecha + ruleId) para que si dos dispositivos
 // la generan antes de sincronizar, el merge por id las deduplique.
 // dueMonths() vive en ./sync-core.js (puro, testeado).
+// Elimina entradas del log cuya transaccion ya no existe (regla borrada, tx borrada
+// por el usuario, o entradas huerfanas viejas sin tx asociada).
+function pruneRecurringLog(){
+  if(!Array.isArray(S.recurringLog)||!S.recurringLog.length) return;
+  var txIds={}; S.transactions.forEach(function(t){ txIds[t.id]=1; });
+  var before=S.recurringLog.length;
+  S.recurringLog=S.recurringLog.filter(function(e){ return txIds[e.id]; });
+  if(S.recurringLog.length!==before){ S.recurringLogUpdatedAt=stamp(); save(); }
+}
 function applyRecurring(){
+  pruneRecurringLog();
   if(!Array.isArray(S.recurring)||!S.recurring.length) return;
   var now=new Date(), added=[], deleted=new Set(S.deletedTxIds||[]);
   S.recurring.forEach(function(r){
@@ -1411,7 +1436,7 @@ function applyRecurring(){
       if(S.transactions.some(function(t){ return t.id===txId; })){ r.lastRun=d.ym; return; }
       S.transactions.push({id:txId,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,imported:false,receiptUrl:null,updatedAt:stamp(),auto:true,recurringId:r.id});
       r.lastRun=d.ym;
-      added.push({id:txId,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
+      added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
     });
   });
   if(added.length){
@@ -1436,30 +1461,68 @@ function renderRecurringManage(){
   wrap.innerHTML=S.recurring.slice().sort(function(a,b){ return (a.dayOfMonth||0)-(b.dayOfMonth||0); }).map(function(r){
     var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
     var meta='Dia '+r.dayOfMonth+' · '+amt+' · '+escHtml(r.category||'-')+' · '+escHtml(r.wallet||'-')+' · '+(r.type||'Debit');
-    return '<div class="preset-mrow"><div class="preset-mrid"><span class="preset-mname">'+escHtml(r.label)+'</span><span class="preset-mmeta">'+meta+'</span></div>'
-      +'<div class="preset-macts"><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></div></div>';
+    return '<div class="preset-mrow'+(_editingRecId===r.id?' editing':'')+'"><div class="preset-mrid"><span class="preset-mname">'+escHtml(r.label)+'</span><span class="preset-mmeta">'+meta+'</span></div>'
+      +'<div class="preset-macts"><button class="wico" onclick="editRecurringRule('+r.id+')" title="Editar">✎</button><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></div></div>';
   }).join('');
 }
+var _editingRecId=null;
+window.editRecurringRule=function(id){
+  var r=(S.recurring||[]).find(function(x){ return x.id===id; }); if(!r) return;
+  _editingRecId=id;
+  document.getElementById('rec-label').value=r.label||'';
+  document.getElementById('rec-wallet').value=r.wallet||'';
+  document.getElementById('rec-type').value=r.type||'Debit';
+  document.getElementById('rec-cat').value=r.category||'';
+  document.getElementById('rec-cur').value=r.currency||'USD';
+  document.getElementById('rec-day').value=r.dayOfMonth||'';
+  document.getElementById('rec-amount').value=r.amount||'';
+  document.getElementById('rec-submit').textContent='Guardar cambios';
+  document.getElementById('rec-cancel').style.display='';
+  renderRecurringManage();
+  document.querySelector('.rec-form').scrollIntoView({behavior:'smooth',block:'nearest'});
+};
+function cancelEditRecurring(){
+  _editingRecId=null;
+  document.getElementById('rec-label').value=''; document.getElementById('rec-day').value=''; document.getElementById('rec-amount').value='';
+  document.getElementById('rec-submit').textContent='Agregar regla';
+  document.getElementById('rec-cancel').style.display='none';
+  renderRecurringManage();
+}
+window.cancelEditRecurring=cancelEditRecurring;
 window.addRecurringRule=function(){
   var label=(document.getElementById('rec-label').value||'').trim();
   var day=parseInt(document.getElementById('rec-day').value,10);
   var amount=parseFloat(document.getElementById('rec-amount').value);
   if(!label||isNaN(day)||day<1||day>31||isNaN(amount)||amount<=0){ alert('Nombre, dia (1-31) y monto son obligatorios'); return; }
-  var r={id:Date.now(),label:label,dayOfMonth:day,
+  if(!S.recurring) S.recurring=[];
+  var fields={label:label,dayOfMonth:day,
     wallet:document.getElementById('rec-wallet').value,
     type:document.getElementById('rec-type').value,
     category:document.getElementById('rec-cat').value,
     currency:document.getElementById('rec-cur').value,
-    amount:amount,lastRun:null};
-  if(!S.recurring) S.recurring=[];
-  S.recurring.push(r); S.recurringUpdatedAt=stamp(); save();
-  document.getElementById('rec-label').value=''; document.getElementById('rec-day').value=''; document.getElementById('rec-amount').value='';
+    amount:amount};
+  if(_editingRecId){
+    var r=S.recurring.find(function(x){ return x.id===_editingRecId; });
+    if(r) Object.assign(r,fields); // conserva id, lastRun -> no re-agrega tx ya creadas
+    cancelEditRecurring();
+  }else{
+    S.recurring.push(Object.assign({id:Date.now(),lastRun:null},fields));
+    document.getElementById('rec-label').value=''; document.getElementById('rec-day').value=''; document.getElementById('rec-amount').value='';
+  }
+  S.recurringUpdatedAt=stamp(); save();
   renderRecurringManage();
   applyRecurring(); // si ya paso el dia este mes, se agrega de una
 };
 window.deleteRecurringRule=function(id){
   S.recurring=(S.recurring||[]).filter(function(x){ return x.id!==id; }); S.recurringUpdatedAt=stamp();
-  save(); renderRecurringManage();
+  // limpia las entradas del log que pertenecen a esta regla (por rid)
+  if(Array.isArray(S.recurringLog)){
+    var before=S.recurringLog.length;
+    S.recurringLog=S.recurringLog.filter(function(e){ return e.rid!==id; });
+    if(S.recurringLog.length!==before) S.recurringLogUpdatedAt=stamp();
+  }
+  if(_editingRecId===id) cancelEditRecurring();
+  save(); renderRecurringManage(); renderSummary();
 };
 
 function renderSnapshotPnL(){
@@ -1829,6 +1892,7 @@ function saveCategoryBudget(cat,val){
 }
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
 window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
+window._budCompareToggle=function(){ _budCompareOpen=!_budCompareOpen; renderBudget(); };
 window._budPctLive=function(cat,val){
   var v=parseFloat(val)||0;
   var total=S.budgetTotal||600;
@@ -1934,6 +1998,34 @@ function renderBudget(){
       +'<div class="bdg-cat-lim"><span>'+(catLim>0?'of '+fmtUSD(catLim):'no limit')+'</span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
       +'</div>';
   });
+  html+='</div>';
+
+  // Month-vs-month comparison accordion (all categories)
+  html+='<div class="bdg-limits'+(_budCompareOpen?' open':'')+'">'
+    +'<button class="bdg-limits-head" onclick="window._budCompareToggle()">'
+    +'<span class="cleg" style="margin:0">Mes vs mes</span>'
+    +'<svg class="bdg-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    +'</button>';
+  if(_budCompareOpen){
+    var cmpM=prevMonth(month);
+    var curS=new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
+    var preS=new Date(cmpM+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
+    var rows='', tCur=0, tPre=0;
+    BUDGET_CATS.forEach(function(cat){
+      var c=catNetSpend(month,[cat]), p=catNetSpend(cmpM,[cat]); tCur+=c; tPre+=p;
+      if(c===0&&p===0) return;
+      var d=c-p, col=d===0?'var(--txt3)':(d>0?'#E24B4A':'#5DCAA5'), arr=d===0?'·':(d>0?'▲':'▼');
+      rows+='<div class="mvm-row"><span class="mvm-cat"><i class="bdg-dot" style="background:'+(CCOLORS[cat]||'#9B70F0')+'"></i>'+cat+'</span>'
+        +'<span class="mvm-num">'+fmtUSD(c)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(p)+'</span>'
+        +'<span class="mvm-num" style="color:'+col+'">'+arr+' '+(d===0?'—':fmtUSD(Math.abs(d)))+'</span></div>';
+    });
+    var dT=tCur-tPre, colT=dT===0?'var(--txt3)':(dT>0?'#E24B4A':'#5DCAA5'), arrT=dT===0?'·':(dT>0?'▲':'▼');
+    html+='<div class="bdg-limits-body">'
+      +'<div class="mvm-row mvm-head"><span class="mvm-cat">Categoria</span><span class="mvm-num">'+curS+'</span><span class="mvm-num">'+preS+'</span><span class="mvm-num">Δ</span></div>'
+      +(rows||'<div style="font-size:13px;color:var(--txt3);padding:6px 2px">Sin gastos en ninguno de los dos meses.</div>')
+      +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num">'+fmtUSD(tCur)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(tPre)+'</span><span class="mvm-num" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
+      +'</div>';
+  }
   html+='</div>';
 
   // Configure limits accordion
@@ -2613,6 +2705,9 @@ async function init(){
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
+  // Cambios locales sin pushear de una sesion anterior (cerro la app offline):
+  // el pull respeta LWW asi que no se pisaron, ahora los propagamos a la nube.
+  if(localStorage.getItem('ft13_dirty')){ _dirty=true; pushToCloud(); }
   // Migration: all Zelle wallet transactions → category Emily
   var migrated=S.transactions.filter(function(t){ return t.wallet==='Zelle'&&t.category!=='Emily'; });
   if(migrated.length){ migrated.forEach(function(t){ t.category='Emily'; t.updatedAt=stamp(); }); S.transactionsUpdatedAt=stamp(); save(); }
@@ -2636,10 +2731,11 @@ async function init(){
   // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
   // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
   _pullTimer=setInterval(autoPull, 25000);
-  // Pull immediately whenever the tab regains focus or visibility.
-  window.addEventListener('focus', autoPull);
+  // Pull immediately whenever the tab regains focus or visibility, y corre las
+  // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
+  window.addEventListener('focus', function(){ autoPull().then(applyRecurring); });
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) autoPull().then(function(){ autoFetchBinance(); autoFetchBibiBinance(); });
+    if(!document.hidden) autoPull().then(function(){ applyRecurring(); autoFetchBinance(); autoFetchBibiBinance(); });
   });
 }
 init();
