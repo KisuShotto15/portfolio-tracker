@@ -478,7 +478,7 @@ input,select,textarea,button{font-family:inherit}
 .sync-banner.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
 .sync-banner button{flex-shrink:0;padding:6px 12px;border:0;border-radius:8px;background:#E24B4A;color:#fff;font-size:12px;font-weight:600;cursor:pointer}
 .bdg-limits-body{padding:0 26px 24px}
-.mvm-row{display:grid;grid-template-columns:1.6fr 1fr 1fr 1.1fr;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid rgba(255,255,255,0.06);font-size:13px}
+.mvm-row{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1.1fr;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid rgba(255,255,255,0.06);font-size:13px}
 .mvm-cat{display:flex;align-items:center;gap:8px;color:var(--color-text-primary)}
 .mvm-num{text-align:right;font-variant-numeric:tabular-nums}
 .mvm-pre{color:var(--color-text-secondary)}

@@ -2007,23 +2007,23 @@ function renderBudget(){
     +'<svg class="bdg-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
     +'</button>';
   if(_budCompareOpen){
-    var cmpM=prevMonth(month);
-    var curS=new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
-    var preS=new Date(cmpM+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
-    var rows='', tCur=0, tPre=0;
+    var m1=prevMonth(month), m2=prevMonth(m1);          // m2=mas viejo, month=mas nuevo
+    var lbl=function(m){ return new Date(m+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}); };
+    var rows='', t2=0, t1=0, t0=0;
     BUDGET_CATS.forEach(function(cat){
-      var c=catNetSpend(month,[cat]), p=catNetSpend(cmpM,[cat]); tCur+=c; tPre+=p;
-      if(c===0&&p===0) return;
-      var d=c-p, col=d===0?'var(--txt3)':(d>0?'#E24B4A':'#5DCAA5'), arr=d===0?'·':(d>0?'▲':'▼');
+      var v2=catNetSpend(m2,[cat]), v1=catNetSpend(m1,[cat]), v0=catNetSpend(month,[cat]);
+      t2+=v2; t1+=v1; t0+=v0;
+      if(v2===0&&v1===0&&v0===0) return;
+      var d=v0-v1, col=d===0?'var(--txt3)':(d>0?'#E24B4A':'#5DCAA5'), arr=d===0?'·':(d>0?'▲':'▼');
       rows+='<div class="mvm-row"><span class="mvm-cat"><i class="bdg-dot" style="background:'+(CCOLORS[cat]||'#9B70F0')+'"></i>'+cat+'</span>'
-        +'<span class="mvm-num">'+fmtUSD(c)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(p)+'</span>'
+        +'<span class="mvm-num mvm-pre">'+fmtUSD(v2)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(v1)+'</span><span class="mvm-num">'+fmtUSD(v0)+'</span>'
         +'<span class="mvm-num" style="color:'+col+'">'+arr+' '+(d===0?'—':fmtUSD(Math.abs(d)))+'</span></div>';
     });
-    var dT=tCur-tPre, colT=dT===0?'var(--txt3)':(dT>0?'#E24B4A':'#5DCAA5'), arrT=dT===0?'·':(dT>0?'▲':'▼');
+    var dT=t0-t1, colT=dT===0?'var(--txt3)':(dT>0?'#E24B4A':'#5DCAA5'), arrT=dT===0?'·':(dT>0?'▲':'▼');
     html+='<div class="bdg-limits-body">'
-      +'<div class="mvm-row mvm-head"><span class="mvm-cat">Categoria</span><span class="mvm-num">'+curS+'</span><span class="mvm-num">'+preS+'</span><span class="mvm-num">Δ</span></div>'
-      +(rows||'<div style="font-size:13px;color:var(--txt3);padding:6px 2px">Sin gastos en ninguno de los dos meses.</div>')
-      +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num">'+fmtUSD(tCur)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(tPre)+'</span><span class="mvm-num" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
+      +'<div class="mvm-row mvm-head"><span class="mvm-cat">Categoria</span><span class="mvm-num">'+lbl(m2)+'</span><span class="mvm-num">'+lbl(m1)+'</span><span class="mvm-num">'+lbl(month)+'</span><span class="mvm-num">Δ</span></div>'
+      +(rows||'<div style="font-size:13px;color:var(--txt3);padding:6px 2px">Sin gastos en estos meses.</div>')
+      +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num mvm-pre">'+fmtUSD(t2)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(t1)+'</span><span class="mvm-num">'+fmtUSD(t0)+'</span><span class="mvm-num" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
       +'</div>';
   }
   html+='</div>';
