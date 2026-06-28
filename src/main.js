@@ -1069,11 +1069,18 @@ function investmentFlow(prevSnap, curSnap){
 function getSnapshotPnL(){
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(snaps.length<2) return [];
+  var txById={}; (S.transactions||[]).forEach(function(t){ txById[t.id]=t; });
   var results=[];
   for(var i=1;i<snaps.length;i++){
     var s1=snaps[i-1],s2=snaps[i];
     var f=investmentFlow(s1,s2);
-    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:f.invOut,invIn:f.invIn,profit:(s2.total-s1.total)+f.invOut-f.invIn });
+    var computed=(s2.total-s1.total)+f.invOut-f.invIn;
+    // Si el periodo se "cerro" con su tx de profit, esa tx es la ganancia realizada
+    // (congelada al tomar el snapshot). Usarla evita que mover flujos de Investments
+    // ese mismo dia DESPUES del snapshot desincronice Monthly Return del Income registrado.
+    var linked=s2.txId!=null?txById[s2.txId]:null;
+    var profit=linked&&typeof linked.amountUSD==='number'?linked.amountUSD:computed;
+    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:f.invOut,invIn:f.invIn,profit:profit });
   }
   return results;
 }
