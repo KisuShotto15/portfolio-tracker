@@ -1,7 +1,7 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, dueMonths } from './sync-core.js';
 import { localToday, parseAmt, fmtUSD, escHtml } from './format.js';
-import { initTools, renderToolToggles, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
+import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
 
 var RATE_URL      = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
@@ -56,7 +56,8 @@ var S = {
   presets:[], presetsUpdatedAt:null,
   bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
-  recurringLog:[], recurringLogUpdatedAt:null
+  recurringLog:[], recurringLogUpdatedAt:null,
+  toolFees:{bpay:4.1, wally:3.745, zinli:3.75, emily:10}, toolFeesUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 
@@ -2366,7 +2367,7 @@ function showPage(id,btn,arg){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools'){ renderToolToggles(); renderBdvLimits(); }
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings') renderPresetsManage();
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
@@ -2696,7 +2697,7 @@ window.deleteSnapshot = deleteSnapshot;
 
 async function init(){
   loadLocal();
-  initTools({ getState:function(){ return S; }, save:save });
+  initTools({ getState:function(){ return S; }, save:save, stamp:stamp });
   var today=localToday();
   document.getElementById('tx-date').value=today;
   populateTxMonth();
@@ -2725,7 +2726,7 @@ async function init(){
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; if(_pc.buy) document.getElementById('pc-buy').value=_pc.buy; if(_pc.card) document.getElementById('pc-card').value=_pc.card; }catch(e){}
   applyRecurring(); renderRecurringManage();
-  renderToolToggles(); renderBdvLimits(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
+  renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
   autoFetchBinance(); autoFetchBibiBinance();
   setInterval(function(){ fetchRate(false); }, 60*60*1000);
   setInterval(function(){ autoFetchBinance(); autoFetchBibiBinance(); }, BINANCE_AUTO_MS);

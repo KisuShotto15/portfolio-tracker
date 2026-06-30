@@ -716,6 +716,18 @@ input::placeholder{color:var(--txt3)}
 .hist-popup{position:absolute;right:0;top:42px;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:17px;display:none;z-index:30;box-shadow:0 12px 32px rgba(0,0,0,.5)}
 .hist-popup.open{display:block}
 
+/* Tools — tuerca de comisiones (a la izquierda del tip ?) */
+.tool-title .tool-gear{right:30px}
+.tool-gear-btn{background:rgba(255,255,255,.07);border:none;color:var(--txt3);width:22px;height:22px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.tool-gear-btn:hover{color:var(--txt2);background:rgba(255,255,255,.12)}
+.tool-gear-pop{position:absolute;right:0;top:30px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:14px;display:none;z-index:31;box-shadow:0 12px 32px rgba(0,0,0,.5);width:max-content;text-transform:none;letter-spacing:0}
+.tool-gear-pop.open{display:block}
+.tool-gear-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--txt3);margin-bottom:11px}
+.tool-gear-row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.tool-gear-row+.tool-gear-row{margin-top:10px}
+.tool-gear-row label{font-size:13px;color:var(--txt2);font-weight:500;white-space:nowrap}
+.tool-gear-row input{width:74px;text-align:center;padding:6px 8px;font-size:14px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--txt);font-family:var(--font-num)}
+
 /* Snapshot history — card list (consistent with holdings / wallets) */
 .snap-hero{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:24px 28px;margin-bottom:22px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
 .snap-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
