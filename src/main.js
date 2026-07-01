@@ -1021,16 +1021,18 @@ function catNetSpend(month, cats){
 }
 
 function getAvgMonthlyOutflows(){
+  // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
-  for(var i=0;i<3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  for(var i=1;i<=3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
   var totals=months.map(function(m){ return catNetSpend(m, EXPENSE_CATS_DASH); });
   var nz=totals.filter(function(v){ return v>0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
 
 function getAvgMonthlyContribution(){
+  // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
-  for(var i=0;i<3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  for(var i=1;i<=3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
   var nets=months.map(function(m){
     var inc=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
     var exp=catNetSpend(m, EXPENSE_CATS_DASH);
