@@ -176,6 +176,15 @@ input,select,textarea,button{font-family:inherit}
   transition:transform .2s cubic-bezier(.16,1,.3,1);
 }
 @media(hover:hover){.kpi-card:hover{transform:translateY(-3px)}}
+/* Entrada sutil: solo se re-renderiza cuando el contenido cambio (guard _kpiSig),
+   asi que la animacion se ve al cargar y al cambiar un valor, no en cada sync. */
+.kpi-card{animation:kpiIn .35s cubic-bezier(.16,1,.3,1) both}
+.kpi-card:nth-child(2){animation-delay:.04s}
+.kpi-card:nth-child(3){animation-delay:.08s}
+.kpi-card:nth-child(4){animation-delay:.12s}
+.kpi-card:nth-child(5){animation-delay:.16s}
+@keyframes kpiIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.kpi-card{animation:none}}
 .kpi-lbl{font-size:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
 .kpi-val{font-size:31px;font-weight:500;letter-spacing:-.02em;margin:11px 0 6px}
 .kpi-sub{font-size:14px;color:var(--txt3);display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}

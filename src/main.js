@@ -95,7 +95,7 @@ function ensureChart(){
   return _chartPromise;
 }
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
-var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
+var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
@@ -1184,7 +1184,7 @@ function renderKPIStrip(month){
   var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
   var retSub=cur.lastPnl!==null?(cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%':''):'no snapshots for '+month;
   var savColor=cur.savRate===null?'#888':cur.savRate>=30?'#1D9E75':cur.savRate>=15?'#EF9F27':'#E24B4A';
-  document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
+  var kHtml='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
     +kpi('Monthly Return',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
     // "Profit Retention" (return retenido vs gastos), NO el savings rate clasico
@@ -1193,6 +1193,8 @@ function renderKPIStrip(month){
     +kpi('Emergency Fund',emgVal,emgSub,emgColor,fmtDelta(cur.emgMo,prev.emgMo))
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
+  // Solo tocar el DOM cuando cambio → la animacion de entrada no se repite en cada sync/tab return.
+  if(kHtml!==_kpiSig){ document.getElementById('kpi-strip').innerHTML=kHtml; _kpiSig=kHtml; }
 }
 
 // ── Health Score ───────────────────────────────────────────────────────────
