@@ -148,7 +148,7 @@ async function pushToCloud(){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
-        saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
+        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
@@ -207,7 +207,7 @@ async function pullFromCloud(quiet){
 
 // Re-render the surfaces that a fresh cloud pull can change.
 function afterPull(){
-  populateWalletSelects(); updateRateUI(); sortTx(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
+  populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
 }
 
 // Background pull so an open, focused tab reflects edits from other devices
@@ -1456,7 +1456,7 @@ function applyRecurring(){
     added.forEach(function(a){ S.recurringLog.unshift(a); });
     S.recurringLog=S.recurringLog.slice(0,30);
     S.recurringLogUpdatedAt=ut;
-    save(); sortTx(); renderTx(); renderSummary(); renderAlerts();
+    save(); renderTx(); renderSummary(); renderAlerts();
   }
 }
 window.dismissRecurringAlert=function(id){
