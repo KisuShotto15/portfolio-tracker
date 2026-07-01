@@ -352,7 +352,13 @@ async function testBinance(){
   try{ await fetchBinanceBalance(); st.textContent='Connected - Funding USDT: $'+S.binanceBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
   catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
 }
-function clearBinance(){ S.binanceBalance=null; S.binanceUpdated=null; S.binanceFetchedAt=null; save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets(); }
+function clearBinance(){
+  S.binanceBalance=null; S.binanceUpdated=null; S.binanceFetchedAt=null;
+  S.binanceKey=''; S.binanceSecret=''; // el proxy puede usar sus propias env vars (BINANCE_KEY/SECRET)
+  var k=document.getElementById('bn-key'); if(k) k.value='';
+  var s=document.getElementById('bn-secret'); if(s) s.value='';
+  save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets();
+}
 var BINANCE_AUTO_MS=5*60*60*1000; // 5 hours
 async function autoFetchBinance(){
   if(S.binanceBalance===null) return; // not connected, skip
@@ -378,7 +384,13 @@ async function testBibiBinance(){
   try{ await fetchBibiBinanceBalance(); st.textContent='Connected - Funding USDT: $'+S.bibiBinanceBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
   catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
 }
-function clearBibiBinance(){ S.bibiBinanceBalance=null; S.bibiBinanceUpdated=null; S.bibiBinanceFetchedAt=null; save(); document.getElementById('bbn-status').textContent='Reset.'; renderWallets(); }
+function clearBibiBinance(){
+  S.bibiBinanceBalance=null; S.bibiBinanceUpdated=null; S.bibiBinanceFetchedAt=null;
+  S.bibiBinanceKey=''; S.bibiBinanceSecret=''; // el proxy puede usar sus propias env vars (BIBI_BINANCE_KEY/SECRET)
+  var k=document.getElementById('bbn-key'); if(k) k.value='';
+  var s=document.getElementById('bbn-secret'); if(s) s.value='';
+  save(); document.getElementById('bbn-status').textContent='Reset.'; renderWallets();
+}
 async function autoFetchBibiBinance(){
   if(S.bibiBinanceBalance===null) return;
   var age=S.bibiBinanceFetchedAt?Date.now()-S.bibiBinanceFetchedAt:Infinity;
