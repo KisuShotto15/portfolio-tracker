@@ -208,6 +208,8 @@ async function pullFromCloud(quiet){
 // Re-render the surfaces that a fresh cloud pull can change.
 function afterPull(){
   populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
+  // Budget solo se re-renderiza al navegar; si es la page activa, refrescala tambien.
+  var pb=document.getElementById('page-budget'); if(pb&&pb.classList.contains('active')) renderBudget();
 }
 
 // Background pull so an open, focused tab reflects edits from other devices
@@ -1007,8 +1009,6 @@ function populateTxMonth(){
   sel.value=cur; // preserve selection ("" → All months)
 }
 
-function groupSum(txDebit, cats){ return cats.reduce(function(s,c){ return s+txDebit.filter(function(t){ return t.category===c; }).reduce(function(a,t){ return a+t.amountUSD; },0); },0); }
-
 // ── Dashboard helpers ──────────────────────────────────────────────────────
 var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
 
@@ -1097,8 +1097,6 @@ function getMonthlyKPIs(month){
   var monthEnd=month+'-31';
   var snapsBefore=snaps.filter(function(s){ return s.date<=monthEnd; });
   var netWorth=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].total:null;
-  // Tx for month
-  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
   var expenses=catNetSpend(month, EXPENSE_CATS_DASH);
   // Monthly Return: snapshot periods ending in month
   var pnls=getSnapshotPnL();
@@ -1594,27 +1592,6 @@ function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').valu
 function renderSummary(){
   populateSumMonth();
   var month=document.getElementById('sum-month').value;
-  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
-  var txD=txM.filter(function(t){ return t.type==='Debit'; });
-  var txC=txM.filter(function(t){ return t.type==='Credit'; });
-  // Income = only new money entering (Income category credits)
-  var income=txC.filter(function(t){ return t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var essential=groupSum(txD,GROUP_ESSENTIAL);
-  var business=groupSum(txD,GROUP_BUSINESS);
-  var lifestyle=groupSum(txD,GROUP_LIFESTYLE);
-  // Investments: net flow — negative=capital deployed, positive=net gain/return
-  var invOut=txD.filter(function(t){ return t.category==='Investments'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var invIn=txC.filter(function(t){ return t.category==='Investments'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var invNet=invIn-invOut;
-  // Savings: amount moved to savings wallets (informational, not an expense)
-  var saved=txD.filter(function(t){ return t.category==='Savings'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  // Net = real spending efficiency, excludes investments and savings
-  var net=income-essential-business-lifestyle;
-  var savRate=income>0?Math.round((net/income)*100):0;
-  function mc(label,val,cls,sub){ var d=val<0?'-'+fmtUSD(-val):fmtUSD(val); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
-  function mcs(label,val,cls,sub){ var d=val>0?'+'+fmtUSD(val):val<0?'-'+fmtUSD(-val):fmtUSD(0); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
-  var invSub=invOut>0||invIn>0?'Out: '+fmtUSD(invOut)+(invIn>0?' · In: '+fmtUSD(invIn):''):'';
-  document.getElementById('sum-cards').innerHTML='';
   renderKPIStrip(month);
   renderHealthScore();
   renderAlerts();
