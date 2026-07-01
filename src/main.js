@@ -1012,13 +1012,31 @@ function populateTxMonth(){
 // ── Dashboard helpers ──────────────────────────────────────────────────────
 var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
 
+// Totales debit/credit por 'YYYY-MM|categoria' en UNA pasada, cacheados.
+// KPIs, alertas, insights y mes-vs-mes hacian decenas de recorridos completos
+// de S.transactions por render; con el indice cada consulta es O(1).
+// Invalida cuando cambia la referencia del array o transactionsUpdatedAt
+// (toda mutacion de tx reasigna el array o bumpea el timestamp).
+var _mctRef=null, _mctTs=null, _mctMap=null;
+function monthCatTotals(){
+  if(_mctMap&&_mctRef===S.transactions&&_mctTs===S.transactionsUpdatedAt) return _mctMap;
+  var map={};
+  S.transactions.forEach(function(t){
+    var k=t.date.slice(0,7)+'|'+t.category;
+    var e=map[k]||(map[k]={d:0,c:0});
+    if(t.type==='Debit') e.d+=t.amountUSD; else if(t.type==='Credit') e.c+=t.amountUSD;
+  });
+  _mctRef=S.transactions; _mctTs=S.transactionsUpdatedAt; _mctMap=map;
+  return map;
+}
 // Net spending for a category in a month: debits - credits (refunds reduce spend)
 function catNetSpend(month, cats){
-  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&(cats.indexOf(t.category)>=0); });
-  var d=txM.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var c=txM.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var map=monthCatTotals(), d=0, c=0;
+  cats.forEach(function(cat){ var e=map[month+'|'+cat]; if(e){ d+=e.d; c+=e.c; } });
   return Math.max(0, d-c);
 }
+// Income del mes = creditos de la categoria Income.
+function monthIncome(month){ var e=monthCatTotals()[month+'|Income']; return e?e.c:0; }
 
 function getAvgMonthlyOutflows(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
@@ -1033,11 +1051,7 @@ function getAvgMonthlyContribution(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
   for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
-  var nets=months.map(function(m){
-    var inc=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    var exp=catNetSpend(m, EXPENSE_CATS_DASH);
-    return inc-exp;
-  });
+  var nets=months.map(function(m){ return monthIncome(m)-catNetSpend(m, EXPENSE_CATS_DASH); });
   var nz=nets.filter(function(v){ return v>0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
@@ -1660,8 +1674,9 @@ function renderMonthlyChart(){
   if(!window.Chart){ ensureChart().then(renderMonthlyChart).catch(function(){}); return; }
   var months=getLast6();
   var SPEND_CATS=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
-  var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
-  var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
+  var map=monthCatTotals();
+  var cD=months.map(function(m){ return parseFloat(SPEND_CATS.reduce(function(s,c){ var e=map[m+'|'+c]; return s+(e?e.d:0); },0).toFixed(2)); });
+  var crD=months.map(function(m){ return parseFloat(monthIncome(m).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
   // Skip rebuild when the underlying data is identical (re-navigation, visibilitychange, sync with no change).
   var sig=JSON.stringify([labels,cD,crD]);
@@ -1909,8 +1924,7 @@ function renderBudget(){
   var months=getMonths();
   if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
   var month=_budMonth;
-  var income=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&BUDGET_CATS.indexOf(t.category)>=0; });
+  var income=monthIncome(month);
   var spent=catNetSpend(month, BUDGET_CATS);
   var net=income-spent;
   var savRate=income>0?Math.round((net/income)*100):0;
