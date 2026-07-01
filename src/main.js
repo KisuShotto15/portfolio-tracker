@@ -10,7 +10,25 @@ var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
-var VERCEL_SECRET = 'ptk_SvIW6dOiXxy_WtusJ322FjH6ijC1WB-D';
+// El API secret vive SOLO en localStorage, nunca en el bundle: el JS es publico
+// y con el secret se puede leer/escribir todo el estado. Se pide una vez por
+// dispositivo (prompt al iniciar o Settings → Cloud sync). Nunca se sincroniza.
+var VERCEL_SECRET='';
+try{ VERCEL_SECRET=localStorage.getItem('ft13_secret')||''; }catch(e){}
+function setApiSecret(v){
+  VERCEL_SECRET=(v||'').trim();
+  try{ localStorage.setItem('ft13_secret',VERCEL_SECRET); }catch(e){}
+}
+window.saveSyncSecret=async function(){
+  var inp=document.getElementById('sync-secret'); if(!inp||!inp.value.trim()) return;
+  setApiSecret(inp.value); inp.value='';
+  syncFailed=false; _pushFailCount=0; // el secret nuevo desbloquea el autoPull/retry
+  showSyncBanner(false);
+  var cs=document.getElementById('cloud-status'); if(cs) cs.textContent='Secret guardado. Probando...';
+  var ok=await pullFromCloud();
+  if(ok){ afterPull(); if(cs) cs.textContent='Secret valido. Sincronizado.'; }
+  else if(cs) cs.textContent='No se pudo sincronizar (secret invalido u offline).';
+};
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
@@ -159,6 +177,7 @@ async function pushToCloud(){
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true; _pushFailCount++;
+    if(e.message==='HTTP 401'){ setSyncStatus('error','Secret invalido'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret no sirve
     setSyncStatus('offline','⚠ Unsynced changes');
     if(_pushFailCount>=2&&navigator.onLine) showSyncBanner(true); // offline real ya tiene su propio aviso
     console.warn('push failed:',e.message);
@@ -199,7 +218,8 @@ async function pullFromCloud(quiet){
     if(!quiet) setSyncStatus('synced','Synced (no cloud data yet)');
     return false;
   }catch(e){
-    setSyncStatus('offline','Offline (local only)');
+    if(e.message==='HTTP 401') setSyncStatus('error','Secret invalido');
+    else setSyncStatus('offline','Offline (local only)');
     console.warn('pull failed:',e.message);
     return false;
   }
@@ -2693,6 +2713,10 @@ async function init(){
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
+  if(!VERCEL_SECRET){
+    var sr=await appPrompt('Cloud sync','Ingresa el API secret de sync para este dispositivo (se guarda solo localmente). Puedes hacerlo despues en Settings → Cloud sync.','',{inputType:'text'});
+    if(sr&&sr.value&&sr.value.trim()) setApiSecret(sr.value);
+  }
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   // Cambios locales sin pushear de una sesion anterior (cerro la app offline):
