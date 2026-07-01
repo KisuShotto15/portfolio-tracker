@@ -1,6 +1,6 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, dueMonths } from './sync-core.js';
-import { localToday, parseAmt, fmtUSD, escHtml } from './format.js';
+import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
 
 var RATE_URL      = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
@@ -10,7 +10,25 @@ var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
-var VERCEL_SECRET = 'ptk_SvIW6dOiXxy_WtusJ322FjH6ijC1WB-D';
+// El API secret vive SOLO en localStorage, nunca en el bundle: el JS es publico
+// y con el secret se puede leer/escribir todo el estado. Se pide una vez por
+// dispositivo (prompt al iniciar o Settings → Cloud sync). Nunca se sincroniza.
+var VERCEL_SECRET='';
+try{ VERCEL_SECRET=localStorage.getItem('ft13_secret')||''; }catch(e){}
+function setApiSecret(v){
+  VERCEL_SECRET=(v||'').trim();
+  try{ localStorage.setItem('ft13_secret',VERCEL_SECRET); }catch(e){}
+}
+window.saveSyncSecret=async function(){
+  var inp=document.getElementById('sync-secret'); if(!inp||!inp.value.trim()) return;
+  setApiSecret(inp.value); inp.value='';
+  syncFailed=false; _pushFailCount=0; // el secret nuevo desbloquea el autoPull/retry
+  showSyncBanner(false);
+  var cs=document.getElementById('cloud-status'); if(cs) cs.textContent='Secret guardado. Probando...';
+  var ok=await pullFromCloud();
+  if(ok){ afterPull(); if(cs) cs.textContent='Secret valido. Sincronizado.'; }
+  else if(cs) cs.textContent='No se pudo sincronizar (secret invalido u offline).';
+};
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
@@ -77,7 +95,7 @@ function ensureChart(){
   return _chartPromise;
 }
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
-var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
+var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
 var _budMonth=null, _budLimitsOpen=false;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
@@ -148,7 +166,7 @@ async function pushToCloud(){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
-        saveLocal(); sortTx(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
+        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
@@ -159,6 +177,7 @@ async function pushToCloud(){
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true; _pushFailCount++;
+    if(e.message==='HTTP 401'){ setSyncStatus('error','Secret invalido'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret no sirve
     setSyncStatus('offline','⚠ Unsynced changes');
     if(_pushFailCount>=2&&navigator.onLine) showSyncBanner(true); // offline real ya tiene su propio aviso
     console.warn('push failed:',e.message);
@@ -199,7 +218,8 @@ async function pullFromCloud(quiet){
     if(!quiet) setSyncStatus('synced','Synced (no cloud data yet)');
     return false;
   }catch(e){
-    setSyncStatus('offline','Offline (local only)');
+    if(e.message==='HTTP 401') setSyncStatus('error','Secret invalido');
+    else setSyncStatus('offline','Offline (local only)');
     console.warn('pull failed:',e.message);
     return false;
   }
@@ -207,7 +227,9 @@ async function pullFromCloud(quiet){
 
 // Re-render the surfaces that a fresh cloud pull can change.
 function afterPull(){
-  populateWalletSelects(); updateRateUI(); sortTx(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
+  populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
+  // Budget solo se re-renderiza al navegar; si es la page activa, refrescala tambien.
+  var pb=document.getElementById('page-budget'); if(pb&&pb.classList.contains('active')) renderBudget();
 }
 
 // Background pull so an open, focused tab reflects edits from other devices
@@ -316,8 +338,9 @@ async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
   if(keyEl&&keyEl.value) S.binanceKey=keyEl.value;
   if(secEl&&secEl.value) S.binanceSecret=secEl.value;
-  if(!S.binanceKey||!S.binanceSecret) throw new Error('API key/secret not configured');
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({key:S.binanceKey,secret:S.binanceSecret})});
+  // Sin keys locales, el proxy usa sus env vars (BINANCE_KEY/SECRET) si estan configuradas.
+  var body=S.binanceKey&&S.binanceSecret?{key:S.binanceKey,secret:S.binanceSecret}:{account:'main'};
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify(body)});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
@@ -342,8 +365,8 @@ async function fetchBibiBinanceBalance(){
   var keyEl=document.getElementById('bbn-key'); var secEl=document.getElementById('bbn-secret');
   if(keyEl&&keyEl.value) S.bibiBinanceKey=keyEl.value;
   if(secEl&&secEl.value) S.bibiBinanceSecret=secEl.value;
-  if(!S.bibiBinanceKey||!S.bibiBinanceSecret) throw new Error('API key/secret not configured');
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({key:S.bibiBinanceKey,secret:S.bibiBinanceSecret})});
+  var body=S.bibiBinanceKey&&S.bibiBinanceSecret?{key:S.bibiBinanceKey,secret:S.bibiBinanceSecret}:{account:'bibi'};
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify(body)});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
@@ -575,7 +598,7 @@ async function refreshWalletHoldings(){
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
 
 function autofillFromNote(){
-  if(window.editingTxId) return; // never autofill while editing an existing tx
+  if(editingTxId) return; // never autofill while editing an existing tx
   var note=document.getElementById('tx-desc').value.trim();
   if(!note) return;
   // Split note into individual words and check each against keywords
@@ -994,36 +1017,52 @@ function renderTx(){
     +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
 }
 
-function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
+function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
 function fmtMonthLabel(m){ var p=String(m).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ',', '); }
 function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
 function populateTxMonth(){
   var sel=document.getElementById('tf-month'); if(!sel) return;
   var cur=sel.value;
   var months=getMonths().slice();
-  var nowM=new Date().toISOString().slice(0,7);
+  var nowM=monthKey(new Date());
   if(months.indexOf(nowM)<0) months.unshift(nowM); // current month always selectable
   sel.innerHTML='<option value="">All months</option>'+months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join('');
   sel.value=cur; // preserve selection ("" → All months)
 }
 
-function groupSum(txDebit, cats){ return cats.reduce(function(s,c){ return s+txDebit.filter(function(t){ return t.category===c; }).reduce(function(a,t){ return a+t.amountUSD; },0); },0); }
-
 // ── Dashboard helpers ──────────────────────────────────────────────────────
 var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
 
+// Totales debit/credit por 'YYYY-MM|categoria' en UNA pasada, cacheados.
+// KPIs, alertas, insights y mes-vs-mes hacian decenas de recorridos completos
+// de S.transactions por render; con el indice cada consulta es O(1).
+// Invalida cuando cambia la referencia del array o transactionsUpdatedAt
+// (toda mutacion de tx reasigna el array o bumpea el timestamp).
+var _mctRef=null, _mctTs=null, _mctMap=null;
+function monthCatTotals(){
+  if(_mctMap&&_mctRef===S.transactions&&_mctTs===S.transactionsUpdatedAt) return _mctMap;
+  var map={};
+  S.transactions.forEach(function(t){
+    var k=t.date.slice(0,7)+'|'+t.category;
+    var e=map[k]||(map[k]={d:0,c:0});
+    if(t.type==='Debit') e.d+=t.amountUSD; else if(t.type==='Credit') e.c+=t.amountUSD;
+  });
+  _mctRef=S.transactions; _mctTs=S.transactionsUpdatedAt; _mctMap=map;
+  return map;
+}
 // Net spending for a category in a month: debits - credits (refunds reduce spend)
 function catNetSpend(month, cats){
-  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&(cats.indexOf(t.category)>=0); });
-  var d=txM.filter(function(t){ return t.type==='Debit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var c=txM.filter(function(t){ return t.type==='Credit'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
+  var map=monthCatTotals(), d=0, c=0;
+  cats.forEach(function(cat){ var e=map[month+'|'+cat]; if(e){ d+=e.d; c+=e.c; } });
   return Math.max(0, d-c);
 }
+// Income del mes = creditos de la categoria Income.
+function monthIncome(month){ var e=monthCatTotals()[month+'|Income']; return e?e.c:0; }
 
 function getAvgMonthlyOutflows(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
-  for(var i=1;i<=3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
   var totals=months.map(function(m){ return catNetSpend(m, EXPENSE_CATS_DASH); });
   var nz=totals.filter(function(v){ return v>0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
@@ -1032,12 +1071,8 @@ function getAvgMonthlyOutflows(){
 function getAvgMonthlyContribution(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
-  for(var i=1;i<=3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
-  var nets=months.map(function(m){
-    var inc=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-    var exp=catNetSpend(m, EXPENSE_CATS_DASH);
-    return inc-exp;
-  });
+  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
+  var nets=months.map(function(m){ return monthIncome(m)-catNetSpend(m, EXPENSE_CATS_DASH); });
   var nz=nets.filter(function(v){ return v>0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
@@ -1089,11 +1124,7 @@ function getSnapshotPnL(){
 }
 
 // ── Dashboard render sections ──────────────────────────────────────────────
-function prevMonth(month){
-  var p=month.split('-'); var y=parseInt(p[0]), m=parseInt(p[1])-1;
-  var d=new Date(y,m-1,1);
-  return d.toISOString().slice(0,7);
-}
+// prevMonth / monthKey viven en ./format.js (puros, testeados).
 
 function getMonthlyKPIs(month){
   // Net Worth = last snapshot of (or before) the month's end
@@ -1101,8 +1132,6 @@ function getMonthlyKPIs(month){
   var monthEnd=month+'-31';
   var snapsBefore=snaps.filter(function(s){ return s.date<=monthEnd; });
   var netWorth=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].total:null;
-  // Tx for month
-  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
   var expenses=catNetSpend(month, EXPENSE_CATS_DASH);
   // Monthly Return: snapshot periods ending in month
   var pnls=getSnapshotPnL();
@@ -1155,13 +1184,17 @@ function renderKPIStrip(month){
   var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
   var retSub=cur.lastPnl!==null?(cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%':''):'no snapshots for '+month;
   var savColor=cur.savRate===null?'#888':cur.savRate>=30?'#1D9E75':cur.savRate>=15?'#EF9F27':'#E24B4A';
-  document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
+  var kHtml='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
     +kpi('Monthly Return',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
-    +kpi('Savings Rate',cur.savRate!==null?cur.savRate+'%':'—','of net flow',savColor,fmtDelta(cur.savRate,prev.savRate))
+    // "Profit Retention" (return retenido vs gastos), NO el savings rate clasico
+    // sobre income que muestra Budget — eran dos metricas distintas con el mismo nombre.
+    +kpi('Profit Retention',cur.savRate!==null?cur.savRate+'%':'—','return vs spending',savColor,fmtDelta(cur.savRate,prev.savRate))
     +kpi('Emergency Fund',emgVal,emgSub,emgColor,fmtDelta(cur.emgMo,prev.emgMo))
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
+  // Solo tocar el DOM cuando cambio → la animacion de entrada no se repite en cada sync/tab return.
+  if(kHtml!==_kpiSig){ document.getElementById('kpi-strip').innerHTML=kHtml; _kpiSig=kHtml; }
 }
 
 // ── Health Score ───────────────────────────────────────────────────────────
@@ -1200,7 +1233,7 @@ function renderHealthScore(){
   divPts=Math.max(0,Math.min(25,divPts));
 
   // Savings rate (0-25): use current month
-  var nowMonth=new Date().toISOString().slice(0,7);
+  var nowMonth=monthKey(new Date());
   var kpis=getMonthlyKPIs(nowMonth);
   var savPts=kpis.savRate!==null?Math.max(0,Math.min(25,Math.round(kpis.savRate/2))):0;
 
@@ -1223,7 +1256,7 @@ function renderHealthScore(){
         +'<circle cx="50" cy="50" r="42" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+dash+' '+CIRC+'" transform="rotate(-90 50 50)"></circle>'
         +'</svg><div class="health-ring-val"><b style="color:'+color+'">'+total+'</b><span>'+label+'</span></div></div>'
       +'<div class="health-breakdown">'
-        +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
+        +item('Growth',growthPts)+item('Diversif.',divPts)+item('Retention',savPts)+item('Emergency',emgPts)
       +'</div>'
     +'</div>';
   // Only touch the DOM when output actually changed → no node recreation, no re-animation on tab return.
@@ -1240,7 +1273,7 @@ function renderHealthScore(){
       +'<div class="hbm-drop-inner">'
         +'<div class="hbm-drop-score" style="color:'+color+'">'+total+'<span class="hbm-drop-lbl">'+label+'</span></div>'
         +'<div class="hbm-items">'
-          +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
+          +item('Growth',growthPts)+item('Diversif.',divPts)+item('Retention',savPts)+item('Emergency',emgPts)
         +'</div>'
       +'</div>'
     +'</div>';
@@ -1302,7 +1335,7 @@ window.toggleAlertsDrop=function(){
 function getActiveAlerts(){
   var alerts=[];
   var now=new Date();
-  var curMonth=now.toISOString().slice(0,7);
+  var curMonth=monthKey(now);
 
   // 1. Overspend per category (current month vs 3-month avg excluding current)
   EXPENSE_CATS_DASH.forEach(function(cat){
@@ -1310,8 +1343,7 @@ function getActiveAlerts(){
     if(curSpend<50) return;
     var prior=[];
     for(var i=1;i<=3;i++){
-      var d=new Date(now.getFullYear(),now.getMonth()-i,1);
-      var m=d.toISOString().slice(0,7);
+      var m=monthKey(new Date(now.getFullYear(),now.getMonth()-i,1));
       var spend=catNetSpend(m, [cat]);
       if(spend>0) prior.push(spend);
     }
@@ -1456,7 +1488,7 @@ function applyRecurring(){
     added.forEach(function(a){ S.recurringLog.unshift(a); });
     S.recurringLog=S.recurringLog.slice(0,30);
     S.recurringLogUpdatedAt=ut;
-    save(); sortTx(); renderTx(); renderSummary(); renderAlerts();
+    save(); renderTx(); renderSummary(); renderAlerts();
   }
 }
 window.dismissRecurringAlert=function(id){
@@ -1599,27 +1631,6 @@ function saveGoal(){ var v=parseFloat(document.getElementById('goal-input').valu
 function renderSummary(){
   populateSumMonth();
   var month=document.getElementById('sum-month').value;
-  var txM=S.transactions.filter(function(t){ return t.date.startsWith(month)&&inSummary(t); });
-  var txD=txM.filter(function(t){ return t.type==='Debit'; });
-  var txC=txM.filter(function(t){ return t.type==='Credit'; });
-  // Income = only new money entering (Income category credits)
-  var income=txC.filter(function(t){ return t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var essential=groupSum(txD,GROUP_ESSENTIAL);
-  var business=groupSum(txD,GROUP_BUSINESS);
-  var lifestyle=groupSum(txD,GROUP_LIFESTYLE);
-  // Investments: net flow — negative=capital deployed, positive=net gain/return
-  var invOut=txD.filter(function(t){ return t.category==='Investments'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var invIn=txC.filter(function(t){ return t.category==='Investments'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var invNet=invIn-invOut;
-  // Savings: amount moved to savings wallets (informational, not an expense)
-  var saved=txD.filter(function(t){ return t.category==='Savings'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  // Net = real spending efficiency, excludes investments and savings
-  var net=income-essential-business-lifestyle;
-  var savRate=income>0?Math.round((net/income)*100):0;
-  function mc(label,val,cls,sub){ var d=val<0?'-'+fmtUSD(-val):fmtUSD(val); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
-  function mcs(label,val,cls,sub){ var d=val>0?'+'+fmtUSD(val):val<0?'-'+fmtUSD(-val):fmtUSD(0); return '<div class="mc"><div class="mc-l">'+label+'</div><div class="mc-v '+cls+'">'+d+'</div>'+(sub?'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
-  var invSub=invOut>0||invIn>0?'Out: '+fmtUSD(invOut)+(invIn>0?' · In: '+fmtUSD(invIn):''):'';
-  document.getElementById('sum-cards').innerHTML='';
   renderKPIStrip(month);
   renderHealthScore();
   renderAlerts();
@@ -1681,15 +1692,16 @@ function renderInsights(month){
     +'<div class="ins-list">'+moverRows+'</div>';
 }
 
-function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
+function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ m.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); } return m; }
 
 function renderMonthlyChart(){
   var cv=document.getElementById('chart-monthly'); if(!cv||cv.offsetParent===null) return;
   if(!window.Chart){ ensureChart().then(renderMonthlyChart).catch(function(){}); return; }
   var months=getLast6();
   var SPEND_CATS=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
-  var cD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Debit'&&SPEND_CATS.indexOf(t.category)>=0; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
-  var crD=months.map(function(m){ return parseFloat(S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0).toFixed(2)); });
+  var map=monthCatTotals();
+  var cD=months.map(function(m){ return parseFloat(SPEND_CATS.reduce(function(s,c){ var e=map[m+'|'+c]; return s+(e?e.d:0); },0).toFixed(2)); });
+  var crD=months.map(function(m){ return parseFloat(monthIncome(m).toFixed(2)); });
   var labels=months.map(function(m){ var p=m.split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1).toLocaleString('en',{month:'short',year:'2-digit'}); });
   // Skip rebuild when the underlying data is identical (re-navigation, visibilitychange, sync with no change).
   var sig=JSON.stringify([labels,cD,crD]);
@@ -1861,7 +1873,7 @@ async function recordSnapshot(){
     var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
     if(res.checked){
       var txId=Date.now()+1;
-      S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
+      S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD',updatedAt:stamp()});
       S.transactionsUpdatedAt=stamp();
       S.snapshots[S.snapshots.length-1].txId=txId;
     }
@@ -1937,8 +1949,7 @@ function renderBudget(){
   var months=getMonths();
   if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
   var month=_budMonth;
-  var income=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
-  var debits=S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&BUDGET_CATS.indexOf(t.category)>=0; });
+  var income=monthIncome(month);
   var spent=catNetSpend(month, BUDGET_CATS);
   var net=income-spent;
   var savRate=income>0?Math.round((net/income)*100):0;
@@ -2467,8 +2478,8 @@ function renderHistory(view){
   wrap.innerHTML=html;
 }
 window.renderHistory=renderHistory;
-function deleteSnapshotFromHistory(id){
-  deleteSnapshot(id);
+async function deleteSnapshotFromHistory(id){
+  await deleteSnapshot(id); // sin await, la lista se re-renderizaba antes del confirm y el borrado no se veia
   renderHistory(window._historyView||'snapshots');
 }
 window.deleteSnapshotFromHistory=deleteSnapshotFromHistory;
@@ -2707,6 +2718,10 @@ async function init(){
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
+  if(!VERCEL_SECRET){
+    var sr=await appPrompt('Cloud sync','Ingresa el API secret de sync para este dispositivo (se guarda solo localmente). Puedes hacerlo despues en Settings → Cloud sync.','',{inputType:'text'});
+    if(sr&&sr.value&&sr.value.trim()) setApiSecret(sr.value);
+  }
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   // Cambios locales sin pushear de una sesion anterior (cerro la app offline):
