@@ -1856,7 +1856,7 @@ async function recordSnapshot(){
     var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
     if(res.checked){
       var txId=Date.now()+1;
-      S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD'});
+      S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD',updatedAt:stamp()});
       S.transactionsUpdatedAt=stamp();
       S.snapshots[S.snapshots.length-1].txId=txId;
     }
@@ -2462,8 +2462,8 @@ function renderHistory(view){
   wrap.innerHTML=html;
 }
 window.renderHistory=renderHistory;
-function deleteSnapshotFromHistory(id){
-  deleteSnapshot(id);
+async function deleteSnapshotFromHistory(id){
+  await deleteSnapshot(id); // sin await, la lista se re-renderizaba antes del confirm y el borrado no se veia
   renderHistory(window._historyView||'snapshots');
 }
 window.deleteSnapshotFromHistory=deleteSnapshotFromHistory;
