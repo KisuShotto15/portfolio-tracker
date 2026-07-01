@@ -1187,7 +1187,9 @@ function renderKPIStrip(month){
   document.getElementById('kpi-strip').innerHTML='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
     +kpi('Monthly Return',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
-    +kpi('Savings Rate',cur.savRate!==null?cur.savRate+'%':'—','of net flow',savColor,fmtDelta(cur.savRate,prev.savRate))
+    // "Profit Retention" (return retenido vs gastos), NO el savings rate clasico
+    // sobre income que muestra Budget — eran dos metricas distintas con el mismo nombre.
+    +kpi('Profit Retention',cur.savRate!==null?cur.savRate+'%':'—','return vs spending',savColor,fmtDelta(cur.savRate,prev.savRate))
     +kpi('Emergency Fund',emgVal,emgSub,emgColor,fmtDelta(cur.emgMo,prev.emgMo))
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
@@ -1252,7 +1254,7 @@ function renderHealthScore(){
         +'<circle cx="50" cy="50" r="42" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+dash+' '+CIRC+'" transform="rotate(-90 50 50)"></circle>'
         +'</svg><div class="health-ring-val"><b style="color:'+color+'">'+total+'</b><span>'+label+'</span></div></div>'
       +'<div class="health-breakdown">'
-        +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
+        +item('Growth',growthPts)+item('Diversif.',divPts)+item('Retention',savPts)+item('Emergency',emgPts)
       +'</div>'
     +'</div>';
   // Only touch the DOM when output actually changed → no node recreation, no re-animation on tab return.
@@ -1269,7 +1271,7 @@ function renderHealthScore(){
       +'<div class="hbm-drop-inner">'
         +'<div class="hbm-drop-score" style="color:'+color+'">'+total+'<span class="hbm-drop-lbl">'+label+'</span></div>'
         +'<div class="hbm-items">'
-          +item('Growth',growthPts)+item('Diversif.',divPts)+item('Savings',savPts)+item('Emergency',emgPts)
+          +item('Growth',growthPts)+item('Diversif.',divPts)+item('Retention',savPts)+item('Emergency',emgPts)
         +'</div>'
       +'</div>'
     +'</div>';
