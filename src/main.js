@@ -575,7 +575,7 @@ async function refreshWalletHoldings(){
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
 
 function autofillFromNote(){
-  if(window.editingTxId) return; // never autofill while editing an existing tx
+  if(editingTxId) return; // never autofill while editing an existing tx
   var note=document.getElementById('tx-desc').value.trim();
   if(!note) return;
   // Split note into individual words and check each against keywords
