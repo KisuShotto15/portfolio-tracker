@@ -338,8 +338,9 @@ async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
   if(keyEl&&keyEl.value) S.binanceKey=keyEl.value;
   if(secEl&&secEl.value) S.binanceSecret=secEl.value;
-  if(!S.binanceKey||!S.binanceSecret) throw new Error('API key/secret not configured');
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({key:S.binanceKey,secret:S.binanceSecret})});
+  // Sin keys locales, el proxy usa sus env vars (BINANCE_KEY/SECRET) si estan configuradas.
+  var body=S.binanceKey&&S.binanceSecret?{key:S.binanceKey,secret:S.binanceSecret}:{account:'main'};
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify(body)});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
@@ -364,8 +365,8 @@ async function fetchBibiBinanceBalance(){
   var keyEl=document.getElementById('bbn-key'); var secEl=document.getElementById('bbn-secret');
   if(keyEl&&keyEl.value) S.bibiBinanceKey=keyEl.value;
   if(secEl&&secEl.value) S.bibiBinanceSecret=secEl.value;
-  if(!S.bibiBinanceKey||!S.bibiBinanceSecret) throw new Error('API key/secret not configured');
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({key:S.bibiBinanceKey,secret:S.bibiBinanceSecret})});
+  var body=S.bibiBinanceKey&&S.bibiBinanceSecret?{key:S.bibiBinanceKey,secret:S.bibiBinanceSecret}:{account:'bibi'};
+  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify(body)});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
   var data=await r.json(); if(data.error) throw new Error(data.error);
   var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;

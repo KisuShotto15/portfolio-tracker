@@ -13,16 +13,20 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { key, secret } = req.body || {};
-  if (!key || !secret) return res.status(400).json({ error: 'key and secret required' });
+  // Fallback a env vars del proxy (BINANCE_KEY/SECRET, BIBI_BINANCE_KEY/SECRET):
+  // permite sacar las keys del cliente (hoy viajan y se sincronizan en claro).
+  const { key, secret, account } = req.body || {};
+  const k = key || (account === 'bibi' ? process.env.BIBI_BINANCE_KEY : process.env.BINANCE_KEY);
+  const s = secret || (account === 'bibi' ? process.env.BIBI_BINANCE_SECRET : process.env.BINANCE_SECRET);
+  if (!k || !s) return res.status(400).json({ error: 'key and secret required (body or proxy env)' });
 
   const ts = Date.now();
   const qs = `asset=USDT&timestamp=${ts}`;
-  const sig = crypto.createHmac('sha256', secret).update(qs).digest('hex');
+  const sig = crypto.createHmac('sha256', s).update(qs).digest('hex');
 
   const r = await fetch(`https://api.binance.com/sapi/v1/asset/get-funding-asset?${qs}&signature=${sig}`, {
     method: 'POST',
-    headers: { 'X-MBX-APIKEY': key },
+    headers: { 'X-MBX-APIKEY': k },
   });
   const data = await r.json();
   if (!r.ok || data.code) return res.status(502).json({ error: data.msg || JSON.stringify(data) });
