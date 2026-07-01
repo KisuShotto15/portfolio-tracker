@@ -2725,8 +2725,7 @@ async function init(){
   initTools({ getState:function(){ return S; }, save:save, stamp:stamp });
   var today=localToday();
   document.getElementById('tx-date').value=today;
-  populateTxMonth();
-  document.getElementById('tf-month').value=today.slice(0,7); // default: current month
+  populateTxMonth(); // default: All months (value queda '')
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
