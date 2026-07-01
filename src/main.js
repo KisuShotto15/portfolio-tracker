@@ -1,6 +1,6 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, dueMonths } from './sync-core.js';
-import { localToday, parseAmt, fmtUSD, escHtml } from './format.js';
+import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
 
 var RATE_URL      = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
@@ -994,14 +994,14 @@ function renderTx(){
     +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
 }
 
-function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(new Date().toISOString().slice(0,7)); return u; }
+function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
 function fmtMonthLabel(m){ var p=String(m).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ',', '); }
 function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
 function populateTxMonth(){
   var sel=document.getElementById('tf-month'); if(!sel) return;
   var cur=sel.value;
   var months=getMonths().slice();
-  var nowM=new Date().toISOString().slice(0,7);
+  var nowM=monthKey(new Date());
   if(months.indexOf(nowM)<0) months.unshift(nowM); // current month always selectable
   sel.innerHTML='<option value="">All months</option>'+months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join('');
   sel.value=cur; // preserve selection ("" → All months)
@@ -1023,7 +1023,7 @@ function catNetSpend(month, cats){
 function getAvgMonthlyOutflows(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
-  for(var i=1;i<=3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
   var totals=months.map(function(m){ return catNetSpend(m, EXPENSE_CATS_DASH); });
   var nz=totals.filter(function(v){ return v>0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
@@ -1032,7 +1032,7 @@ function getAvgMonthlyOutflows(){
 function getAvgMonthlyContribution(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
-  for(var i=1;i<=3;i++){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); months.push(d.toISOString().slice(0,7)); }
+  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
   var nets=months.map(function(m){
     var inc=S.transactions.filter(function(t){ return t.date.startsWith(m)&&t.type==='Credit'&&t.category==='Income'; }).reduce(function(s,t){ return s+t.amountUSD; },0);
     var exp=catNetSpend(m, EXPENSE_CATS_DASH);
@@ -1089,11 +1089,7 @@ function getSnapshotPnL(){
 }
 
 // ── Dashboard render sections ──────────────────────────────────────────────
-function prevMonth(month){
-  var p=month.split('-'); var y=parseInt(p[0]), m=parseInt(p[1])-1;
-  var d=new Date(y,m-1,1);
-  return d.toISOString().slice(0,7);
-}
+// prevMonth / monthKey viven en ./format.js (puros, testeados).
 
 function getMonthlyKPIs(month){
   // Net Worth = last snapshot of (or before) the month's end
@@ -1200,7 +1196,7 @@ function renderHealthScore(){
   divPts=Math.max(0,Math.min(25,divPts));
 
   // Savings rate (0-25): use current month
-  var nowMonth=new Date().toISOString().slice(0,7);
+  var nowMonth=monthKey(new Date());
   var kpis=getMonthlyKPIs(nowMonth);
   var savPts=kpis.savRate!==null?Math.max(0,Math.min(25,Math.round(kpis.savRate/2))):0;
 
@@ -1302,7 +1298,7 @@ window.toggleAlertsDrop=function(){
 function getActiveAlerts(){
   var alerts=[];
   var now=new Date();
-  var curMonth=now.toISOString().slice(0,7);
+  var curMonth=monthKey(now);
 
   // 1. Overspend per category (current month vs 3-month avg excluding current)
   EXPENSE_CATS_DASH.forEach(function(cat){
@@ -1310,8 +1306,7 @@ function getActiveAlerts(){
     if(curSpend<50) return;
     var prior=[];
     for(var i=1;i<=3;i++){
-      var d=new Date(now.getFullYear(),now.getMonth()-i,1);
-      var m=d.toISOString().slice(0,7);
+      var m=monthKey(new Date(now.getFullYear(),now.getMonth()-i,1));
       var spend=catNetSpend(m, [cat]);
       if(spend>0) prior.push(spend);
     }
@@ -1681,7 +1676,7 @@ function renderInsights(month){
     +'<div class="ins-list">'+moverRows+'</div>';
 }
 
-function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); m.push(d.toISOString().slice(0,7)); } return m; }
+function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ m.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); } return m; }
 
 function renderMonthlyChart(){
   var cv=document.getElementById('chart-monthly'); if(!cv||cv.offsetParent===null) return;
