@@ -3,7 +3,9 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, d
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
 
-var RATE_URL      = 'https://red-rain-afef.efrenalejandro2010.workers.dev/';
+// BCV oficial via dolarapi (scrapea el BCV desde dentro de Venezuela, sin geo-bloqueo
+// ni el retraso del worker viejo). CORS abierto, se llama directo desde el browser.
+var RATE_URL      = 'https://ve.dolarapi.com/v1/dolares/oficial';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
 var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
 var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
@@ -323,7 +325,7 @@ async function fetchRate(force){
   var stale=S.rateFetchedAt&&(Date.now()-S.rateFetchedAt>60*60*1000);
   if(!force&&S.rate&&S.rateDate&&!stale){ updateRateUI(); return; }
   document.getElementById('rate-display').textContent='...';
-  try{ var r=await fetch(RATE_URL); var d=await r.json(); if(d.rate&&parseFloat(d.rate)>10){ S.rate=parseFloat(parseFloat(d.rate).toFixed(2)); S.rateDate='today ('+d.source+')'; S.rateFetchedAt=Date.now(); S.rateUpdatedAt=stamp(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
+  try{ var r=await fetch(RATE_URL); var d=await r.json(); var v=parseFloat(d.promedio); if(v>10){ S.rate=parseFloat(v.toFixed(2)); S.rateDate='BCV'+(d.fechaActualizacion?' ('+d.fechaActualizacion.slice(0,10)+')':''); S.rateFetchedAt=Date.now(); S.rateUpdatedAt=stamp(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
   if(!S.rate) showManualRate(); else updateRateUI();
 }
 function showManualRate(){
