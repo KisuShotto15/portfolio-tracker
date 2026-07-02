@@ -103,7 +103,7 @@ var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
 var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={};
-var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0;
+var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0, _pullChanged=false;
 
 // Monotonic logical clock for last-writer-wins. Using a plain Date.now() lets a
 // device with a skewed clock silently lose its newer edit; stamp() only ever moves
@@ -194,6 +194,7 @@ async function pullFromCloud(quiet){
     if(res.data){
       var cloud=res.data;
       seedClock(cloud); // advance our logical clock past anything the cloud has seen
+      var before=JSON.stringify(S); // detectar si el merge realmente cambia algo → evita re-render inutil cada 25s
       // Transactions: per-tx last-writer-wins merge
       if(cloud.transactions){
         var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cloud.deletedTxIds||[]));
@@ -211,6 +212,7 @@ async function pullFromCloud(quiet){
         if(localFieldWins(cloud[p[1]], S[p[1]])){ delete rest[p[0]]; delete rest[p[1]]; }
       });
       S=Object.assign({},S,rest);
+      _pullChanged=(JSON.stringify(S)!==before);
       saveLocal();
       if(!quiet) setSyncStatus('synced','Synced');
       return true;
@@ -238,7 +240,7 @@ function afterPull(){
 async function autoPull(){
   if(_pullInFlight||_dirty||syncFailed||document.hidden||!navigator.onLine) return;
   _pullInFlight=true;
-  try{ var ok=await pullFromCloud(true); if(ok) afterPull(); }
+  try{ await pullFromCloud(true); if(_pullChanged) afterPull(); } // solo re-render si la nube trajo algo nuevo
   finally{ _pullInFlight=false; }
 }
 
