@@ -105,7 +105,7 @@ var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var GROUP_FINANCIAL=['Investments','Savings'];
-var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={};
+var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={}, _rateTimer=null;
 var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0, _pullChanged=false;
 
 // Monotonic logical clock for last-writer-wins. Using a plain Date.now() lets a
@@ -328,6 +328,21 @@ async function fetchRate(force){
   document.getElementById('rate-display').textContent='...';
   try{ var r=await fetch(RATE_URL); var d=await r.json(); var v=parseFloat(d.current&&d.current.usd); if(v>10){ S.rate=parseFloat(v.toFixed(2)); S.rateDate='BCV'+(d.current.date?' ('+d.current.date+')':''); S.rateFetchedAt=Date.now(); S.rateUpdatedAt=stamp(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
   if(!S.rate) showManualRate(); else updateRateUI();
+}
+// El BCV publica ~1 vez al dia, dias habiles por la tarde (hora Venezuela).
+// Refresco adaptativo: chequea seguido SOLO en esa ventana (agarra el ajuste, y
+// un raro segundo ajuste el mismo dia, pronto); el resto del tiempo espacia mucho
+// para gastar menos requests. Venezuela = UTC-4 fijo (sin DST), calculado desde UTC
+// para no depender de la zona horaria del dispositivo (el usuario puede estar fuera).
+function rateRefreshDelay(){
+  var vet=new Date(Date.now()-4*3600*1000);
+  var d=vet.getUTCDay(), h=vet.getUTCHours();
+  var hot=(d>=1&&d<=5)&&h>=14&&h<20; // L-V, 2pm-8pm VET (ventana de publicacion)
+  return hot?30*60*1000:6*60*60*1000; // 30 min en ventana, 6 h fuera
+}
+function scheduleRateRefresh(){
+  clearTimeout(_rateTimer);
+  _rateTimer=setTimeout(function(){ fetchRate(true).finally(scheduleRateRefresh); }, rateRefreshDelay());
 }
 function showManualRate(){
   var bar=document.querySelector('.rbar'); if(bar.querySelector('#mr')) return;
@@ -2761,7 +2776,7 @@ async function init(){
   applyRecurring(); renderRecurringManage();
   renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
   autoFetchBinance(); autoFetchBibiBinance();
-  setInterval(function(){ fetchRate(false); }, 60*60*1000);
+  scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)
   setInterval(function(){ autoFetchBinance(); autoFetchBibiBinance(); }, BINANCE_AUTO_MS);
   // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
   // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
