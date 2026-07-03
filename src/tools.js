@@ -73,7 +73,9 @@ export function calcProfit(){
   var spent     = parseFloat(document.getElementById('pc-amount').value)||0;
   var buyRate   = parseFloat(document.getElementById('pc-buy').value)||0;
   var cardComm  = parseFloat(document.getElementById('pc-card').value)||0;
-  try{ localStorage.setItem('ft13_pc', JSON.stringify({sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value, buy:document.getElementById('pc-buy').value, card:document.getElementById('pc-card').value})); }catch(e){}
+  // Solo se cachean sell/amount: buy se autollena con la tasa Intervencion (main.js)
+  // y fee debe arrancar vacio siempre.
+  try{ localStorage.setItem('ft13_pc', JSON.stringify({sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value})); }catch(e){}
 
   var usdt         = (sellRate > 0 && spent > 0) ? spent * buyRate / sellRate : 0;
   var bpayRecharge = spent > 0 ? spent / (1 + cardComm / 100) : 0;

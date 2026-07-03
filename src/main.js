@@ -359,7 +359,18 @@ function showManualRate(){
   b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; S.rateUpdatedAt=stamp(); save(); updateRateUI(); inp.remove(); b.remove(); } };
   bar.appendChild(inp); bar.appendChild(b);
 }
-function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=(Math.ceil(S.rate*1.005*100)/100).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD'; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
+function updateRateUI(){
+  if(!S.rate) return;
+  var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('rate-display').textContent=v+' Bs/USD';
+  var iv=Math.ceil(S.rate*1.005*100)/100; // Intervencion = BCV +0.5%, redondeado hacia arriba
+  var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=iv.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD';
+  var m=document.getElementById('rate-display-m'); if(m) m.textContent=v;
+  // Profit Calc: el campo Buy sigue a la tasa Intervencion automaticamente
+  // (no pisar mientras el usuario lo esta editando).
+  var pb=document.getElementById('pc-buy');
+  if(pb&&pb!==document.activeElement&&parseFloat(pb.value)!==iv){ pb.value=iv; calcProfit(); }
+}
 
 async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
@@ -2785,7 +2796,8 @@ async function init(){
   fetchTrezorBalance().then(function(){ renderWallets(); renderSummary(); }).catch(function(){});
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
-  try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; if(_pc.buy) document.getElementById('pc-buy').value=_pc.buy; if(_pc.card) document.getElementById('pc-card').value=_pc.card; }catch(e){}
+  // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
+  try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; }catch(e){}
   applyRecurring(); renderRecurringManage();
   renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
   autoFetchBinance(); autoFetchBibiBinance();
