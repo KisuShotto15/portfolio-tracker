@@ -352,7 +352,7 @@ function showManualRate(){
   b.onclick=function(){ var v=parseFloat(inp.value); if(v>0){ S.rate=v; S.rateDate='manual'; S.rateUpdatedAt=stamp(); save(); updateRateUI(); inp.remove(); b.remove(); } };
   bar.appendChild(inp); bar.appendChild(b);
 }
-function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
+function updateRateUI(){ if(!S.rate) return; var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); document.getElementById('rate-display').textContent=v+' Bs/USD'; var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=(Math.ceil(S.rate*1.005*100)/100).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD'; var m=document.getElementById('rate-display-m'); if(m) m.textContent=v; }
 
 async function fetchBinanceBalance(){
   var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
