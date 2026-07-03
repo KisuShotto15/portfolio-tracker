@@ -143,11 +143,14 @@
         <span class="rval" id="rate-display-m">-</span>
       </div>
     </div>
+    <!-- Toolbar: en desktop es display:contents (tabs+rbar+frow como antes);
+         en movil colapsa a una sola fila compacta. -->
+    <div class="tx-toolbar">
     <!-- Mobile type tabs -->
     <div class="tx-type-tabs" id="tx-type-tabs">
-      <button class="ttt active" onclick="setTxTab(this,'')">All</button>
-      <button class="ttt" onclick="setTxTab(this,'Debit')">Debit</button>
-      <button class="ttt" onclick="setTxTab(this,'Credit')">Credit</button>
+      <button class="ttt active" onclick="setTxTab(this,'')"><span class="ttt-full">All</span><span class="ttt-short">All</span></button>
+      <button class="ttt ttt-neg" onclick="setTxTab(this,'Debit')"><span class="ttt-full">Debit</span><span class="ttt-short">&#8722;</span></button>
+      <button class="ttt ttt-pos" onclick="setTxTab(this,'Credit')"><span class="ttt-full">Credit</span><span class="ttt-short">+</span></button>
     </div>
     <!-- Desktop rate bar -->
     <div class="rbar">
@@ -159,8 +162,9 @@
       <span class="rval" id="rate-interv">-</span>
     </div>
     <div class="frow">
+      <button class="tx-search-btn" onclick="toggleTxSearch()" aria-label="Buscar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg></button>
       <input type="search" id="tf-search" placeholder="Search..." aria-label="Search transactions" style="min-width:140px" oninput="renderTx()"/>
-      <button class="tx-filter-toggle" onclick="toggleTxFilters()">Filters <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6l5 5 5-5"/></svg></button>
+      <button class="tx-filter-toggle" onclick="toggleTxFilters()"><svg class="tf-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="tf-lbl">Filters <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6l5 5 5-5"/></svg></span></button>
       <button id="btn-undo" class="btn btns" style="padding:5px 8px" title="Undo" aria-label="Undo" disabled onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button id="btn-redo" class="btn btns" style="padding:5px 8px" title="Redo" aria-label="Redo" disabled onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <select id="tf-type" onchange="renderTx()" style="display:none"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
@@ -170,6 +174,7 @@
         <select id="tf-month" onchange="renderTx()"></select>
       </div>
     </div>
+    </div><!-- /.tx-toolbar -->
     <div id="tx-wrap"></div>
   </div>
 

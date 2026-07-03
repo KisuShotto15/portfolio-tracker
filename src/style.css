@@ -378,6 +378,9 @@ input,select,textarea,button{font-family:inherit}
 .ttt{background:none;border:none;color:var(--txt3);font-size:13px;font-weight:500;cursor:pointer;padding:6px 14px;border-radius:999px;transition:color .12s,background .12s}
 .ttt.active{color:var(--accent)}
 .tx-filter-toggle{display:none}
+.tx-toolbar{display:contents}
+.tx-search-btn{display:none}
+.ttt-short{display:none}
 #tx-filters-extra{display:contents}
 #tx-filters-extra.open{display:contents}
 
@@ -907,14 +910,25 @@ input::placeholder{color:var(--txt3)}
   /* Transaction mobile redesign */
   .rbar{display:none}
   .tx-mob-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-  .tx-type-tabs{display:flex;background:var(--surface2);border-radius:999px;padding:3px;margin-bottom:14px}
-  .ttt{flex:1;text-align:center;border-radius:999px;padding:6px 0;font-size:13px}
+  /* Controles en una sola fila compacta: [All][-][+] ··· lupa · embudo · undo · redo */
+  .tx-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .frow{display:contents}
+  .tx-type-tabs{display:flex;background:var(--surface2);border-radius:999px;padding:2px;margin-bottom:0;flex:0 0 auto}
+  .ttt{flex:0 0 auto;text-align:center;border-radius:999px;padding:5px 11px;font-size:13px;line-height:1}
   .ttt.active{background:var(--surface);color:var(--txt);box-shadow:0 1px 3px rgba(0,0,0,.35)}
-  #tf-search{min-width:0!important;flex:1}
-  .tx-filter-toggle{display:flex;align-items:center;gap:5px;padding:7px 14px;background:var(--surface2);border:1px solid var(--line-soft);border-radius:999px;color:var(--txt2);font-size:13px;cursor:pointer;flex-shrink:0}
+  .ttt-full{display:none}
+  .ttt-short{display:inline;font-weight:700}
+  .ttt-neg .ttt-short{color:#E24B4A}
+  .ttt-pos .ttt-short{color:#5DCAA5}
+  .ttt-neg.active .ttt-short,.ttt-pos.active .ttt-short{color:var(--txt)}
+  .tx-search-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;margin-left:auto;background:var(--surface2);border:1px solid var(--line-soft);border-radius:999px;color:var(--txt2);cursor:pointer;flex-shrink:0}
+  #tf-search{display:none}
+  #tf-search.open{display:block;flex-basis:100%;min-width:0;order:9;margin-top:2px}
+  .tx-filter-toggle{display:flex;align-items:center;justify-content:center;padding:8px 11px;background:var(--surface2);border:1px solid var(--line-soft);border-radius:999px;color:var(--txt2);font-size:13px;cursor:pointer;flex-shrink:0}
+  .tf-lbl{display:none}
   #btn-undo,#btn-redo{flex-shrink:0}
   #tx-filters-extra{display:none}
-  #tx-filters-extra.open{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 4px}
+  #tx-filters-extra.open{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 4px;flex-basis:100%;order:10}
   .tx-table,.tx-table tbody{display:block}
   .tx-table thead{display:none}
   .tx-row{display:flex;align-items:center;gap:12px;padding:11px 10px;border-bottom:none;background:none;cursor:pointer;border-radius:12px;margin:0 -10px}

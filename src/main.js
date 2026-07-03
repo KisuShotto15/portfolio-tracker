@@ -2526,7 +2526,13 @@ window.toggleSidebar = toggleSidebar;
 window.showPage = showPage;
 function setTxTab(btn,val){ document.getElementById('tf-type').value=val; document.querySelectorAll('.ttt').forEach(function(b){b.classList.remove('active');}); btn.classList.add('active'); renderTx(); }
 function toggleTxFilters(){ document.getElementById('tx-filters-extra').classList.toggle('open'); }
-window.setTxTab=setTxTab; window.toggleTxFilters=toggleTxFilters;
+// Movil: la lupa despliega el campo de busqueda; al cerrarlo, limpia el filtro.
+function toggleTxSearch(){
+  var i=document.getElementById('tf-search');
+  if(i.classList.toggle('open')){ i.focus(); }
+  else if(i.value){ i.value=''; renderTx(); }
+}
+window.setTxTab=setTxTab; window.toggleTxFilters=toggleTxFilters; window.toggleTxSearch=toggleTxSearch;
 window.fetchRate = fetchRate;
 window.addTx = addTx;
 window.deleteTx = deleteTx;
