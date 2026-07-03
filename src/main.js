@@ -100,7 +100,7 @@ function ensureChart(){
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
 var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
-var _budMonth=null, _budLimitsOpen=false;
+var _budMonth=null, _budLimitsOpen=false, _budSig=null;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
@@ -1008,13 +1008,19 @@ function catIcon(cat){
 
 function loadMoreTx(){ _txLimit+=_txBase; renderTx(); }
 window.loadMoreTx=loadMoreTx;
+var _txRenderSig='';
 function renderTx(){
   var wrap=document.getElementById('tx-wrap');
-  populateTxMonth();
   var tF=document.getElementById('tf-type').value, cF=document.getElementById('tf-cat').value, wF=document.getElementById('tf-wallet').value, mF=document.getElementById('tf-month').value, sF=(document.getElementById('tf-search').value||'').toLowerCase().trim();
   // Reset pagination whenever the filter set changes (loadMoreTx keeps the same filters → no reset).
   var fSig=tF+'|'+cF+'|'+wF+'|'+mF+'|'+sF;
   if(fSig!==_txFilterSig){ _txLimit=_txBase; _txFilterSig=fSig; }
+  // Skip completo si nada que afecte la lista cambio: ordenar 2000 txs y re-parsear
+  // 200 filas de innerHTML costaba ~90ms por CADA vuelta a la tab en un telefono medio.
+  var rSig=fSig+'|'+_txLimit+'|'+(S.transactionsUpdatedAt||0)+'|'+S.transactions.length+'|'+(S.manualWalletsUpdatedAt||0)+'|'+localToday();
+  if(rSig===_txRenderSig) return;
+  _txRenderSig=rSig;
+  populateTxMonth();
   // Single pass: sort once, then one combined filter instead of 5 chained passes.
   var data=sortTx(S.transactions);
   if(tF||cF||wF||mF||sF){
@@ -1077,7 +1083,7 @@ function renderTx(){
     +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
 }
 
-function getMonths(){ var all=S.transactions.map(function(t){ return t.date.slice(0,7); }); var u=all.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
+function getMonths(){ var seen={}; S.transactions.forEach(function(t){ seen[t.date.slice(0,7)]=1; }); var u=Object.keys(seen).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
 function fmtMonthLabel(m){ var p=String(m).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ',', '); }
 function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
 function populateTxMonth(){
@@ -1166,7 +1172,16 @@ function investmentFlow(prevSnap, curSnap){
   var invIn=txs.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
   return {invOut:invOut,invIn:invIn};
 }
+// Memo: se llama ~5 veces por render del dashboard (KPIs actual+previo, health,
+// panel P&L) y cada computo es O(snapshots x txs). Invalida por timestamps+longitudes.
+var _pnlKey=null,_pnlVal=null;
 function getSnapshotPnL(){
+  var k=(S.transactionsUpdatedAt||0)+'|'+(S.snapshotsUpdatedAt||0)+'|'+S.transactions.length+'|'+(S.snapshots||[]).length;
+  if(_pnlVal&&_pnlKey===k) return _pnlVal;
+  _pnlKey=k; _pnlVal=_computeSnapshotPnL();
+  return _pnlVal;
+}
+function _computeSnapshotPnL(){
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(snaps.length<2) return [];
   var txById={}; (S.transactions||[]).forEach(function(t){ txById[t.id]=t; });
@@ -1774,6 +1789,7 @@ function renderMonthlyChart(){
   mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#209473',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#721414',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:15}}},y:{display:false}}}});
 }
 
+var _cChartSig=null;
 function renderCatChart(month){
   var cv=document.getElementById('chart-cat'); if(!cv||cv.offsetParent===null) return;
   if(!window.Chart){ ensureChart().then(function(){ renderCatChart(month); }).catch(function(){}); return; }
@@ -1785,10 +1801,16 @@ function renderCatChart(month){
   var leg=document.getElementById('cat-leg');
   if(!cats.length){
     if(cChart){ cChart.destroy(); cChart=null; }
+    _cChartSig=null;
     if(leg) leg.innerHTML='<span style="color:var(--color-text-secondary)">No expenses this month</span>';
     return;
   }
   if(leg) leg.innerHTML=cats.map(function(c,i){ return '<div class="bdg-leg-item"><i style="background:'+colors[i]+'"></i><span class="bdg-leg-name">'+c+'</span><span class="bdg-leg-val">$'+Math.round(vals[i]).toLocaleString('en-US')+'</span></div>'; }).join('');
+  // renderBudget reconstruye su innerHTML (canvas nuevo), pero si el canvas sigue
+  // vivo y los datos no cambiaron, no destruyas/recrees el chart (~20ms por visita).
+  var sig=month+'|'+JSON.stringify(vals)+'|'+cats.join(',');
+  if(sig===_cChartSig&&cChart&&cChart.canvas===cv) return;
+  _cChartSig=sig;
   if(cChart){ cChart.destroy(); cChart=null; }
   cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,spacing:2,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'72%'}});
 }
@@ -2156,7 +2178,9 @@ function renderBudget(){
   }
   html+='</div>';
 
-  document.getElementById('bud-wrap').innerHTML=html;
+  // Solo tocar el DOM si el HTML cambio: preserva el canvas del donut (su chart
+  // se salta el recreate via _cChartSig) y evita re-parsear la pagina entera.
+  if(html!==_budSig){ document.getElementById('bud-wrap').innerHTML=html; _budSig=html; }
   renderInsights(month);
   renderCatChart(month);
 }
@@ -2172,11 +2196,28 @@ function saveManualWallet(){
   save(); renderWallets(); populateWalletSelects();
 }
 
+// Balances de TODOS los trackers en una pasada, cacheados: antes cada
+// calcTrackerBal escaneaba las 2000 txs (con un find de wallet por tx) y se
+// llamaba por-wallet en health score, wallets y total.
+var _trkKey=null,_trkMap=null;
+function trackerTxBalances(){
+  var k=(S.transactionsUpdatedAt||0)+'|'+(S.manualWalletsUpdatedAt||0)+'|'+S.transactions.length;
+  if(_trkMap&&_trkKey===k) return _trkMap;
+  // mismo criterio que isTracker(): trackerOnly===true; 'Zelle' es tracker salvo
+  // que exista un manualWallet con ese nombre que diga lo contrario.
+  var trk={Zelle:true};
+  S.manualWallets.forEach(function(w){ trk[w.name]=w.trackerOnly===true; });
+  var map={};
+  S.transactions.forEach(function(t){
+    if(t.imported||!t.wallet||!trk[t.wallet]) return;
+    map[t.wallet]=(map[t.wallet]||0)+(t.type==='Credit'?1:-1)*t.amountUSD;
+  });
+  _trkKey=k; _trkMap=map;
+  return map;
+}
 function calcTrackerBal(name){
-  var txBal=0;
-  S.transactions.forEach(function(t){ if(t.wallet===name&&isTracker(t.wallet,t)) txBal+=(t.type==='Credit'?1:-1)*t.amountUSD; });
   var mw=S.manualWallets.find(function(w){ return w.name===name; });
-  return (mw?mw.balance:0)+txBal;
+  return (mw?mw.balance:0)+(trackerTxBalances()[name]||0);
 }
 
 window.refreshAllWallets=async function(){
