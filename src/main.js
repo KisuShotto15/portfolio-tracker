@@ -1076,8 +1076,10 @@ function populateTxMonth(){
   var months=getMonths().slice();
   var nowM=monthKey(new Date());
   if(months.indexOf(nowM)<0) months.unshift(nowM); // current month always selectable
-  sel.innerHTML='<option value="">All months</option>'+months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join('');
-  sel.value=cur; // preserve selection ("" → All months)
+  // Labels cortos ("Jul 2026") para que el filtro quepa en la fila compacta movil.
+  var shortM=function(m){ var p=m.split('-'); return new Date(+p[0],+p[1]-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'}); };
+  sel.innerHTML='<option value="">Month</option>'+months.map(function(m){ return '<option value="'+m+'">'+shortM(m)+'</option>'; }).join('');
+  sel.value=cur; // preserve selection ("" → all months)
 }
 
 // ── Dashboard helpers ──────────────────────────────────────────────────────
@@ -2314,7 +2316,7 @@ function populateWalletSelects(){
   ['tx-wallet','tf-wallet','rec-wallet'].forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
     var cur=el.value; var isF=id.startsWith('tf');
-    el.innerHTML=(isF?'<option value="">All wallets</option>':'')+names.map(function(n){ return '<option>'+n+'</option>'; }).join('');
+    el.innerHTML=(isF?'<option value="">Wallet</option>':'')+names.map(function(n){ return '<option>'+n+'</option>'; }).join('');
     if(cur) el.value=cur;
   });
 }

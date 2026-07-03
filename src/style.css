@@ -929,7 +929,8 @@ input::placeholder{color:var(--txt3)}
   .tf-lbl{display:none}
   #btn-undo,#btn-redo{flex-shrink:0}
   #tx-filters-extra{display:none}
-  #tx-filters-extra.open{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 4px;flex-basis:100%;order:10}
+  #tx-filters-extra.open{display:flex;flex-wrap:nowrap;gap:6px;padding:8px 0 4px;flex-basis:100%;order:10}
+  #tx-filters-extra select{flex:1 1 0;min-width:0;font-size:13px;padding:8px 10px}
   .tx-table,.tx-table tbody{display:block}
   .tx-table thead{display:none}
   .tx-row{display:flex;align-items:center;gap:12px;padding:11px 10px;border-bottom:none;background:none;cursor:pointer;border-radius:12px;margin:0 -10px}
