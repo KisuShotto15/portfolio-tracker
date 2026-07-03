@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, dueMonths } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
 
@@ -135,12 +135,12 @@ function setSyncStatus(state, msg){
 }
 
 var TOMBSTONE_TTL=90*24*60*60*1000; // 90d: by then every device has applied the deletion
-// Tx ids are timestamps; drop tombstones older than the TTL so the sync payload
-// doesn't grow without bound. Safe because the matching cloud tx is long gone.
+// Drop tombstones older than the TTL so the sync payload doesn't grow without
+// bound. Nuevos: por fecha de borrado (ts). Legacy: por fecha de creacion (id).
 function pruneTombstones(){
   if(!Array.isArray(S.deletedTxIds)||!S.deletedTxIds.length) return;
   var cut=Date.now()-TOMBSTONE_TTL;
-  S.deletedTxIds=S.deletedTxIds.filter(function(id){ return (parseInt(id,10)||0)>cut; });
+  S.deletedTxIds=S.deletedTxIds.filter(function(e){ var t=(e&&typeof e==='object')?e.ts:e; return (parseInt(t,10)||0)>cut; });
 }
 function saveLocal(){ pruneTombstones(); try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
 function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); }
@@ -200,9 +200,9 @@ async function pullFromCloud(quiet){
       var before=JSON.stringify(S); // detectar si el merge realmente cambia algo → evita re-render inutil cada 25s
       // Transactions: per-tx last-writer-wins merge
       if(cloud.transactions){
-        var mergedDeleted=new Set((S.deletedTxIds||[]).concat(cloud.deletedTxIds||[]));
-        S.deletedTxIds=Array.from(mergedDeleted);
-        S.transactions=mergeTxArrays(S.transactions,cloud.transactions,mergedDeleted);
+        var tombs=mergeTombstones(S.deletedTxIds,cloud.deletedTxIds);
+        S.transactions=mergeTxArrays(S.transactions,cloud.transactions,tombs);
+        S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
         S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
       }
       // Replace all other fields normally
@@ -313,11 +313,18 @@ function _bumpChangedUpdatedAt(prevTxs,newTxs){
 }
 // Cualquier tx que vuelve a existir tras un undo/redo NO debe seguir tombstoneada,
 // si no el merge (cliente/servidor) la filtra y el undo de un borrado se revierte solo.
-function _untombstoneExisting(){ if(!S.deletedTxIds||!S.deletedTxIds.length) return; var ids={}; S.transactions.forEach(function(t){ ids[t.id]=1; }); S.deletedTxIds=S.deletedTxIds.filter(function(id){ return !ids[id]; }); }
-function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function _untombstoneExisting(){ if(!S.deletedTxIds||!S.deletedTxIds.length) return; S.deletedTxIds=pruneRevokedTombstones(S.deletedTxIds,S.transactions); }
+// Toda tx que desaparecio en un undo/redo necesita tombstone fresco (ej. redo de un
+// borrado); sin el, la nube la trae de vuelta en el proximo pull.
+function _tombstoneMissing(prevTxs,newTxs){
+  var ids={}; newTxs.forEach(function(t){ ids[t.id]=1; });
+  if(!S.deletedTxIds) S.deletedTxIds=[];
+  prevTxs.forEach(function(t){ if(!ids[t.id]) S.deletedTxIds.push({id:t.id,ts:stamp()}); });
+}
+function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
-function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.transactions.forEach(function(t){ S.deletedTxIds.push(t.id); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
+function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return true; return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
@@ -752,7 +759,7 @@ function addTx(){
   closeTxForm();
 }
 
-function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push(id); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
+function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push({id:id,ts:stamp()}); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
 // ── Quick-add presets ──────────────────────────────────────────────────
 function renderPresets(){
@@ -1498,7 +1505,7 @@ function pruneRecurringLog(){
 function applyRecurring(){
   pruneRecurringLog();
   if(!Array.isArray(S.recurring)||!S.recurring.length) return;
-  var now=new Date(), added=[], deleted=new Set(S.deletedTxIds||[]);
+  var now=new Date(), added=[], deleted=new Set((S.deletedTxIds||[]).map(tombId));
   S.recurring.forEach(function(r){
     if(!r.amount||r.amount<=0||!r.dayOfMonth) return;
     dueMonths(r, now).forEach(function(d){
@@ -1926,7 +1933,7 @@ async function deleteSnapshot(id){
     var delLinked=linked&&await appConfirm('Delete linked transaction?',escHtml(linked.desc)+' <span style="color:#5DCAA5">'+fmtUSD(linked.amountUSD)+'</span>','Delete');
     if(delLinked){
       if(!S.deletedTxIds) S.deletedTxIds=[];
-      S.deletedTxIds.push(snap.txId);
+      S.deletedTxIds.push({id:snap.txId,ts:stamp()});
       S.transactions=S.transactions.filter(function(t){ return t.id!==snap.txId; });
       S.transactionsUpdatedAt=stamp();
     }

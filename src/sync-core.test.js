@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, dueMonths } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -56,7 +56,8 @@ describe('vesToUsd', () => {
 });
 
 describe('mergeTxArrays (per-tx last-writer-wins)', () => {
-  const del = (...ids) => new Set(ids);
+  // ids numericos = tombstones legacy (irrevocables), como antes del cambio
+  const del = (...ids) => ids;
 
   it('keeps cloud-only and local-only transactions', () => {
     const local = [{ id: 1, updatedAt: 5 }];
@@ -91,6 +92,46 @@ describe('mergeTxArrays (per-tx last-writer-wins)', () => {
   it('missing updatedAt counts as 0 (cloud wins)', () => {
     const m = mergeTxArrays([{ id: 1, desc: 'local' }], [{ id: 1, updatedAt: 1, desc: 'cloud' }], del());
     expect(m[0].desc).toBe('cloud');
+  });
+});
+
+describe('tombstones revocables (regresion: undo de un borrado)', () => {
+  it('BUG ORIGINAL: la tx restaurada por undo le gana al tombstone de la nube', () => {
+    // delete en T=100 (tombstone en la nube), undo en T=200 (tx local restaurada)
+    const cloudTombs = [{ id: 1, ts: 100 }];
+    const local = [{ id: 1, updatedAt: 200, desc: 'restaurada' }];
+    const tombs = mergeTombstones([], cloudTombs);
+    const merged = mergeTxArrays(local, [], tombs);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].desc).toBe('restaurada');
+    // y el tombstone revocado se elimina para no matarla en merges futuros
+    expect(pruneRevokedTombstones(tombs, merged)).toEqual([]);
+  });
+
+  it('un borrado mas nuevo que la ultima edicion SI mata la tx', () => {
+    const merged = mergeTxArrays([{ id: 1, updatedAt: 100 }], [], [{ id: 1, ts: 300 }]);
+    expect(merged).toEqual([]);
+  });
+
+  it('empate ts === updatedAt: gana el borrado (sin zombies)', () => {
+    expect(mergeTxArrays([{ id: 1, updatedAt: 100 }], [], [{ id: 1, ts: 100 }])).toEqual([]);
+  });
+
+  it('tombstone legacy (id numerico) mata siempre, aunque la tx sea nueva', () => {
+    expect(mergeTxArrays([{ id: 1, updatedAt: 9e15 }], [], [1])).toEqual([]);
+  });
+
+  it('mergeTombstones dedup por id conservando el ts mayor; legacy gana', () => {
+    expect(mergeTombstones([{ id: 1, ts: 100 }], [{ id: 1, ts: 300 }])).toEqual([{ id: 1, ts: 300 }]);
+    expect(mergeTombstones([{ id: 1, ts: 100 }], [1])).toEqual([1]);
+    expect(mergeTombstones([1], [{ id: 1, ts: 999 }])).toEqual([1]);
+  });
+
+  it('tombId/tombKills manejan ambos formatos', () => {
+    expect(tombId(5)).toBe(5);
+    expect(tombId({ id: 5, ts: 1 })).toBe(5);
+    expect(tombKills(5, { updatedAt: 9e15 })).toBe(true);
+    expect(tombKills({ id: 5, ts: 10 }, { updatedAt: 20 })).toBe(false);
   });
 });
 

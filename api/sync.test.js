@@ -52,3 +52,41 @@ describe('mergeDocs LWW generico por convencion', () => {
     expect(out.transactions.find(t => t.id === 2)).toBeTruthy();
   });
 });
+
+describe('mergeDocs tombstones revocables (undo de borrado)', () => {
+  const NOW = Date.now();
+
+  it('REGRESION: undo de un borrado sobrevive al merge autoritativo', () => {
+    // La nube tiene el tombstone del delete (ts) y ya no tiene la tx;
+    // el device hizo undo: manda la tx restaurada (updatedAt > ts) sin tombstone.
+    // ts realistas (stamp() ~ now): el prune de 90d corre antes del merge.
+    const cloud = { transactions: [], deletedTxIds: [{ id: NOW, ts: NOW - 2000 }] };
+    const inc = { transactions: [{ id: NOW, updatedAt: NOW - 1000, desc: 'restaurada' }], deletedTxIds: [] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.transactions).toHaveLength(1);
+    expect(out.transactions[0].desc).toBe('restaurada');
+    expect(out.deletedTxIds).toEqual([]); // tombstone revocado: no vuelve a matarla
+  });
+
+  it('un delete mas nuevo que la tx de la nube la elimina (y el tombstone queda)', () => {
+    const cloud = { transactions: [{ id: NOW, updatedAt: NOW - 1000 }], deletedTxIds: [] };
+    const inc = { transactions: [], deletedTxIds: [{ id: NOW, ts: NOW - 500 }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.transactions).toEqual([]);
+    expect(out.deletedTxIds).toEqual([{ id: NOW, ts: NOW - 500 }]);
+  });
+
+  it('un tombstone viejisimo (fuera del TTL de 90d) se poda y no mata', () => {
+    const cloud = { transactions: [{ id: NOW, updatedAt: NOW - 1000 }], deletedTxIds: [] };
+    const inc = { transactions: [], deletedTxIds: [{ id: NOW, ts: 300 }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.transactions).toHaveLength(1);
+    expect(out.deletedTxIds).toEqual([]);
+  });
+
+  it('tombstones legacy (numericos) siguen siendo irrevocables', () => {
+    const cloud = { transactions: [], deletedTxIds: [NOW] };
+    const inc = { transactions: [{ id: NOW, updatedAt: 9e15 }], deletedTxIds: [] };
+    expect(mergeDocs(cloud, inc).transactions).toEqual([]);
+  });
+});

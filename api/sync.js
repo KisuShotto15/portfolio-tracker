@@ -1,19 +1,46 @@
+// ── Tombstones (espejo del cliente en src/sync-core.js) ─────────────────────
+// Legacy: id numerico = borrado irrevocable. Nuevo: {id, ts} = borrado con
+// stamp; una tx restaurada por undo (updatedAt > ts) le gana al tombstone.
+export function tombId(e) { return (e && typeof e === 'object') ? e.id : e; }
+export function tombTs(e) { return (e && typeof e === 'object') ? (e.ts || 0) : null; }
+export function mergeTombstones(a, b) {
+  var by = {}, order = [];
+  (a || []).concat(b || []).forEach(function (e) {
+    var id = tombId(e);
+    if (!(id in by)) { by[id] = e; order.push(id); return; }
+    var pts = tombTs(by[id]), ets = tombTs(e);
+    if (pts === null) return;
+    if (ets === null || ets > pts) by[id] = e;
+  });
+  return order.map(function (id) { return by[id]; });
+}
+export function tombKills(e, tx) {
+  var ts = tombTs(e);
+  return ts === null || ts >= (tx.updatedAt || 0);
+}
+export function pruneRevokedTombstones(tombs, txs) {
+  var live = {};
+  txs.forEach(function (t) { live[t.id] = 1; });
+  return (tombs || []).filter(function (e) { return !live[tombId(e)]; });
+}
+
 // Per-transaction last-writer-wins merge (mirror of the client helper).
 // Cloud version of a tx wins unless the incoming side has a strictly higher updatedAt.
-export function mergeTxArrays(incomingTxs, cloudTxs, deletedSet) {
-  var incomingById = {};
-  incomingTxs.forEach(function (t) { if (!deletedSet.has(t.id)) incomingById[t.id] = t; });
-  var cloudById = {};
+export function mergeTxArrays(incomingTxs, cloudTxs, tombs) {
+  var tm = {};
+  (tombs || []).forEach(function (e) { tm[tombId(e)] = e; });
+  function killed(t) { var e = tm[t.id]; return e !== undefined && tombKills(e, t); }
+  var incomingById = {}, cloudById = {};
+  incomingTxs.forEach(function (t) { incomingById[t.id] = t; });
   cloudTxs.forEach(function (t) { cloudById[t.id] = t; });
   var merged = [];
   cloudTxs.forEach(function (t) {
-    if (deletedSet.has(t.id)) return;
     var inc = incomingById[t.id];
-    if (!inc) { merged.push(t); return; }
-    merged.push((inc.updatedAt || 0) > (t.updatedAt || 0) ? inc : t);
+    var win = (inc && (inc.updatedAt || 0) > (t.updatedAt || 0)) ? inc : t;
+    if (!killed(win)) merged.push(win);
   });
   incomingTxs.forEach(function (t) {
-    if (!cloudById[t.id] && !deletedSet.has(t.id)) merged.push(t);
+    if (!cloudById[t.id] && !killed(t)) merged.push(t);
   });
   return merged;
 }
@@ -27,12 +54,13 @@ export function mergeDocs(cloud, incoming) {
   incoming = incoming || {};
   var out = Object.assign({}, cloud, incoming);
 
-  // transactions: per-tx LWW + union of tombstones (pruned past 90d to cap growth)
-  var deletedSet = new Set((incoming.deletedTxIds || []).concat(cloud.deletedTxIds || []));
+  // transactions: per-tx LWW + tombstones revocables (prune 90d para acotar crecimiento)
   var tombCut = Date.now() - 90 * 24 * 60 * 60 * 1000;
-  out.deletedTxIds = Array.from(deletedSet).filter(function (id) { return (parseInt(id, 10) || 0) > tombCut; });
-  deletedSet = new Set(out.deletedTxIds);
-  out.transactions = mergeTxArrays(incoming.transactions || [], cloud.transactions || [], deletedSet);
+  // Prune: nuevos por fecha de borrado (ts), legacy por fecha de creacion (id).
+  var tombs = mergeTombstones(incoming.deletedTxIds, cloud.deletedTxIds)
+    .filter(function (e) { var t = (e && typeof e === 'object') ? e.ts : e; return (parseInt(t, 10) || 0) > tombCut; });
+  out.transactions = mergeTxArrays(incoming.transactions || [], cloud.transactions || [], tombs);
+  out.deletedTxIds = pruneRevokedTombstones(tombs, out.transactions);
   out.transactionsUpdatedAt = Math.max(incoming.transactionsUpdatedAt || 0, cloud.transactionsUpdatedAt || 0) || null;
 
   // Generic last-writer-wins by convention: ANY field with a sibling
