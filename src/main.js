@@ -770,7 +770,17 @@ function addTx(){
   closeTxForm();
 }
 
-function deleteTx(id){ snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; S.deletedTxIds.push({id:id,ts:stamp()}); S.transactions=S.transactions.filter(function(t){ return t.id!==id; }); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
+async function deleteTx(id){
+  var t=S.transactions.find(function(x){ return x.id===id; }); if(!t) return;
+  var amt=(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD);
+  var ok=await appConfirm('Delete transaction?',escHtml(t.desc)+' <span style="color:'+(t.type==='Credit'?'#5DCAA5':'#E24B4A')+'">'+amt+'</span>','Delete');
+  if(!ok) return;
+  snapshot(); // despues del confirm: cancelar no debe ensuciar el undo stack
+  if(!S.deletedTxIds) S.deletedTxIds=[];
+  S.deletedTxIds.push({id:id,ts:stamp()});
+  S.transactions=S.transactions.filter(function(x){ return x.id!==id; }); // por id: un sync durante el await no invalida el filtro
+  S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary();
+}
 
 // ── Quick-add presets ──────────────────────────────────────────────────
 function renderPresets(){
