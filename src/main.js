@@ -895,6 +895,11 @@ function openTxForm(){
   // then start the slide on the same tick — no deferred frames, so no perceived open delay.
   void panel.offsetHeight;
   panel.classList.add('open'); ov.classList.add('open');
+  // Web: enfoca la descripcion para escribir de una vez. En movil NO: abriria el
+  // teclado y taparia el form apenas se abre.
+  if(!editingTxId && window.matchMedia('(min-width:721px)').matches){
+    var _d=document.getElementById('tx-desc'); if(_d) _d.focus();
+  }
   _sheetPush('tx');
 }
 function closeTxForm(fromPop){
