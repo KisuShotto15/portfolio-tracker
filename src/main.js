@@ -1020,13 +1020,18 @@ var NOTE_ICONS=[
   { keywords:['netflix'], src:'/icon-netflix.png?v=1', zoom:1 },
   { keywords:['cashea'],   src:'/icon-cashea.png?v=1',   zoom:1 },
   { keywords:['movistar'], src:'/icon-movistar.png?v=1', zoom:1 },
+  { keywords:['digitel'],  src:'/icon-digitel.png?v=1',  zoom:1 },
+  { phrase:'mi super',     src:'/icon-misuper.png?v=1',  zoom:1.15 },
 ];
+// Matchea por palabra (keywords) o por frase/substring (phrase, para marcas de
+// varias palabras como "Mi Super").
 function noteIcon(desc){
   if(!desc) return null;
-  var words=desc.toLowerCase().split(/[\s,:]+/);
+  var low=desc.toLowerCase(), words=low.split(/[\s,:]+/);
   for(var i=0;i<NOTE_ICONS.length;i++){
     var ni=NOTE_ICONS[i];
-    if(words.some(function(w){ return ni.keywords.indexOf(w)>=0; })) return ni;
+    if(ni.phrase&&low.indexOf(ni.phrase)>=0) return ni;
+    if(ni.keywords&&words.some(function(w){ return ni.keywords.indexOf(w)>=0; })) return ni;
   }
   return null;
 }
@@ -2691,6 +2696,14 @@ if(!window._sheetBackListener){
     var wvOpen=document.getElementById('wv-form-panel').classList.contains('open');
     if(s==='tx'||txOpen) closeTxForm(true);
     else if(s==='wallet'||wvOpen) closeWalletForm(true);
+  });
+}
+// Web: ESC cierra el form de tx (nueva o edicion). Solo actua si esta abierto.
+if(!window._txEscListener){
+  window._txEscListener=true;
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Escape') return;
+    if(document.getElementById('tx-form-panel').classList.contains('open')) closeTxForm();
   });
 }
 // Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
