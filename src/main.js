@@ -1006,23 +1006,27 @@ var CAT_META={
 // Iconos personalizados por palabra clave de la nota (misma mecanica que el
 // autofill: se matchea contra las palabras de la nota). Pisan al icono de la
 // categoria en la lista de transacciones.
+// zoom: factor de escala del asset (1 = llena el marco tal cual; >1 recorta el
+// margen de logos con mucho aire alrededor, como el pato).
 var NOTE_ICONS=[
-  { keywords:['patodo'], src:'/icon-patodo.png?v=1' },
+  { keywords:['patodo'],  src:'/icon-patodo.png?v=1',  zoom:1.7 },
+  { keywords:['inter'],   src:'/icon-inter.png?v=1',   zoom:1 },
+  { keywords:['netflix'], src:'/icon-netflix.png?v=1', zoom:1 },
 ];
-function noteIconSrc(desc){
+function noteIcon(desc){
   if(!desc) return null;
   var words=desc.toLowerCase().split(/[\s,:]+/);
   for(var i=0;i<NOTE_ICONS.length;i++){
     var ni=NOTE_ICONS[i];
-    if(words.some(function(w){ return ni.keywords.indexOf(w)>=0; })) return ni.src;
+    if(words.some(function(w){ return ni.keywords.indexOf(w)>=0; })) return ni;
   }
   return null;
 }
 function txIcon(t){
-  var src=noteIconSrc(t.desc);
-  // Zoom 1.7x con recorte centrado: los logos suelen traer mucho margen alrededor.
-  if(src) return '<span class="cat-ico" style="background:transparent;border-radius:10px;overflow:hidden"><img src="'+src+'" style="width:61px;height:61px;margin:-12.5px;object-fit:cover"></span>';
-  return catIcon(t.category);
+  var ni=noteIcon(t.desc);
+  if(!ni) return catIcon(t.category);
+  var sz=Math.round(36*(ni.zoom||1)), m=(36-sz)/2;
+  return '<span class="cat-ico" style="background:transparent;border-radius:10px;overflow:hidden"><img src="'+ni.src+'" style="width:'+sz+'px;height:'+sz+'px;margin:'+m+'px;object-fit:cover"></span>';
 }
 function catIcon(cat){
   var m=CAT_META[cat]||{bg:'#252535',svg:''};
