@@ -1013,7 +1013,8 @@ var NOTE_ICONS=[
   { keywords:['patodo'],  src:'/icon-patodo.png?v=1',  zoom:1.7 },
   { keywords:['inter'],   src:'/icon-inter.png?v=1',   zoom:1 },
   { keywords:['netflix'], src:'/icon-netflix.png?v=1', zoom:1 },
-  { keywords:['cashea'],  src:'/icon-cashea.png?v=1',  zoom:1 },
+  { keywords:['cashea'],   src:'/icon-cashea.png?v=1',   zoom:1 },
+  { keywords:['movistar'], src:'/icon-movistar.png?v=1', zoom:1 },
 ];
 function noteIcon(desc){
   if(!desc) return null;
