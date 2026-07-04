@@ -1007,7 +1007,7 @@ var CAT_META={
 // autofill: se matchea contra las palabras de la nota). Pisan al icono de la
 // categoria en la lista de transacciones.
 var NOTE_ICONS=[
-  { keywords:['patodo'], src:'/icon-patodo.svg?v=1' },
+  { keywords:['patodo'], src:'/icon-patodo.png?v=1' },
 ];
 function noteIconSrc(desc){
   if(!desc) return null;
@@ -1020,7 +1020,8 @@ function noteIconSrc(desc){
 }
 function txIcon(t){
   var src=noteIconSrc(t.desc);
-  if(src) return '<span class="cat-ico" style="background:transparent"><img src="'+src+'" style="width:36px;height:36px;border-radius:10px;object-fit:cover"></span>';
+  // Zoom 1.7x con recorte centrado: los logos suelen traer mucho margen alrededor.
+  if(src) return '<span class="cat-ico" style="background:transparent;border-radius:10px;overflow:hidden"><img src="'+src+'" style="width:61px;height:61px;margin:-12.5px;object-fit:cover"></span>';
   return catIcon(t.category);
 }
 function catIcon(cat){
