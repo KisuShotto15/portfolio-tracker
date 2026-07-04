@@ -1003,6 +1003,26 @@ var CAT_META={
   'Savings':      {bg:'#0f3060', svg:'<rect x="1.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="7" cy="8" r="2.5"/><line x1="7" y1="8" x2="8.8" y2="6.5"/><line x1="12.5" y1="5.5" x2="14.5" y2="5.5"/><line x1="12.5" y1="10.5" x2="14.5" y2="10.5"/>'},
   'Emily':        {bg:'#3d1580', logo:'/logo-zelle.png?v=1'},
 };
+// Iconos personalizados por palabra clave de la nota (misma mecanica que el
+// autofill: se matchea contra las palabras de la nota). Pisan al icono de la
+// categoria en la lista de transacciones.
+var NOTE_ICONS=[
+  { keywords:['patodo'], src:'/icon-patodo.svg?v=1' },
+];
+function noteIconSrc(desc){
+  if(!desc) return null;
+  var words=desc.toLowerCase().split(/[\s,:]+/);
+  for(var i=0;i<NOTE_ICONS.length;i++){
+    var ni=NOTE_ICONS[i];
+    if(words.some(function(w){ return ni.keywords.indexOf(w)>=0; })) return ni.src;
+  }
+  return null;
+}
+function txIcon(t){
+  var src=noteIconSrc(t.desc);
+  if(src) return '<span class="cat-ico" style="background:transparent"><img src="'+src+'" style="width:36px;height:36px;border-radius:10px;object-fit:cover"></span>';
+  return catIcon(t.category);
+}
 function catIcon(cat){
   var m=CAT_META[cat]||{bg:'#252535',svg:''};
   var inner=m.logo?'<img src="'+m.logo+'" style="width:36px;height:36px;border-radius:10px;object-fit:cover">':'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>';
@@ -1062,7 +1082,7 @@ function renderTx(){
       var origM=orig?'<span class="td-orig-m">'+orig+'</span>':'';
       var mCol=isTrk?'var(--accent)':(t.type==='Credit'?'#5DCAA5':'var(--txt)');
       return '<tr class="tx-row '+txType+'" onclick="selectTxRow(this)">'
-        +'<td class="td-icon">'+catIcon(t.category)+'</td>'
+        +'<td class="td-icon">'+txIcon(t)+'</td>'
         +'<td class="td-desc" title="'+escHtml(t.desc)+'">'
         +  '<span class="td-desc-txt">'+escHtml(t.desc)+'</span>'
         +  '<span class="td-sub">'+sub+'</span>'
