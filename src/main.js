@@ -46,6 +46,7 @@ var AUTOFILL_RULES = [
   { keywords:['yummy','ridery','almuerzo','cena','desayuno','cafe','restaurante','arepera','pizzeria','hamburgesa','sushi','helado','postre'],                                                                      type:'Debit',  category:'Eating Out' },
   { keywords:['bybit','binance','okx','btc','eth','usdt','crypto','bitcoin','trezor','fondos','acciones','circle','crcl','invertido'],                                                                             type:'Debit',  category:'Investments' },
   { keywords:['ahorro','deployed','reserva','guardado','emergencia'],                                                                                                                                             type:'Debit',  category:'Savings' },
+  { keywords:['cashea'],                                                                                                                                                                                           type:'Debit',  category:'Home', currency:'VES', wallet:'Binance' },
 ];
 
 var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
@@ -1012,6 +1013,7 @@ var NOTE_ICONS=[
   { keywords:['patodo'],  src:'/icon-patodo.png?v=1',  zoom:1.7 },
   { keywords:['inter'],   src:'/icon-inter.png?v=1',   zoom:1 },
   { keywords:['netflix'], src:'/icon-netflix.png?v=1', zoom:1 },
+  { keywords:['cashea'],  src:'/icon-cashea.png?v=1',  zoom:1 },
 ];
 function noteIcon(desc){
   if(!desc) return null;
