@@ -1024,6 +1024,9 @@ var NOTE_ICONS=[
   { phrase:'mi super',     src:'/icon-misuper.png?v=1',  zoom:1.15 },
   { keywords:['botellon'], src:'/icon-botellon.png?v=1', zoom:1.15 },
   { keywords:['rio'],      src:'/icon-rio.png?v=1',      zoom:1 },
+  { keywords:['epa'],      src:'/icon-epa.png?v=1',      zoom:1.5 },
+  { keywords:['vamos'],    src:'/icon-vamos.png?v=1',    zoom:1 },
+  { keywords:['yummy'],    src:'/icon-yummy.png?v=1',    zoom:1.2 },
 ];
 // Matchea por palabra (keywords) o por frase/substring (phrase, para marcas de
 // varias palabras como "Mi Super").
