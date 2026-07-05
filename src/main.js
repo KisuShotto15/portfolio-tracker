@@ -785,8 +785,13 @@ async function deleteTx(id){
 }
 
 // ── Quick-add presets ──────────────────────────────────────────────────
+var _presetsSig=null;
 function renderPresets(){
   var wrap=document.getElementById('tx-presets'); if(!wrap) return;
+  // Solo reconstruir si cambiaron: corria en cada apertura del sheet, retrasando el primer frame
+  var sig=editingTxId?'edit':'p'+(S.presetsUpdatedAt||0)+'|'+(S.presets||[]).length;
+  if(sig===_presetsSig) return;
+  _presetsSig=sig;
   if(editingTxId){ wrap.innerHTML=''; return; }
   var sorted=(S.presets||[]).slice().sort(function(a,b){ return (b.uses||0)-(a.uses||0) || b.id-a.id; });
   var html=sorted.map(function(p){
@@ -865,7 +870,6 @@ function editTx(id){
   var btn=document.querySelector('.btn-add');
   btn.textContent='Confirm';
   var cancelBtn=document.getElementById('btn-cancel-edit'); if(cancelBtn) cancelBtn.style.display='';
-  document.getElementById('tx-desc').scrollIntoView({behavior:'smooth',block:'center'});
   openTxForm();
 }
 function cancelEditTx(){
@@ -887,6 +891,9 @@ function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(hist
 function txMsg(text){ var el=document.getElementById('tx-form-msg'); if(el) el.textContent=text||''; }
 function openTxForm(){
   txMsg('');
+  // Si el reset diferido del cierre anterior sigue pendiente, ejecutarlo ya
+  // (evita que borre lo que editTx/addTx acaban de poner en los campos).
+  if(_txResetTimer){ clearTimeout(_txResetTimer); _txResetTimer=null; if(!editingTxId) _resetTxFields(); }
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
   updateDateDisplay();
   renderPresets();
@@ -903,12 +910,11 @@ function openTxForm(){
   }
   _sheetPush('tx');
 }
-function closeTxForm(fromPop){
-  editingTxId=null;
+var _txResetTimer=null;
+function _resetTxFields(){
   var btn=document.querySelector('.btn-add'); if(btn) btn.textContent='Add';
   var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='none';
-  var today=localToday();
-  document.getElementById('tx-date').value=today;
+  document.getElementById('tx-date').value=localToday();
   document.getElementById('tx-desc').value='';
   setDefaultWallet();
   document.getElementById('tx-type').value='Debit';
@@ -917,10 +923,18 @@ function closeTxForm(fromPop){
   document.getElementById('tx-cur').value='USD';
   removeReceipt();
   toggleVesHint();
+  updateDateDisplay();
+}
+function closeTxForm(fromPop){
+  editingTxId=null;
+  // Arrancar el slide-out en el mismo tick del tap; el reset de campos (10+ escrituras
+  // DOM + recalc) se difiere a cuando el panel ya salio de pantalla.
   var _txp=document.getElementById('tx-form-panel');
   _txp.classList.remove('open'); _txp.style.bottom=''; _txp.style.maxHeight='';
   document.getElementById('tx-overlay').classList.remove('open');
   document.getElementById('fab-add').style.display='flex';
+  clearTimeout(_txResetTimer);
+  _txResetTimer=setTimeout(function(){ _txResetTimer=null; _resetTxFields(); },280);
   if(fromPop!==true) _sheetPop();
 }
 function openWalletForm(type){
