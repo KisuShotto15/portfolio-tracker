@@ -122,6 +122,18 @@ function stamp(){ _ts=nextStamp(_ts, Date.now()); return _ts; }
 function tsFields(){ return Object.keys(S).filter(function(k){ return /UpdatedAt$/.test(k); }); }
 // [dataField, timestampField] pares para LWW en pull (transactions va aparte via per-tx merge).
 function lwwPairs(){ return tsFields().filter(function(k){ return k!=='transactionsUpdatedAt'; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
+// Firma barata del estado para detectar si un pull cambio algo (reemplaza el
+// doble JSON.stringify(S) de cada 25s). Todo cambio sincronizado viene con un
+// timestamp (*UpdatedAt/*Updated/*FetchedAt) — invariante del sync — y las tx
+// se cubren con length + suma de updatedAt (un merge por-tx puede no mover
+// transactionsUpdatedAt).
+function stateSig(){
+  var a=S.transactions||[], sum=0;
+  for(var i=0;i<a.length;i++) sum+=(a[i].updatedAt||0);
+  var sig='t'+a.length+':'+sum;
+  for(var k in S){ if(/(?:UpdatedAt|Updated|FetchedAt)$/.test(k)) sig+=';'+k+'='+S[k]; }
+  return sig;
+}
 function seedClock(o){
   if(!o) return;
   var m=maxObservedStamp(o,tsFields()); if(m>_ts) _ts=m;
@@ -144,7 +156,26 @@ function pruneTombstones(){
   var cut=Date.now()-TOMBSTONE_TTL;
   S.deletedTxIds=S.deletedTxIds.filter(function(e){ var t=(e&&typeof e==='object')?e.ts:e; return (parseInt(t,10)||0)>cut; });
 }
-function saveLocal(){ pruneTombstones(); try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
+// Persistencia diferida: serializar S completo a localStorage en cada edicion
+// competia con las animaciones. La escritura corre en idle; flush al ocultar la
+// pagina (asi es como muere una PWA en movil). El push a la nube lee S en
+// memoria, no localStorage — el sync no depende de esto.
+var _slHandle=null,_slIdle=false,_slDisabled=false;
+function _saveLocalNow(){ pruneTombstones(); try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
+function saveLocal(){
+  if(_slDisabled||_slHandle!=null) return;
+  var run=function(){ _slHandle=null; _saveLocalNow(); };
+  if(typeof requestIdleCallback==='function'){ _slIdle=true; _slHandle=requestIdleCallback(run,{timeout:800}); }
+  else { _slIdle=false; _slHandle=setTimeout(run,150); }
+}
+function flushSaveLocal(){
+  if(_slHandle==null) return;
+  if(_slIdle){ try{ cancelIdleCallback(_slHandle); }catch(e){} } else clearTimeout(_slHandle);
+  _slHandle=null;
+  if(!_slDisabled) _saveLocalNow();
+}
+window.addEventListener('pagehide',flushSaveLocal);
+document.addEventListener('visibilitychange',function(){ if(document.hidden) flushSaveLocal(); });
 function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); }
 
 // mergeTxArrays / dueMonths / vesToUsd / localFieldWins / maxObservedStamp / nextStamp
@@ -199,7 +230,7 @@ async function pullFromCloud(quiet){
     if(res.data){
       var cloud=res.data;
       seedClock(cloud); // advance our logical clock past anything the cloud has seen
-      var before=JSON.stringify(S); // detectar si el merge realmente cambia algo → evita re-render inutil cada 25s
+      var before=stateSig(); // detectar si el merge realmente cambia algo → evita re-render inutil cada 25s
       // Transactions: per-tx last-writer-wins merge
       if(cloud.transactions){
         var tombs=mergeTombstones(S.deletedTxIds,cloud.deletedTxIds);
@@ -217,8 +248,8 @@ async function pullFromCloud(quiet){
         if(localFieldWins(cloud[p[1]], S[p[1]])){ delete rest[p[0]]; delete rest[p[1]]; }
       });
       S=Object.assign({},S,rest);
-      _pullChanged=(JSON.stringify(S)!==before);
-      saveLocal();
+      _pullChanged=(stateSig()!==before);
+      if(_pullChanged) saveLocal();
       if(!quiet) setSyncStatus('synced','Synced');
       return true;
     }
@@ -302,7 +333,10 @@ async function forcePush(){
   await pushToCloud();
 }
 
-function snapshot(){ undoStack.push(JSON.stringify(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
+// structuredClone captura el snapshot mas rapido que stringify+parse (sigue siendo
+// sincrono: debe copiar ANTES de la mutacion). Cada entrada del stack se usa una vez.
+var _cloneTxs=(typeof structuredClone==='function')?structuredClone:function(a){ return JSON.parse(JSON.stringify(a)); };
+function snapshot(){ undoStack.push(_cloneTxs(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
 // Marca con updatedAt fresco solo las tx que el undo/redo realmente cambio, para que
 // gane el merge last-writer-wins contra la nube (si no, la nube revierte el undo).
 function _bumpChangedUpdatedAt(prevTxs,newTxs){
@@ -323,8 +357,8 @@ function _tombstoneMissing(prevTxs,newTxs){
   if(!S.deletedTxIds) S.deletedTxIds=[];
   prevTxs.forEach(function(t){ if(!ids[t.id]) S.deletedTxIds.push({id:t.id,ts:stamp()}); });
 }
-function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(undoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(JSON.stringify(S.transactions)); S.transactions=JSON.parse(redoStack.pop()); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(_cloneTxs(S.transactions)); S.transactions=undoStack.pop(); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(_cloneTxs(S.transactions)); S.transactions=redoStack.pop(); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
@@ -2567,7 +2601,7 @@ function importJSON(file){
   reader.readAsText(file);
 }
 
-function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ localStorage.removeItem('ft13'); location.reload(); } }
+function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ _slDisabled=true; flushSaveLocal(); localStorage.removeItem('ft13'); location.reload(); } }
 
 var _pageInTimer=null;
 function showPage(id,btn,arg){

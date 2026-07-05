@@ -1053,6 +1053,9 @@ input::placeholder{color:var(--txt3)}
   .wico{width:22px;height:22px;border-radius:6px}
   .wico svg{width:10px;height:10px}
   .badge-t{font-size:10px;padding:1.5px 5px;margin-left:3px}
+  /* Listas largas fuera de tx: no pintar filas fuera del viewport */
+  .wm-row,.snap-row{content-visibility:auto;contain-intrinsic-size:auto 64px}
+  .wv-row{content-visibility:auto;contain-intrinsic-size:auto 120px}
 }
 
 @media(min-width:721px){
