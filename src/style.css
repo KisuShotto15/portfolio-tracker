@@ -92,11 +92,16 @@ input,select,textarea,button{font-family:inherit}
 @keyframes page-in{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}
 
 /* ───────── Skeleton shimmer (async loads) ───────── */
-@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Shimmer con transform (compositor-only): animar background-position forzaba paint continuo */
+@keyframes shimmer{to{transform:translateX(200%)}}
 .skeleton{
-  background:linear-gradient(90deg,var(--surface) 25%,rgba(255,255,255,.07) 50%,var(--surface) 75%);
-  background-size:200% 100%;animation:shimmer 1.3s ease-in-out infinite;
+  position:relative;overflow:hidden;background:var(--surface);
   border-radius:7px;color:transparent!important;user-select:none;pointer-events:none;
+}
+.skeleton::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);
+  transform:translateX(-200%);animation:shimmer 1.3s ease-in-out infinite;
 }
 
 /* Page header (title + control) */
@@ -1072,24 +1077,38 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
 /* Page switch: la anima .page-in (.14s, definida arriba). No poner animation en
    .page.active: por venir despues en el stylesheet pisaria la version rapida. */
 
-/* Dashboard sections + cards rise in with a light stagger */
+/* Dashboard sections + cards rise in with a light stagger.
+   Scoped a .page-in (JS la quita ~700ms tras el cambio de tab): los re-renders
+   por sync/ediciones ya no re-disparan estas animaciones en cada tick. */
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-.dash-grid > div,.tool-card,.wm-group,.bdg-cat,.hld-list,.hld-top,.bdg-top,.wm-hero,.fc{
+.page-in .dash-grid > div,.page-in .tool-card,.page-in .wm-group,.page-in .bdg-cat,.page-in .hld-list,.page-in .hld-top,.page-in .bdg-top,.page-in .wm-hero,.page-in .fc{
   animation:fadeUp .42s cubic-bezier(.22,.61,.36,1) both;
 }
-.dash-grid > div:nth-child(2){animation-delay:.05s}
-.dash-grid > div:nth-child(3){animation-delay:.1s}
-.dash-grid > div:nth-child(4){animation-delay:.15s}
-.dash-grid > div:nth-child(5){animation-delay:.2s}
-.bdg-cat:nth-child(2){animation-delay:.04s}
-.bdg-cat:nth-child(3){animation-delay:.08s}
-.bdg-cat:nth-child(4){animation-delay:.12s}
+.page-in .dash-grid > div:nth-child(2){animation-delay:.05s}
+.page-in .dash-grid > div:nth-child(3){animation-delay:.1s}
+.page-in .dash-grid > div:nth-child(4){animation-delay:.15s}
+.page-in .dash-grid > div:nth-child(5){animation-delay:.2s}
+.page-in .bdg-cat:nth-child(2){animation-delay:.04s}
+.page-in .bdg-cat:nth-child(3){animation-delay:.08s}
+.page-in .bdg-cat:nth-child(4){animation-delay:.12s}
 
 /* Progress / allocation bars grow from the left on render (scaleX → GPU, radius intact at rest) */
 @keyframes barGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-.hb-fill,.goal-bar i,.bdg-pf,.hld-bar i{
-  transform-origin:left center;
+.hb-fill,.goal-bar i,.bdg-pf,.hld-bar i{transform-origin:left center}
+.page-in .hb-fill,.page-in .goal-bar i,.page-in .bdg-pf,.page-in .hld-bar i{
   animation:barGrow .65s cubic-bezier(.22,.61,.36,1) both;
+}
+
+/* Movil: entradas mas cortas y sin stagger (menos frames animando a la vez),
+   y sin backdrop blur en modales (efecto mas caro en GPU movil; el fondo ya es 98% opaco) */
+@media(max-width:720px){
+  .page-in .dash-grid > div,.page-in .tool-card,.page-in .wm-group,.page-in .bdg-cat,.page-in .hld-list,.page-in .hld-top,.page-in .bdg-top,.page-in .wm-hero,.page-in .fc{
+    animation-duration:.22s;
+  }
+  /* :nth-child(n) iguala la especificidad de las reglas de stagger para anularlas */
+  .page-in .dash-grid > div:nth-child(n),.page-in .bdg-cat:nth-child(n){animation-delay:0s}
+  .page-in .hb-fill,.page-in .goal-bar i,.page-in .bdg-pf,.page-in .hld-bar i{animation-duration:.4s}
+  .app-modal{backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 
 /* ───────────────── Custom <select> dropdown (all selects) ─────────────────

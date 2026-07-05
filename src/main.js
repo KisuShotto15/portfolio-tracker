@@ -2555,6 +2555,7 @@ function importJSON(file){
 
 function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ localStorage.removeItem('ft13'); location.reload(); } }
 
+var _pageInTimer=null;
 function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
@@ -2563,6 +2564,10 @@ function showPage(id,btn,arg){
   var target=document.getElementById('page-'+id);
   // Restart the cheap CSS enter animation each navigation (no View Transition snapshot cost).
   target.classList.remove('page-in'); void target.offsetWidth; target.classList.add('active','page-in');
+  // Quitar page-in al terminar las animaciones de entrada: los re-renders por
+  // sync/ediciones (innerHTML nuevo) ya no re-disparan fadeUp/barGrow en cada tick.
+  clearTimeout(_pageInTimer);
+  _pageInTimer=setTimeout(function(){ target.classList.remove('page-in'); },700);
   document.querySelectorAll('.nb[onclick*="\''+id+'\'"],#mob-settings-btn[onclick*="\''+id+'\'"]').forEach(function(b){ b.classList.add('active'); });
   if(btn) btn.classList.add('active');
   // Reflect the tab in the URL WITHOUT stacking history entries, so the back
