@@ -914,6 +914,14 @@ function setDefaultWallet(){
   for(var i=0;i<ws.options.length;i++){ if(ws.options[i].value==='Binance'){ ws.value='Binance'; return; } }
   ws.value='';
 }
+// Web: en Chromium desktop, clickear el texto de un input[type=date] solo enfoca un
+// segmento — el picker nativo solo abre sobre el icono (borde derecho). showPicker()
+// abre el calendario desde cualquier punto del recuadro. En movil el tap ya funciona.
+window.openTxDatePicker=function(){
+  if(!window.matchMedia('(min-width:721px)').matches) return;
+  var i=document.getElementById('tx-date'); if(!i) return;
+  try{ i.showPicker(); }catch(e){ i.focus(); }
+};
 function updateDateDisplay(){
   var i=document.getElementById('tx-date'), d=document.getElementById('tx-date-display'); if(!i||!d) return;
   var v=i.value; if(!v){ d.textContent=''; return; }
