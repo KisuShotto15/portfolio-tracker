@@ -1079,11 +1079,12 @@ var NOTE_ICONS=[
   { keywords:['movistar'], src:'/icon-movistar.png?v=1', zoom:1 },
   { keywords:['digitel'],  src:'/icon-digitel.png?v=1',  zoom:1 },
   { phrase:'mi super',     src:'/icon-misuper.png?v=1',  zoom:1.15 },
-  { keywords:['botellon'], src:'/icon-botellon.png?v=1', zoom:1.15 },
+  { keywords:['botellon'], src:'/icon-botellon.png?v=2', zoom:1.02 },
   { keywords:['rio'],      src:'/icon-rio.png?v=1',      zoom:1 },
   { keywords:['epa'],      src:'/icon-epa.png?v=1',      zoom:1.5 },
   { keywords:['vamos'],    src:'/icon-vamos.png?v=1',    zoom:1 },
   { keywords:['yummy'],    src:'/icon-yummy.png?v=1',    zoom:1 },
+  { keywords:['claude'],   src:'/icon-claude.png?v=1',   zoom:1 },
 ];
 // Matchea por palabra (keywords) o por frase/substring (phrase, para marcas de
 // varias palabras como "Mi Super").
