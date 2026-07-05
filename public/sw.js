@@ -1,4 +1,4 @@
-const CACHE = 'portfolio-v8';
+const CACHE = 'portfolio-v9';
 
 // Precache the app shell + hashed JS/CSS on install, reading the asset URLs out
 // of index.html. This guarantees offline works even on the first load after a
@@ -15,6 +15,14 @@ self.addEventListener('install', e => {
           .map(m => m[1]).filter(u => u.startsWith('/'));
         // Chart.js is lazy-loaded (not in the HTML), so precache it explicitly for offline.
         urls.push('/chart.umd.js?v=4.4.1');
+        // Self-hosted fonts (referenced from CSS, not the HTML): precache so the
+        // first cold open renders text without a network round-trip.
+        urls.push(
+          '/fonts/instrumentsans-latin.woff2',
+          '/fonts/instrumentsans-latin-ext.woff2',
+          '/fonts/splinesansmono-latin.woff2',
+          '/fonts/splinesansmono-latin-ext.woff2'
+        );
         await Promise.all(urls.map(u => cache.add(u).catch(() => {})));
       }
     } catch (err) { /* offline at install — runtime caching will fill in */ }

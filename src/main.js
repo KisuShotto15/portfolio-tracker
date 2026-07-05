@@ -264,10 +264,24 @@ async function pullFromCloud(quiet){
 }
 
 // Re-render the surfaces that a fresh cloud pull can change.
+function _activePageId(){
+  var p=document.querySelector('.page.active'); return p?p.id.replace(/^page-/,''):'';
+}
+// Re-render solo la tab activa tras un pull. showPage ya re-renderiza al entrar
+// a cualquier tab, asi que reconstruir las inactivas es trabajo DOM/charts para
+// nada. updateRateUI y populateWalletSelects son globales (barra de rate + selects
+// del form) y baratos, asi que se corren siempre.
 function afterPull(){
-  populateWalletSelects(); updateRateUI(); renderTx(); renderSummary(); renderWallets(); renderBdvLimits();
-  // Budget solo se re-renderiza al navegar; si es la page activa, refrescala tambien.
-  var pb=document.getElementById('page-budget'); if(pb&&pb.classList.contains('active')) renderBudget();
+  populateWalletSelects(); updateRateUI();
+  switch(_activePageId()){
+    case 'transactions': renderTx(); break;
+    case 'summary': renderSummary(); break;
+    case 'budget': renderBudget(); break;
+    case 'wallets': renderWallets(); break;
+    case 'holdings': renderOnchainWallets(); renderWalletHoldings(); break;
+    case 'tools': renderBdvLimits(); break;
+    case 'history': renderHistory(window._historyView||'snapshots'); break;
+  }
 }
 
 // Background pull so an open, focused tab reflects edits from other devices
