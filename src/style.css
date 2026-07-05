@@ -1069,9 +1069,8 @@ input::placeholder{color:var(--txt3)}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
 
 /* ───────────────── Entrance animations ───────────────── */
-/* Page switch: subtle fade + lift. transform/opacity only → compositor-only, no layout. */
-@keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.page.active{animation:pageIn .32s cubic-bezier(.22,.61,.36,1) both}
+/* Page switch: la anima .page-in (.14s, definida arriba). No poner animation en
+   .page.active: por venir despues en el stylesheet pisaria la version rapida. */
 
 /* Dashboard sections + cards rise in with a light stagger */
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}

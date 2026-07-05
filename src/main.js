@@ -100,7 +100,8 @@ function ensureChart(){
 }
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
 var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
-var _txLimit=200, _txBase=200, _txFilterSig=''; // tx list pagination state
+var _txLimit=60, _txBase=60, _txFilterSig=''; // tx list pagination state
+var _txData=null, _txDayTotals=null; // cache del ultimo filtrado para append incremental
 var _budMonth=null, _budLimitsOpen=false, _budSig=null;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
@@ -1044,15 +1045,92 @@ function txIcon(t){
   var ni=noteIcon(t.desc);
   if(!ni) return catIcon(t.category);
   var sz=Math.round(36*(ni.zoom||1)), m=(36-sz)/2;
-  return '<span class="cat-ico" style="background:transparent;border-radius:10px;overflow:hidden"><img src="'+ni.src+'" style="width:'+sz+'px;height:'+sz+'px;margin:'+m+'px;object-fit:cover"></span>';
+  return '<span class="cat-ico" style="background:transparent;border-radius:10px;overflow:hidden"><img src="'+ni.src+'" width="'+sz+'" height="'+sz+'" loading="lazy" decoding="async" style="width:'+sz+'px;height:'+sz+'px;margin:'+m+'px;object-fit:cover"></span>';
 }
 function catIcon(cat){
   var m=CAT_META[cat]||{bg:'#252535',svg:''};
-  var inner=m.logo?'<img src="'+m.logo+'" style="width:36px;height:36px;border-radius:10px;object-fit:cover">':'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>';
+  var inner=m.logo?'<img src="'+m.logo+'" width="36" height="36" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:10px;object-fit:cover">':'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>';
   return '<span class="cat-ico" style="background:'+(m.logo?'transparent':m.bg)+'">'+inner+'</span>';
 }
 
-function loadMoreTx(){ _txLimit+=_txBase; renderTx(); }
+function fmtDateHdr(d){
+  var today=localToday();
+  var yd=new Date(); yd.setDate(yd.getDate()-1);
+  var yest=yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
+  return d===today?'Today':d===yest?'Yesterday':new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+function txSepHtml(date){
+  var dayTotal=(_txDayTotals&&_txDayTotals[date])||0;
+  return '<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
+}
+function txRowHtml(t){
+  var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
+  var isTrk=isTracker(t.wallet,t);
+  var trk=isTrk?'<span class="badge-t">tracker</span>':'';
+  var wTag=t.wallet==='Binance'?'tBinance':'tX';
+  var txType=isTrk?'tx-tracker':(t.type==='Debit'?'tx-debit':'tx-credit');
+  var sub=escHtml(t.wallet||'')+(t.category?' · '+escHtml(t.category):'');
+  var origM=orig?'<span class="td-orig-m">'+orig+'</span>':'';
+  var mCol=isTrk?'var(--accent)':(t.type==='Credit'?'#5DCAA5':'var(--txt)');
+  return '<tr class="tx-row '+txType+'" onclick="selectTxRow(this)">'
+    +'<td class="td-icon">'+txIcon(t)+'</td>'
+    +'<td class="td-desc" title="'+escHtml(t.desc)+'">'
+    +  '<span class="td-desc-txt">'+escHtml(t.desc)+'</span>'
+    +  '<span class="td-sub">'+sub+'</span>'
+    +'</td>'
+    +'<td class="td-wallet"><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td>'
+    +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
+    +'<td class="td-orig">'+orig+'</td>'
+    +'<td class="td-amt">'
+    +  '<span class="td-amt-val td-amt-mob" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
+    +  '<span class="td-amt-val td-amt-desk" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
+    +  origM
+    +'</td>'
+    +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" width="28" height="28" loading="lazy" decoding="async" title="Factura" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
+  +'</tr>';
+}
+// prevDate: fecha de la ultima fila ya en el DOM — evita duplicar el separador cuando un dia cruza el limite de pagina
+function buildTxRows(list,prevDate){
+  var out='';
+  for(var i=0;i<list.length;i++){
+    var t=list[i];
+    if(t.date!==prevDate){ out+=txSepHtml(t.date); prevDate=t.date; }
+    out+=txRowHtml(t);
+  }
+  return out;
+}
+function txMoreHtml(){
+  var remaining=_txData.length-Math.min(_txLimit,_txData.length);
+  return remaining>0?'<button class="btn btns" onclick="loadMoreTx()">Mostrar '+Math.min(_txBase,remaining)+' mas · '+remaining+' restantes</button>':'';
+}
+function txRSig(fSig){ return fSig+'|'+_txLimit+'|'+(S.transactionsUpdatedAt||0)+'|'+S.transactions.length+'|'+(S.manualWalletsUpdatedAt||0)+'|'+localToday(); }
+// Autocarga: cuando el boton "Mostrar mas" se acerca al viewport, carga la siguiente pagina solo.
+var _txMoreObs=null;
+function watchTxMore(){
+  if(!('IntersectionObserver' in window)) return;
+  if(!_txMoreObs) _txMoreObs=new IntersectionObserver(function(es){ for(var i=0;i<es.length;i++){ if(es[i].isIntersecting){ loadMoreTx(); break; } } },{rootMargin:'700px'});
+  _txMoreObs.disconnect();
+  var el=document.getElementById('tx-more');
+  if(el) _txMoreObs.observe(el);
+}
+// Append incremental: agrega solo las filas nuevas al tbody en vez de reconstruir todo el innerHTML
+// (reconstruir 200+ filas en pleno scroll era el jank principal en movil).
+function loadMoreTx(){
+  var tbody=document.querySelector('#tx-wrap .tx-table tbody');
+  if(!tbody||!_txData){ _txLimit+=_txBase; renderTx(); return; }
+  var prev=Math.min(_txLimit,_txData.length);
+  if(prev>=_txData.length) return;
+  _txLimit+=_txBase;
+  var chunk=_txData.slice(prev,_txLimit);
+  tbody.insertAdjacentHTML('beforeend',buildTxRows(chunk,prev>0?_txData[prev-1].date:''));
+  var more=document.getElementById('tx-more');
+  if(more){
+    var h=txMoreHtml();
+    if(h){ more.innerHTML=h; } else { if(_txMoreObs) _txMoreObs.disconnect(); more.remove(); }
+  }
+  _txRenderSig=txRSig(_txFilterSig);
+  watchTxMore();
+}
 window.loadMoreTx=loadMoreTx;
 var _txRenderSig='';
 function renderTx(){
@@ -1062,8 +1140,8 @@ function renderTx(){
   var fSig=tF+'|'+cF+'|'+wF+'|'+mF+'|'+sF;
   if(fSig!==_txFilterSig){ _txLimit=_txBase; _txFilterSig=fSig; }
   // Skip completo si nada que afecte la lista cambio: ordenar 2000 txs y re-parsear
-  // 200 filas de innerHTML costaba ~90ms por CADA vuelta a la tab en un telefono medio.
-  var rSig=fSig+'|'+_txLimit+'|'+(S.transactionsUpdatedAt||0)+'|'+S.transactions.length+'|'+(S.manualWalletsUpdatedAt||0)+'|'+localToday();
+  // filas de innerHTML costaba ~90ms por CADA vuelta a la tab en un telefono medio.
+  var rSig=txRSig(fSig);
   if(rSig===_txRenderSig) return;
   _txRenderSig=rSig;
   populateTxMonth();
@@ -1079,54 +1157,22 @@ function renderTx(){
       return true;
     });
   }
-  if(!data.length){ wrap.innerHTML=emptyState('No transactions yet','Use the + button to add your first transaction'); return; }
-  var totalDebits=data.reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
-  // Only build DOM for the first _txLimit rows; the rest load on demand (keeps innerHTML small).
+  if(!data.length){ _txData=null; wrap.innerHTML=emptyState('No transactions yet','Use the + button to add your first transaction'); return; }
+  // Totales por dia sobre TODO el filtrado (no solo lo visible): el header de un dia
+  // que cruza el limite de pagina muestra el total completo desde el principio.
+  var dayTotals={}, totalDebits=0;
+  data.forEach(function(t){
+    if(t.type==='Debit'&&inSummary(t)){ totalDebits+=t.amountUSD; dayTotals[t.date]=(dayTotals[t.date]||0)+t.amountUSD; }
+  });
+  _txData=data; _txDayTotals=dayTotals;
+  // Only build DOM for the first _txLimit rows; the rest auto-load on scroll (keeps innerHTML small).
   var shown=data.length>_txLimit?data.slice(0,_txLimit):data;
-  // Group by date — single table with separator rows so columns stay aligned
-  var groups={}, groupOrder=[];
-  shown.forEach(function(t){ if(!groups[t.date]){ groups[t.date]=[]; groupOrder.push(t.date); } groups[t.date].push(t); });
-  function fmtDateHdr(d){
-    var today=localToday();
-    var yd=new Date(); yd.setDate(yd.getDate()-1);
-    var yest=yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
-    return d===today?'Today':d===yest?'Yesterday':new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-  }
-  var rows=groupOrder.map(function(date){
-    var dayTotal=groups[date].reduce(function(s,t){ return s+(t.type==='Debit'&&inSummary(t)?t.amountUSD:0); },0);
-    var sep='<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
-    var txRows=groups[date].map(function(t){
-      var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
-      var isTrk=isTracker(t.wallet,t); var col=isTrk?'#a78bfa':(t.type==='Credit'?'#5DCAA5':'#E24B4A');
-      var trk=isTrk?'<span class="badge-t">tracker</span>':'';
-      var wTag=t.wallet==='Binance'?'tBinance':'tX';
-      var txType=isTrk?'tx-tracker':(t.type==='Debit'?'tx-debit':'tx-credit');
-      var sub=escHtml(t.wallet||'')+(t.category?' · '+escHtml(t.category):'');
-      var origM=orig?'<span class="td-orig-m">'+orig+'</span>':'';
-      var mCol=isTrk?'var(--accent)':(t.type==='Credit'?'#5DCAA5':'var(--txt)');
-      return '<tr class="tx-row '+txType+'" onclick="selectTxRow(this)">'
-        +'<td class="td-icon">'+txIcon(t)+'</td>'
-        +'<td class="td-desc" title="'+escHtml(t.desc)+'">'
-        +  '<span class="td-desc-txt">'+escHtml(t.desc)+'</span>'
-        +  '<span class="td-sub">'+sub+'</span>'
-        +'</td>'
-        +'<td class="td-wallet"><span class="tag '+wTag+'">'+escHtml(t.wallet||'-')+'</span>'+trk+'</td>'
-        +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
-        +'<td class="td-orig">'+orig+'</td>'
-        +'<td class="td-amt">'
-        +  '<span class="td-amt-val td-amt-mob" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
-        +  '<span class="td-amt-val td-amt-desk" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
-        +  origM
-        +'</td>'
-        +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" title="Factura" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
-      +'</tr>';
-    }).join('');
-    return sep+txRows;
-  }).join('');
-  var remaining=data.length-shown.length;
-  var moreBtn=remaining>0?'<div style="text-align:center;margin-top:18px"><button class="btn btns" onclick="loadMoreTx()">Mostrar '+Math.min(_txBase,remaining)+' mas · '+remaining+' restantes</button></div>':'';
+  var rows=buildTxRows(shown,'');
+  var moreBtn=txMoreHtml();
   wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+moreBtn;
+    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +(moreBtn?'<div id="tx-more" style="text-align:center;margin-top:18px">'+moreBtn+'</div>':'');
+  watchTxMore();
 }
 
 function getMonths(){ var seen={}; S.transactions.forEach(function(t){ seen[t.date.slice(0,7)]=1; }); var u=Object.keys(seen).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
