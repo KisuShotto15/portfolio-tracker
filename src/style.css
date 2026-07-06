@@ -936,7 +936,9 @@ input::placeholder{color:var(--txt3)}
   .fab-add{right:18px;bottom:calc(78px + env(safe-area-inset-bottom))}
   /* Transaction mobile redesign */
   .rbar{display:none}
-  .tx-mob-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .tx-mob-hdr{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-bottom:14px}
+  .tx-mob-hdr-bcv{justify-self:center}
+  .tx-mob-hdr-int{justify-self:end}
   /* Controles en una sola fila compacta: [All][-][+] ··· lupa · embudo · undo · redo */
   .tx-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
   .frow{display:contents}

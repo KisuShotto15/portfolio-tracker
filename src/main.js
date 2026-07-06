@@ -414,8 +414,10 @@ function updateRateUI(){
   var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('rate-display').textContent=v+' Bs/USD';
   var iv=Math.ceil(S.rate*1.005*100)/100; // Intervencion = BCV +0.5%, redondeado hacia arriba
-  var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=iv.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs/USD';
+  var ivs=iv.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=ivs+' Bs/USD';
   var m=document.getElementById('rate-display-m'); if(m) m.textContent=v;
+  var iem=document.getElementById('rate-interv-m'); if(iem) iem.textContent=ivs;
   // Profit Calc: el campo Buy sigue a la tasa Intervencion automaticamente
   // (no pisar mientras el usuario lo esta editando).
   var pb=document.getElementById('pc-buy');
