@@ -89,57 +89,92 @@ export function mergeDocs(cloud, incoming) {
   return out;
 }
 
+// Adaptadores de storage segun el modo. Ambos exponen readDoc()/writeDoc(doc) y
+// el resto del handler (read-merge-write con mergeDocs) es identico. Multi-usuario
+// si estan SUPABASE_URL + SUPABASE_ANON_KEY; si no, legacy (secret + DATA_URL).
+async function makeStore(req, res) {
+  const SB_URL = process.env.SUPABASE_URL;
+  const SB_KEY = process.env.SUPABASE_ANON_KEY;
+
+  if (SB_URL && SB_KEY) {
+    const jwt = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (!jwt) { res.status(401).json({ error: 'Unauthorized' }); return null; }
+    // Verifica el token y obtiene el user id. El JWT lo firma Supabase; no confiamos
+    // en nada que mande el cliente para identificar al usuario.
+    const ur = await fetch(SB_URL + '/auth/v1/user', { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + jwt } });
+    if (!ur.ok) { res.status(401).json({ error: 'Unauthorized' }); return null; }
+    const uid = (await ur.json()).id;
+    const base = SB_URL + '/rest/v1/app_state';
+    // Reenviamos el JWT del usuario a PostgREST → RLS aplica de punta a punta:
+    // aunque este codigo tuviera un bug, la DB no deja tocar filas ajenas.
+    const h = { apikey: SB_KEY, Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' };
+    return {
+      async readDoc() {
+        const r = await fetch(base + '?select=doc', { headers: h });
+        if (!r.ok) throw { status: r.status };
+        const rows = await r.json();
+        return (rows[0] && rows[0].doc) || {};
+      },
+      async writeDoc(doc) {
+        const r = await fetch(base + '?on_conflict=user_id', {
+          method: 'POST',
+          headers: { ...h, Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ user_id: uid, doc }),
+        });
+        if (!r.ok) throw { status: r.status };
+      },
+    };
+  }
+
+  // Legacy: secret compartido + blob unico.
+  const apiSecret = process.env.API_SECRET;
+  if (!apiSecret || req.headers['x-api-secret'] !== apiSecret) { res.status(401).json({ error: 'Unauthorized' }); return null; }
+  const dataUrl = process.env.DATA_URL, dataToken = process.env.DATA_TOKEN;
+  if (!dataUrl || !dataToken) { res.status(500).json({ error: 'Sync not configured' }); return null; }
+  const h = { Authorization: 'Bearer ' + dataToken };
+  return {
+    async readDoc() {
+      const r = await fetch(dataUrl + '/data', { headers: h });
+      if (r.status === 404) return {};
+      if (!r.ok) throw { status: r.status };
+      const j = await r.json().catch(() => null);
+      return (j && j.data) || {};
+    },
+    async writeDoc(doc) {
+      const r = await fetch(dataUrl + '/data', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify(doc) });
+      if (!r.ok) throw { status: r.status };
+    },
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Secret');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Secret, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const apiSecret = process.env.API_SECRET;
-  if (!apiSecret || req.headers['x-api-secret'] !== apiSecret) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const dataUrl = process.env.DATA_URL;
-  const dataToken = process.env.DATA_TOKEN;
-  if (!dataUrl || !dataToken) return res.status(500).json({ error: 'Sync not configured' });
-
-  const headers = { 'Authorization': 'Bearer ' + dataToken };
+  const store = await makeStore(req, res);
+  if (!store) return; // makeStore ya respondio 401/500
 
   if (req.method === 'GET') {
-    const r = await fetch(dataUrl + '/data', { headers });
-    const body = await r.text();
-    res.status(r.status).setHeader('Content-Type', 'application/json').end(body);
+    try { res.status(200).json({ data: await store.readDoc() }); }
+    catch (e) { res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync read failed, retry' }); }
     return;
   }
 
   if (req.method === 'POST') {
-    // Read current cloud doc, merge the incoming state into it, write back.
-    // If the read fails (backend hiccup), abort instead of clobbering with stale data.
-    let cloud = {};
-    const gr = await fetch(dataUrl + '/data', { headers });
-    if (gr.ok) {
-      const gj = await gr.json().catch(function () { return null; });
-      cloud = (gj && gj.data) || {};
-    } else if (gr.status !== 404) {
-      return res.status(503).json({ error: 'Sync read failed, retry' });
-    }
+    // Read-merge-write. Si la lectura falla, abortar en vez de pisar con datos viejos.
+    let cloud;
+    try { cloud = await store.readDoc(); }
+    catch (e) { return res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync read failed, retry' }); }
 
     const merged = mergeDocs(cloud, req.body || {});
 
-    const pr = await fetch(dataUrl + '/data', {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(merged),
-    });
-    if (!pr.ok) {
-      const body = await pr.text();
-      res.status(pr.status).setHeader('Content-Type', 'application/json').end(body);
-      return;
-    }
-    // Return the authoritative merged document so the client can adopt it.
-    res.status(200).setHeader('Content-Type', 'application/json').json({ data: merged });
+    try { await store.writeDoc(merged); }
+    catch (e) { return res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync write failed, retry' }); }
+
+    res.status(200).json({ data: merged });
     return;
   }
 

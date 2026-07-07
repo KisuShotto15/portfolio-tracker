@@ -503,6 +503,26 @@
 
 </main>
 </div>
+
+<div id="auth-overlay" class="auth-overlay">
+  <div class="auth-card">
+    <img src="/KS.png" alt="" class="auth-logo">
+    <h2>Portfolio</h2>
+    <div id="auth-step-email">
+      <p class="auth-sub">Inicia sesion con tu correo</p>
+      <input type="email" id="auth-email" placeholder="tucorreo@ejemplo.com" autocomplete="email" enterkeyhint="send" onkeydown="if(event.key==='Enter')authSendCode()">
+      <button class="btn btnp" onclick="authSendCode()">Enviar codigo</button>
+    </div>
+    <div id="auth-step-code" style="display:none">
+      <p class="auth-sub">Ingresa el codigo de 6 digitos que te llego al correo</p>
+      <input type="text" id="auth-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" enterkeyhint="go" onkeydown="if(event.key==='Enter')authVerifyCode()">
+      <button class="btn btnp" onclick="authVerifyCode()">Entrar</button>
+      <button class="btn btns" onclick="authBackToEmail()">Cambiar correo</button>
+    </div>
+    <div id="auth-msg" class="auth-msg"></div>
+  </div>
+</div>
+
 <script type="module" src="/src/main.js"></script>
 <script>
 /* Mirror the Net Worth KPI (and its delta) into the dashboard hero.
