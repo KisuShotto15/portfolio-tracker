@@ -36,6 +36,20 @@ function sbSetSession(j){
   }catch(e){}
 }
 function sbClearSession(){ try{ ['sb_at','sb_rt','sb_email'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){} }
+// Cuando el usuario llega desde un enlace de correo (confirmacion de registro o
+// magic link), Supabase pone la sesion en el fragmento de la URL (#access_token=...).
+// La tomamos, la guardamos y limpiamos el hash para no dejar tokens en la URL.
+function sbConsumeHashSession(){
+  var h=location.hash||'';
+  if(h.indexOf('access_token=')<0) return false;
+  try{
+    var p=new URLSearchParams(h.replace(/^#/,''));
+    var at=p.get('access_token'); if(!at) return false;
+    sbSetSession({access_token:at, refresh_token:p.get('refresh_token')||''});
+    history.replaceState(null,'',location.pathname+location.search);
+    return true;
+  }catch(e){ return false; }
+}
 async function sbRefresh(){
   var rt=sbGet('sb_rt'); if(!rt) return false;
   try{
@@ -3099,11 +3113,16 @@ async function init(){
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   if(MULTIUSER){
+    // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
+    var justLinked=sbConsumeHashSession();
     // Requiere sesion valida antes de sincronizar. Sin token o refresh fallido → login.
-    var authed=sbGet('sb_at') ? await sbRefresh() : false;
+    var authed=justLinked||(sbGet('sb_at') ? await sbRefresh() : false);
     if(!authed){ showAuthOverlay(); return; }
     hideAuthOverlay();
-  } else if(!VERCEL_SECRET){
+    await bootAfterAuth(justLinked);
+    return;
+  }
+  if(!VERCEL_SECRET){
     var sr=await appPrompt('Cloud sync','Ingresa el API secret de sync para este dispositivo (se guarda solo localmente). Puedes hacerlo despues en Settings → Cloud sync.','',{inputType:'text'});
     if(sr&&sr.value&&sr.value.trim()) setApiSecret(sr.value);
   }
