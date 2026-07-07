@@ -9,10 +9,12 @@ import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, 
 var RATE_URL      = 'https://rates.dolarvzla.com/bcv/current.json';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
 var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
-// Relativo (mismo-origen): cada deployment llama a SU propia /api/sync. Asi el
-// preview con env de Supabase va multi-usuario y produccion sin esas env sigue
-// legacy — sin CORS entre origenes.
-var SYNC_PROXY    = '/api/sync';
+// Preview (.vercel.app): mismo-origen /api/sync → ese deployment (con env de
+// Supabase) responde multi-usuario, sin CORS. Produccion (portfolio.kisushotto.com
+// via Cloudflare): la URL absoluta del proyecto Vercel, como siempre.
+var SYNC_PROXY    = location.hostname.endsWith('.vercel.app')
+  ? '/api/sync'
+  : 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
@@ -74,6 +76,10 @@ async function syncFetch(base,init){
   return r;
 }
 window.logout=function(){ sbClearSession(); try{ localStorage.removeItem('ft13'); localStorage.removeItem('ft13_dirty'); }catch(e){} location.reload(); };
+// Las funciones de exchange (Binance/Bybit/OKX/Trezor/holdings) usan el X-Api-Secret
+// del dueno. En multi-usuario los amigos no lo tienen → no deben ni intentar (evita
+// 401 y que vean cuentas ajenas). En legacy el secret siempre esta → sin cambio.
+function exchangesEnabled(){ return !!VERCEL_SECRET; }
 function showAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.add('open'); }
 function hideAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.remove('open'); }
 function authMsg(t){ var e=document.getElementById('auth-msg'); if(e) e.textContent=t||''; }
@@ -534,7 +540,7 @@ function clearBinance(){
   save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets();
 }
 var BINANCE_AUTO_MS=5*60*60*1000; // 5 hours
-async function autoFetchBinance(){
+async function autoFetchBinance(){ if(!exchangesEnabled()) return;
   if(S.binanceBalance===null) return; // not connected, skip
   var age=S.binanceFetchedAt?Date.now()-S.binanceFetchedAt:Infinity;
   if(age<BINANCE_AUTO_MS) return;
@@ -565,14 +571,14 @@ function clearBibiBinance(){
   var s=document.getElementById('bbn-secret'); if(s) s.value='';
   save(); document.getElementById('bbn-status').textContent='Reset.'; renderWallets();
 }
-async function autoFetchBibiBinance(){
+async function autoFetchBibiBinance(){ if(!exchangesEnabled()) return;
   if(S.bibiBinanceBalance===null) return;
   var age=S.bibiBinanceFetchedAt?Date.now()-S.bibiBinanceFetchedAt:Infinity;
   if(age<BINANCE_AUTO_MS) return;
   try{ await fetchBibiBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
 }
 
-async function fetchBybitBalance(){
+async function fetchBybitBalance(){ if(!exchangesEnabled()) return;
   var r=await fetch(BYBIT_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('Bybit '+r.status);
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var list=(d.result&&d.result.list)||[]; var total=0;
@@ -586,7 +592,7 @@ async function testBybit(){
 }
 function clearBybit(){ S.bybitBalance=null; S.bybitUpdated=null; save(); document.getElementById('bb-status').textContent='Reset.'; renderWallets(); }
 
-async function fetchOKXBalance(){
+async function fetchOKXBalance(){ if(!exchangesEnabled()) return;
   var r=await fetch(OKX_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('OKX '+r.status);
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var details=(d.data&&d.data[0]&&d.data[0].details)||[];
@@ -603,7 +609,7 @@ function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getE
 var TREZOR_ADDRESS = '0xe0c19374255aCDA45aC2727A5359f0Cfe59cF29B';
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
-async function fetchTrezorBalance(){
+async function fetchTrezorBalance(){ if(!exchangesEnabled()) return;
   var padded = '000000000000000000000000' + TREZOR_ADDRESS.slice(2).toLowerCase();
   var data   = '0x70a08231' + padded;
   var res = await fetch(BSC_RPC, {
@@ -618,7 +624,7 @@ async function fetchTrezorBalance(){
   save(); return S.trezorBalance;
 }
 
-async function fetchWalletHoldings(){
+async function fetchWalletHoldings(){ if(!exchangesEnabled()) return;
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
   var r=await fetch(ANKR_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({wallets:wallets})});
