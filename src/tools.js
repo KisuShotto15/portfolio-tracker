@@ -11,7 +11,7 @@ export function initTools(o){ _getState = o.getState; _save = o.save; _stamp = o
 
 // Comisiones ajustables (la tuerca de cada tool). Default = valor real actual;
 // se persisten/sincronizan via S.toolFees + toolFeesUpdatedAt (LWW por convencion).
-var TOOL_FEE_DEFAULTS = { bpay:4.1, wally:3.745, zinli:3.75, emily:10 };
+var TOOL_FEE_DEFAULTS = { bpay:4.1, emily:10 };
 function feeOf(key){
   var f = _getState().toolFees || {};
   var v = f[key];
@@ -34,10 +34,6 @@ var TOOLS = [
   { id:'profit',   label:'Profit Calc'    },
   { id:'p2p',      label:'P2P Spread'     },
   { id:'bcvemily', label:'BCV→Emily USD' },
-  { id:'bdvbpay',  label:'BDV→Bpay'      },
-  { id:'bdvwally', label:'BDV→Wally'     },
-  { id:'bdvzinli', label:'BDV→Zinli'     },
-  { id:'bdvlimits',label:'BDV Limits'    },
 ];
 
 export function renderToolToggles(){
@@ -115,34 +111,6 @@ export function calcSpread(){
 }
 window.calcSpread = calcSpread;
 
-export function calcBDV(){
-  var bank = parseFloat(document.getElementById('bdv-input').value)||0;
-  var charge   = bank > 0 ? bank / (1.01 * 1.015) : 0;
-  var received = charge * (1 - feeOf('bpay') / 100);
-  var lost     = bank - received;
-  var lostPct  = bank > 0 ? (lost / bank) * 100 : 0;
-  renderCalcCards('bdv-cards','bdv-result',[
-    { label:'Recharge', value:'$'+charge.toFixed(2),   sub:'on card' },
-    { label:'Received', value:'$'+received.toFixed(2), sub:'after fee', green:true },
-    { label:'Lost',     value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of total', red:true },
-  ]);
-}
-window.calcBDV = calcBDV;
-
-function calcWalletUpfront(bank, walletFeeRate, resultId, cardsId){
-  bank = bank || 0;
-  var cardCharge = bank > 0 ? bank / 1.02515 : 0;
-  var received   = bank > 0 ? cardCharge / (1 + walletFeeRate) : 0;
-  var walletFee  = cardCharge - received;
-  var lost       = bank - received;
-  var lostPct    = bank > 0 ? (lost / bank) * 100 : 0;
-  renderCalcCards(cardsId, resultId, [
-    { label:'Received', value:'$'+received.toFixed(2), sub:'to wallet', green:true },
-    { label:'Fee',      value:'$'+walletFee.toFixed(2),sub:'upfront' },
-    { label:'Lost',     value:'$'+lost.toFixed(2),     sub:lostPct.toFixed(2)+'% of total', red:true },
-  ]);
-}
-
 export function calcBCVEmily(){
   var usd      = parseFloat(document.getElementById('be-usd').value)||0;
   var usdtRate = parseFloat(document.getElementById('be-usdt').value)||0;
@@ -159,24 +127,12 @@ export function calcBCVEmily(){
 }
 window.calcBCVEmily = calcBCVEmily;
 
-export function calcWally(){
-  calcWalletUpfront(parseFloat(document.getElementById('wally-input').value), feeOf('wally') / 100, 'wally-result', 'wally-cards');
-}
-export function calcZinli(){
-  calcWalletUpfront(parseFloat(document.getElementById('zinli-input').value), feeOf('zinli') / 100, 'zinli-result', 'zinli-cards');
-}
-window.calcWally = calcWally;
-window.calcZinli = calcZinli;
-
 // --- Tuerca de comisiones por tool -----------------------------------------
 var GEAR_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 // Que comision ajusta cada tool. P2P ya tiene su campo Fee% inline; BDV Limits no tiene fee.
 var TOOL_GEARS = {
   profit:   [{ key:'bpay',  label:'Bpay fee %' }],
   bcvemily: [{ key:'emily', label:'Below market %' }],
-  bdvbpay:  [{ key:'bpay',  label:'Bpay fee %' }],
-  bdvwally: [{ key:'wally', label:'Wally fee %' }],
-  bdvzinli: [{ key:'zinli', label:'Zinli fee %' }],
 };
 
 function syncGearInputs(){
@@ -210,8 +166,8 @@ window.setToolFee = function(key, val){
   S.toolFees[key] = isFinite(v) ? v : TOOL_FEE_DEFAULTS[key];
   if(_stamp) S.toolFeesUpdatedAt = _stamp();
   _save();
-  calcProfit(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
-  // un mismo fee (ej. bpay) aparece en 2 tools: sincroniza los otros inputs
+  calcProfit(); calcBCVEmily();
+  // un mismo fee puede aparecer en varios tools: sincroniza los otros inputs
   document.querySelectorAll('.tool-gear input[data-fee="'+key+'"]').forEach(function(inp){
     if(inp !== document.activeElement) inp.value = S.toolFees[key];
   });

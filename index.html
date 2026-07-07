@@ -172,7 +172,7 @@
       <button id="btn-redo" class="btn btns" style="padding:5px 8px" title="Redo" aria-label="Redo" disabled onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <select id="tf-type" onchange="renderTx()" style="display:none"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div id="tx-filters-extra">
-        <select id="tf-cat" onchange="renderTx()"><option value="">Category</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Emily</option></select>
+        <select id="tf-cat" onchange="renderTx()"><option value="">Category</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
         <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
         <select id="tf-month" onchange="renderTx()"></select>
       </div>
@@ -319,65 +319,6 @@
       </div>
     </div>
 
-    <div id="tc-bdvbpay" class="tool-card">
-      <div class="tool-title">
-        <h2 style="margin:0">BDV to Bpay</h2>
-        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Bpay keeps its fee of the recharge (adjustable via the gear)</span></span>
-      </div>
-      <div class="field-row" style="margin-bottom:.875rem">
-        <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Balance</span>
-          <input type="number" id="bdv-input" placeholder="0.00" step="0.01" oninput="calcBDV()"/>
-        </div>
-      </div>
-      <div id="bdv-result">
-        <div id="bdv-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
-      </div>
-    </div>
-
-    <div id="tc-bdvwally" class="tool-card">
-      <div class="tool-title">
-        <h2 style="margin:0">BDV to Wally</h2>
-        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Wally fee: 3.5% + 7% ITBMS on commission = 3.745% charged upfront</span></span>
-      </div>
-      <div class="field-row" style="margin-bottom:.875rem">
-        <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Balance</span>
-          <input type="number" id="wally-input" placeholder="0.00" step="0.01" oninput="calcWally()"/>
-        </div>
-      </div>
-      <div id="wally-result">
-        <div id="wally-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
-      </div>
-    </div>
-
-    <div id="tc-bdvzinli" class="tool-card">
-      <div class="tool-title">
-        <h2 style="margin:0">BDV to Zinli</h2>
-        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Bank fees: 1% then 1.5% on total · Zinli fee: 3.75% charged upfront</span></span>
-      </div>
-      <div class="field-row" style="margin-bottom:.875rem">
-        <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Balance</span>
-          <input type="number" id="zinli-input" placeholder="0.00" step="0.01" oninput="calcZinli()"/>
-        </div>
-      </div>
-      <div id="zinli-result">
-        <div id="zinli-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:520px"></div>
-      </div>
-    </div>
-
-    <div id="tc-bdvlimits" class="tool-card tool-wide">
-      <div class="tool-title" style="margin-bottom:16px">
-        <h2 style="margin:0">BDV Monthly Limits</h2>
-      </div>
-      <div id="bdvl-list" class="bdvl-grid"></div>
-      <div class="bdvl-actions">
-        <button class="wm-add" onclick="addBdvLimit()">+ Add name</button>
-        <button class="wm-add bdvl-reset" onclick="resetBdvLimits()">Reset all</button>
-      </div>
-    </div>
-
     <div id="tools-toggles" style="grid-column:1/-1"></div>
 
   </div>
@@ -396,7 +337,7 @@
           <select id="rec-type"><option value="Debit">Debit</option><option value="Credit">Credit</option></select>
         </div>
         <div class="rec-form-row">
-          <select id="rec-cat"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Emily</option></select>
+          <select id="rec-cat"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
           <select id="rec-cur"><option value="USD">USD</option><option value="VES">VES</option></select>
         </div>
         <div class="rec-form-row">
@@ -624,7 +565,7 @@
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Emily</option></select></div>
+    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES</option></select></div>
     <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
   </div>

@@ -1,7 +1,7 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
-import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBDV, calcBCVEmily, calcWally, calcZinli } from './tools.js';
+import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 
 // BCV oficial via dolarvzla (rates.dolarvzla.com). Devuelve la ultima tasa BCV
 // PUBLICADA (el valor anunciado para el proximo dia habil, no el retraso de dolarapi),
@@ -149,7 +149,7 @@ window.saveSyncSecret=async function(){
 var AUTOFILL_RULES = [
   { keywords:['income','salario','cobro','pago','freelance','consulting','dividendo','ganancia','utilidad'],                                                                                                       type:'Credit', category:'Income' },
   { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto','bodega','mercado','automercado','central','polleria','panaderia','carneceria','charcuteria','verduras','frutas','lacteos','huevos','harina','arroz','pasta','embutidos','licoreria'], type:'Debit', category:'Groceries', currency:'VES' },
-  { keywords:['remesa','emily'],                                                                                                                                                                             type:'Credit', wallet:'Zelle', category:'Emily' },
+  { keywords:['remesa','emily'],                                                                                                                                                                             type:'Credit', wallet:'Emily' },
   { keywords:['corpoelec','inter','movistar','digitel','electricidad','cantv','netuno','simpletv','directv','condominio','alquiler','agua','gas','plomero','electricista','pintura','mantenimiento','ferreteria','homemax','reparacion'], type:'Debit', category:'Home', currency:'VES' },
   { keywords:['enviado','transferencia','familia','apoyo','ayuda','envio','giro'],                                                                                                                                 type:'Debit',  category:'Support' },
   { keywords:['uber','taxi','metro','buseta','gasolina','vamos','yummy','ridery','busvero','mototaxi','encomienda','mudanza','estacionamiento','peaje'],                                                            type:'Debit',  category:'Transport', currency:'USD' },
@@ -165,7 +165,7 @@ var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business',
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
 var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8','Eating Out':'#FB923C',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
-  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Zelle:'#a78bfa',Other:'#6B7280',Remesa:'#6c1cd3',Emily:'#6c1cd3'};
+  Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Other:'#6B7280'};
 
 var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
@@ -175,7 +175,6 @@ var S = {
   // Settings. null = aun sin derivar; se decide en deriveIntegrations() segun los
   // datos del usuario (encendido si ya los usa, apagado para cuentas nuevas).
   showExchanges:null, showExchangesUpdatedAt:null,
-  showZelle:null,     showZelleUpdatedAt:null,
   binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
@@ -196,7 +195,6 @@ var S = {
   categoryBudgets:{}, categoryBudgetsUpdatedAt:null,
   rateUpdatedAt:null,
   presets:[], presetsUpdatedAt:null,
-  bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
   recurringLog:[], recurringLogUpdatedAt:null,
   toolFees:{bpay:4.1, wally:3.745, zinli:3.75, emily:10}, toolFeesUpdatedAt:null
@@ -321,7 +319,7 @@ async function pushToCloud(){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
-        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
+        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage();
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
@@ -398,7 +396,7 @@ function afterPull(){
     case 'budget': renderBudget(); break;
     case 'wallets': renderWallets(); break;
     case 'holdings': renderOnchainWallets(); renderWalletHoldings(); break;
-    case 'tools': renderBdvLimits(); break;
+    case 'tools': break;
     case 'history': renderHistory(window._historyView||'snapshots'); break;
   }
 }
@@ -495,7 +493,7 @@ function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoSt
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
-function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return !!S.showZelle; return w?w.trackerOnly===true:false; }
+function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
 
 async function fetchRate(force){
@@ -1186,8 +1184,8 @@ function emptyState(title, sub){
 }
 // localToday / parseAmt / fmtUSD / escHtml viven en ./format.js (puros).
 // Pill hue mirrors the category icon background (CAT_META[cat].bg) so both stay consistent.
-function tagCat(cat){ var m={Income:'tG',Home:'tB',Groceries:'tG',Transport:'tB',Health:'tP',Business:'tT',Discretionary:'tP','Eating Out':'tA',Support:'tR',Investments:'tA',Savings:'tB',Emily:'tP',
-  Services:'tP','Help others':'tA',Emergency:'tR',Zelle:'tZ',Other:'tX'}; return m[cat]||'tX'; }
+function tagCat(cat){ var m={Income:'tG',Home:'tB',Groceries:'tG',Transport:'tB',Health:'tP',Business:'tT',Discretionary:'tP','Eating Out':'tA',Support:'tR',Investments:'tA',Savings:'tB',
+  Services:'tP','Help others':'tA',Emergency:'tR',Other:'tX'}; return m[cat]||'tX'; }
 function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
 
 var CAT_META={
@@ -1202,7 +1200,6 @@ var CAT_META={
   'Business':     {bg:'#0f4a4a', svg:'<rect x="1.5" y="6" width="13" height="8" rx="1.5"/><path d="M5 6V4.5A1.5 1.5 0 0 1 6.5 3h3A1.5 1.5 0 0 1 11 4.5V6"/><line x1="1.5" y1="10" x2="14.5" y2="10"/>'},
   'Support':      {bg:'#5a1515', svg:'<path d="M8 12.5C6 11 2 8.5 2 5.5A3 3 0 0 1 8 4 3 3 0 0 1 14 5.5C14 8.5 10 11 8 12.5z"/>'},
   'Savings':      {bg:'#0f3060', svg:'<rect x="1.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="7" cy="8" r="2.5"/><line x1="7" y1="8" x2="8.8" y2="6.5"/><line x1="12.5" y1="5.5" x2="14.5" y2="5.5"/><line x1="12.5" y1="10.5" x2="14.5" y2="10.5"/>'},
-  'Emily':        {bg:'#3d1580', logo:'/logo-zelle.png?v=1'},
 };
 // Iconos personalizados por palabra clave de la nota (misma mecanica que el
 // autofill: se matchea contra las palabras de la nota). Pisan al icono de la
@@ -1222,6 +1219,7 @@ var NOTE_ICONS=[
   { keywords:['epa'],      src:'/icon-epa.png?v=1',      zoom:1.5 },
   { keywords:['vamos'],    src:'/icon-vamos.png?v=1',    zoom:1 },
   { keywords:['yummy'],    src:'/icon-yummy.png?v=1',    zoom:1 },
+  { keywords:['emily','remesa','zelle'], src:'/logo-zelle.png?v=1', zoom:1 },
   { keywords:['claude'],   src:'/icon-claude.png?v=1',   zoom:1 },
   { keywords:['pan'],      src:'/icon-pan.png?v=1',      zoom:1.1 },
   { keywords:['gatarina','mimosa','kittens','gatos','gato'], src:'/icon-mimosa.png?v=2', zoom:1 },
@@ -1571,7 +1569,6 @@ function getWalletShares(){
   shares['Bybit']=S.bybitBalance||0;
   shares['OKX']=S.okxBalance||0;
   shares['Trezor']=S.trezorBalance||0;
-  shares['Zelle']=calcTrackerBal('Zelle');
   S.manualWallets.forEach(function(w){
     var bal=w.trackerOnly?(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)):w.balance;
     shares[w.name]=bal;
@@ -2156,8 +2153,7 @@ function getTotalBalance(){
   var api=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
   var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
   var manualBal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
-  var zelle=calcTrackerBal('Zelle');
-  return parseFloat((api+trackerBal+manualBal+zelle).toFixed(2));
+  return parseFloat((api+trackerBal+manualBal).toFixed(2));
 }
 
 function appPrompt(title,infoHtml,defaultVal,opts){
@@ -2492,9 +2488,8 @@ var _trkKey=null,_trkMap=null;
 function trackerTxBalances(){
   var k=(S.transactionsUpdatedAt||0)+'|'+(S.manualWalletsUpdatedAt||0)+'|'+S.transactions.length;
   if(_trkMap&&_trkKey===k) return _trkMap;
-  // mismo criterio que isTracker(): trackerOnly===true; 'Zelle' es tracker salvo
-  // que exista un manualWallet con ese nombre que diga lo contrario.
-  var trk={Zelle:true};
+  // tracker = manualWallet con trackerOnly===true.
+  var trk={};
   S.manualWallets.forEach(function(w){ trk[w.name]=w.trackerOnly===true; });
   var map={};
   S.transactions.forEach(function(t){
@@ -2523,7 +2518,7 @@ window.refreshAllWallets=async function(){
   if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
 };
 
-var WALLET_LOGOS={'Zelle':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1'};
+var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1'};
 
 // ── Integraciones personales (toggles en Settings) ──────────────────────────
 // Deriva el estado inicial de los toggles la primera vez (null): encendido si el
@@ -2533,33 +2528,21 @@ function deriveIntegrations(){
   if(S.showExchanges==null){
     S.showExchanges=!!(S.binanceBalance!=null||S.bibiBinanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||S.trezorBalance!=null||(S.binanceKey&&S.binanceKey.length)||(S.bibiBinanceKey&&S.bibiBinanceKey.length));
   }
-  if(S.showZelle==null){
-    S.showZelle=(S.transactions||[]).some(function(t){ return t.wallet==='Zelle'||t.category==='Emily'; });
-  }
 }
-var INTEGRATIONS=[{id:'showExchanges',label:'Exchanges'},{id:'showZelle',label:'Zelle / Remesas'}];
+var INTEGRATIONS=[{id:'showExchanges',label:'Exchanges'}];
 function renderIntegrationToggles(){
   var wrap=document.getElementById('integration-toggles'); if(!wrap) return;
   wrap.innerHTML=INTEGRATIONS.map(function(t){
     return '<button class="tool-toggle'+(S[t.id]?' on':'')+'" onclick="toggleIntegration(\''+t.id+'\')">'+t.label+'</button>';
   }).join('');
 }
-// Muestra/oculta lo que depende de los toggles y que no se reconstruye en cada
-// render: la seccion de config de exchanges en Settings y la opcion de categoria
-// Emily en los dropdowns. Las cards de wallet y el tracker Zelle se gatean dentro
-// de renderWallets/populateWalletSelects/isTracker.
+// Muestra/oculta la config de exchanges en Settings segun el toggle.
 function applyIntegrations(){
   // La config built-in (Binance/Bybit/OKX del dueno) solo se muestra a quien ya la
   // usa; los demas solo ven "Wallets de exchange" para agregar los suyos.
   var hasBuiltin=(S.binanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||(S.binanceKey&&S.binanceKey.length));
   var ex=document.getElementById('set-exchanges'); if(ex) ex.style.display=(S.showExchanges&&hasBuiltin)?'':'none';
   var xw=document.getElementById('set-exchange-wallets'); if(xw) xw.style.display=S.showExchanges?'':'none';
-  ['tf-cat','tx-cat'].forEach(function(id){
-    var sel=document.getElementById(id); if(!sel) return;
-    var opt=Array.prototype.filter.call(sel.options,function(o){ return o.value==='Emily'; })[0];
-    if(S.showZelle&&!opt){ var o=document.createElement('option'); o.text='Emily'; sel.add(o); }
-    else if(!S.showZelle&&opt){ sel.remove(opt.index); }
-  });
 }
 window.toggleIntegration=function(id){
   S[id]=!S[id]; S[id+'UpdatedAt']=stamp(); save();
@@ -2674,7 +2657,7 @@ function renderWallets(){
   var xwList=showEx?(S.exchangeWallets||[]):[];
   var xwTotal=xwList.reduce(function(s,w){ return s+(w.balance||0); },0);
   var apiTotal=showEx?((S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+xwTotal):0;
-  var trackerNames=S.showZelle?['Zelle']:[];
+  var trackerNames=[];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
   var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
@@ -2735,14 +2718,11 @@ function renderWallets(){
   var trRows=trackerNames.map(function(name){
     var mw=S.manualWallets.find(function(w){return w.name===name;});
     var total=mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(name);
-    var isZelle=name==='Zelle';
     var meta='<span class="wm-badge">tracker</span>';
-    var right=isZelle
-      ?'<div class="wm-bal-stack">'+balHtml(total)+'<span class="wm-bal-sub">+5%: '+fmtUSD(total*1.05)+'</span></div>'
-      :balHtml(total);
+    var right=balHtml(total);
     var acts='';
     if(mw){
-      if(!isZelle) acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
+      acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
     var tlogo=WALLET_LOGOS[name]||null;
@@ -2802,7 +2782,7 @@ function drawWalletDonut(data, grand){
 
 
 function populateWalletSelects(){
-  var names=['Binance'].concat(S.showZelle?['Zelle']:[]).concat(['Cash']);
+  var names=['Binance','Cash'];
   S.manualWallets.forEach(function(w){ if(names.indexOf(w.name)<0) names.push(w.name); });
   ['tx-wallet','tf-wallet','rec-wallet'].forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
@@ -2819,7 +2799,7 @@ function normCat(raw){ var c=(raw||'').toLowerCase();
   if(c==='discretionary') return 'Discretionary'; if(c==='support'||c.indexOf('help')>=0) return 'Support';
   if(c==='investments') return 'Investments'; if(c==='savings'||c.indexOf('emergency')>=0) return 'Savings';
   // legacy mappings for old imports
-  if(c.indexOf('services')>=0) return 'Services'; if(c.indexOf('zelle')>=0) return 'Zelle'; if(c.indexOf('other')>=0) return 'Other';
+  if(c.indexOf('services')>=0) return 'Services'; if(c.indexOf('other')>=0) return 'Other';
   return raw||''; }
 
 function loadPapa(){
@@ -2928,7 +2908,7 @@ function showPage(id,btn,arg){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); }
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ renderPresetsManage(); renderIntegrationToggles(); applyIntegrations(); renderExchangeWallets(); toggleXwFields(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
@@ -3229,42 +3209,6 @@ window.save = save;
 
 
 // ── BDV Monthly Limits ───────────────────────────────────────────────
-function bdvLimitsState(){ if(!Array.isArray(S.bdvLimits)) S.bdvLimits=[]; return S.bdvLimits; }
-function bdvInitVirtual(){ return 10000; }
-function bdvInitFisica(name){ return String(name).trim().toLowerCase()==='jesusg'?10000:5000; }
-function _bdvFind(id){ return bdvLimitsState().filter(function(n){ return n.id===id; })[0]; }
-function renderBdvLimits(){
-  var wrap=document.getElementById('bdvl-list'); if(!wrap) return;
-  var list=bdvLimitsState();
-  if(!list.length){ wrap.innerHTML='<div class="bdvl-empty">No names yet. Add one below.</div>'; return; }
-  function stepper(id,key,val,on){
-    if(!on) return '<span class="bdvl-off">Off</span>';
-    return '<div class="bdvl-step">'
-      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',-500)">&#8722;</button>'
-      +'<input class="bdvl-amt" type="number" step="500" value="'+(val||0)+'" onchange="bdvSet('+id+',\''+key+'\',this.value)">'
-      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',500)">+</button>'
-    +'</div>';
-  }
-  wrap.innerHTML=list.map(function(n){
-    return '<div class="bdvl-card">'
-      +'<div class="bdvl-card-head"><span class="bdvl-name" onclick="renameBdvLimit('+n.id+')">'+escHtml(n.name)+'</span>'
-        +'<button class="wico del" onclick="deleteBdvLimit('+n.id+')" title="Delete">&#10005;</button></div>'
-      +'<div class="bdvl-opt"><span class="bdvl-opt-lbl">Virtual</span>'+stepper(n.id,'virtual',n.virtual,true)+'</div>'
-      +'<div class="bdvl-opt"><button class="bdvl-toggle'+(n.fisicaOn?' on':'')+'" onclick="toggleBdvFisica('+n.id+')">Fisica</button>'+stepper(n.id,'fisica',n.fisica,!!n.fisicaOn)+'</div>'
-    +'</div>';
-  }).join('');
-}
-window.renderBdvLimits=renderBdvLimits;
-// Every mutation stamps bdvLimitsUpdatedAt so cloud sync does correct last-writer-wins.
-function bdvSave(){ S.bdvLimitsUpdatedAt=stamp(); save(); renderBdvLimits(); }
-window.bdvAdj=function(id,key,delta){ var n=_bdvFind(id); if(!n) return; n[key]=Math.max(0,(n[key]||0)+delta); bdvSave(); };
-window.bdvSet=function(id,key,val){ var n=_bdvFind(id); if(!n) return; var v=parseFloat(val); n[key]=isNaN(v)?0:Math.max(0,v); bdvSave(); };
-window.toggleBdvFisica=function(id){ var n=_bdvFind(id); if(!n) return; n.fisicaOn=!n.fisicaOn; bdvSave(); };
-window.addBdvLimit=async function(){ var r=await appPrompt('Add name','Name for the new entry','',{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; var nm=r.value.trim(); bdvLimitsState().push({id:Date.now(),name:nm,virtual:bdvInitVirtual(),fisica:bdvInitFisica(nm),fisicaOn:true}); bdvSave(); };
-window.resetBdvLimits=async function(){ var list=bdvLimitsState(); if(!list.length) return; var ok=await appConfirm('Reset all limits?','Sets every Virtual to '+fmtUSD(bdvInitVirtual())+' and Fisica to its initial amount.','Reset'); if(!ok) return; list.forEach(function(n){ n.virtual=bdvInitVirtual(); n.fisica=bdvInitFisica(n.name); }); bdvSave(); };
-window.renameBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var r=await appPrompt('Rename',escHtml(n.name),n.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; n.name=r.value.trim(); bdvSave(); };
-window.deleteBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var ok=await appConfirm('Delete name?',escHtml(n.name),'Delete'); if(!ok) return; S.bdvLimits=bdvLimitsState().filter(function(x){ return x.id!==id; }); bdvSave(); };
-
 window.autofillFromNote = autofillFromNote;
 window.recordSnapshot = recordSnapshot;
 window.saveGoal = saveGoal;
@@ -3310,9 +3254,21 @@ async function bootAfterAuth(firstLogin){
   // Primer login multi-usuario: sube el estado local (migracion de tus datos al
   // row de tu usuario). El merge del servidor evita cualquier clobber.
   if(firstLogin){ _dirty=true; pushToCloud(); }
-  // Migration: all Zelle wallet transactions → category Emily
-  var migrated=S.transactions.filter(function(t){ return t.wallet==='Zelle'&&t.category!=='Emily'; });
-  if(migrated.length){ migrated.forEach(function(t){ t.category='Emily'; t.updatedAt=stamp(); }); S.transactionsUpdatedAt=stamp(); save(); }
+  // Migration: Zelle deja de ser especial. Las tx del wallet 'Zelle' pasan al wallet
+  // 'Emily' (un tracker normal, con el logo de Zelle por nombre), y se limpia la
+  // categoria 'Emily' (ya no existe; el logo lo da el nombre/nota).
+  if(!S.zelleMigrated){
+    var zTx=S.transactions.filter(function(t){ return t.wallet==='Zelle'||t.category==='Emily'; });
+    if(zTx.length){
+      if(!S.manualWallets.some(function(w){ return w.name==='Emily'; })){
+        S.manualWallets.push({id:Date.now(),name:'Emily',trackerOnly:true,balance:0,balanceOverride:null});
+        S.manualWalletsUpdatedAt=stamp();
+      }
+      zTx.forEach(function(t){ if(t.wallet==='Zelle') t.wallet='Emily'; if(t.category==='Emily') t.category=''; t.updatedAt=stamp(); });
+      S.transactionsUpdatedAt=stamp();
+    }
+    S.zelleMigrated=1; save();
+  }
   // Migration: balanceOverride congelaba el balance tracker (las txs nuevas no lo
   // movian). Rebase a base equivalente: mismo valor mostrado, pero vivo.
   var frozen=S.manualWallets.filter(function(w){ return w.trackerOnly&&w.balanceOverride!=null; });
@@ -3332,7 +3288,7 @@ async function bootAfterAuth(firstLogin){
   // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; }catch(e){}
   applyRecurring(); renderRecurringManage();
-  renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBDV(); calcWally(); calcZinli(); calcBCVEmily();
+  renderToolToggles(); renderToolGears(); calcProfit(); calcSpread(); calcBCVEmily();
   autoFetchBinance(); autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)
   setInterval(function(){ autoFetchBinance(); autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
