@@ -464,6 +464,12 @@
       </div>
       <div id="okx-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
+    <div class="fc">
+      <h3>Trezor (BSC)</h3>
+      <p class="hint">Tu direccion BSC para leer el balance USDT (BEP-20). Se guarda en tus datos, no en el codigo.</p>
+      <input id="trezor-addr" type="text" placeholder="0x..." oninput="S.trezorAddress=this.value.trim();S.trezorAddressUpdatedAt=stamp();save()" style="width:100%">
+      <div style="margin-top:8px"><button class="btn btnp" onclick="fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(){})">Actualizar balance</button></div>
+    </div>
     </div>
     </div>
 

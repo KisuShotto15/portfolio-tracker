@@ -183,6 +183,7 @@ var S = {
   bybitBalance:null,   bybitUpdated:null,
   okxBalance:null,     okxUpdated:null,
   trezorBalance:null,  trezorUpdated:null,
+  trezorAddress:'', trezorAddressUpdatedAt:null,
   walletHoldings:[],   walletHoldingsUpdated:null,
   onchainWallets:[],   onchainWalletsUpdatedAt:null,
   snapshots:[],
@@ -632,11 +633,14 @@ async function testOKX(){
 }
 function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getElementById('okx-status').textContent='Reset.'; renderWallets(); }
 
-var TREZOR_ADDRESS = '0xe0c19374255aCDA45aC2727A5359f0Cfe59cF29B';
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
+// La direccion Trezor vive en los datos del usuario (S.trezorAddress), no en el
+// bundle publico. Sin direccion no se consulta nada.
 async function fetchTrezorBalance(){ if(!exchangesEnabled()) return;
-  var padded = '000000000000000000000000' + TREZOR_ADDRESS.slice(2).toLowerCase();
+  var addr=(S.trezorAddress||'').trim();
+  if(!/^0x[0-9a-fA-F]{40}$/.test(addr)) return;
+  var padded = '000000000000000000000000' + addr.slice(2).toLowerCase();
   var data   = '0x70a08231' + padded;
   var res = await fetch(BSC_RPC, {
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -3203,6 +3207,7 @@ async function bootAfterAuth(firstLogin){
     frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; });
     S.manualWalletsUpdatedAt=stamp(); save();
   }
+  if(S.trezorAddress){ var ta=document.getElementById('trezor-addr'); if(ta) ta.value=S.trezorAddress; }
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
   if(S.bibiBinanceKey){ var bbk=document.getElementById('bbn-key'); if(bbk) bbk.value=S.bibiBinanceKey; }
