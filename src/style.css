@@ -839,6 +839,17 @@ input::placeholder{color:var(--txt3)}
 .tx-form-panel.open{transform:translate3d(-50%,0,0)}
 .sheet-grabber{width:36px;height:4px;border-radius:2px;background:var(--txt3);opacity:.4;margin:0 auto 14px}
 .tx-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+/* ───────────────── Login overlay (multi-usuario) ───────────────── */
+.auth-overlay{display:none;position:fixed;inset:0;z-index:200;background:var(--bg);align-items:center;justify-content:center;padding:24px}
+.auth-overlay.open{display:flex}
+.auth-card{width:100%;max-width:360px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.auth-logo{width:64px;height:64px;border-radius:16px;object-fit:cover;margin-bottom:4px}
+.auth-card h2{font-size:24px;font-weight:700;margin:0}
+.auth-sub{font-size:14px;color:var(--txt3);margin:2px 0 14px}
+.auth-card input{width:100%;padding:12px 14px;font-size:16px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--txt);box-sizing:border-box;margin-bottom:10px}
+.auth-card input:focus{border-color:var(--accent);outline:none}
+.auth-card .btn{width:100%;justify-content:center;padding:12px;border-radius:12px;margin-bottom:8px}
+.auth-msg{font-size:13px;color:var(--txt3);min-height:18px;margin-top:4px}
 .app-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:160;align-items:center;justify-content:center}
 .app-modal-overlay.open{display:flex}
 .app-modal{background:rgba(14,14,24,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:1.5rem 1.5rem 1.25rem;min-width:280px;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.6)}

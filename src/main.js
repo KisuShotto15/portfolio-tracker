@@ -9,10 +9,103 @@ import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, 
 var RATE_URL      = 'https://rates.dolarvzla.com/bcv/current.json';
 var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
 var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
-var SYNC_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
+// Preview (.vercel.app): mismo-origen /api/sync → ese deployment (con env de
+// Supabase) responde multi-usuario, sin CORS. Produccion (portfolio.kisushotto.com
+// via Cloudflare): la URL absoluta del proyecto Vercel, como siempre.
+var SYNC_PROXY    = location.hostname.endsWith('.vercel.app')
+  ? '/api/sync'
+  : 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
+// ── Multi-usuario (Supabase) ──────────────────────────────────────────────
+// Si SUPABASE_URL/KEY estan configuradas, la app entra en modo multi-usuario:
+// login por codigo de correo, y el sync usa el token del usuario (Bearer) en vez
+// del secret compartido. La URL y la publishable key son PUBLICAS por diseno
+// (RLS en la DB es lo que protege los datos). Vacias = modo mono-usuario actual.
+var SUPABASE_URL = 'https://fcrqrfpjpuscorbogjho.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_1ru1s3pT8wJ75GEKa2ag5A_jlz0y1GQ';
+var MULTIUSER    = !!(SUPABASE_URL && SUPABASE_KEY);
+
+function sbGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
+function sbSetSession(j){
+  try{
+    if(j.access_token)  localStorage.setItem('sb_at', j.access_token);
+    if(j.refresh_token) localStorage.setItem('sb_rt', j.refresh_token);
+    if(j.user&&j.user.email) localStorage.setItem('sb_email', j.user.email);
+  }catch(e){}
+}
+function sbClearSession(){ try{ ['sb_at','sb_rt','sb_email'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){} }
+async function sbRefresh(){
+  var rt=sbGet('sb_rt'); if(!rt) return false;
+  try{
+    var r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({refresh_token:rt})});
+    if(!r.ok) return false;
+    sbSetSession(await r.json()); return true;
+  }catch(e){ return false; }
+}
+async function sbOtpRequest(email){
+  try{
+    var r=await fetch(SUPABASE_URL+'/auth/v1/otp',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({email:email})});
+    return r.ok;
+  }catch(e){ return false; }
+}
+async function sbOtpVerify(email,token){
+  try{
+    var r=await fetch(SUPABASE_URL+'/auth/v1/verify',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({email:email,token:token,type:'email'})});
+    if(!r.ok) return false;
+    var j=await r.json(); if(!j.access_token) return false;
+    sbSetSession(j); return true;
+  }catch(e){ return false; }
+}
+// Headers de auth para el proxy de sync segun el modo.
+function syncAuthHeaders(base){
+  var h=Object.assign({},base||{});
+  if(MULTIUSER) h['Authorization']='Bearer '+sbGet('sb_at');
+  else h['X-Api-Secret']=VERCEL_SECRET;
+  return h;
+}
+// fetch a SYNC_PROXY con refresh automatico del token en 401 (solo multi-usuario).
+async function syncFetch(base,init){
+  init=init||{}; init.headers=syncAuthHeaders(base);
+  var r=await fetch(SYNC_PROXY,init);
+  if(r.status===401&&MULTIUSER&&await sbRefresh()){
+    init.headers=syncAuthHeaders(base);
+    r=await fetch(SYNC_PROXY,init);
+  }
+  return r;
+}
+window.logout=function(){ sbClearSession(); try{ localStorage.removeItem('ft13'); localStorage.removeItem('ft13_dirty'); }catch(e){} location.reload(); };
+// Las funciones de exchange (Binance/Bybit/OKX/Trezor/holdings) usan el X-Api-Secret
+// del dueno. En multi-usuario los amigos no lo tienen → no deben ni intentar (evita
+// 401 y que vean cuentas ajenas). En legacy el secret siempre esta → sin cambio.
+function exchangesEnabled(){ return !!VERCEL_SECRET; }
+function showAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.add('open'); }
+function hideAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.remove('open'); }
+function authMsg(t){ var e=document.getElementById('auth-msg'); if(e) e.textContent=t||''; }
+window.authSendCode=async function(){
+  var email=(document.getElementById('auth-email').value||'').trim().toLowerCase();
+  if(!email||email.indexOf('@')<1){ authMsg('Correo invalido'); return; }
+  authMsg('Enviando codigo...'); window._authEmail=email;
+  if(await sbOtpRequest(email)){
+    document.getElementById('auth-step-email').style.display='none';
+    document.getElementById('auth-step-code').style.display='block';
+    authMsg('Codigo enviado a '+email);
+    var c=document.getElementById('auth-code'); if(c) c.focus();
+  } else authMsg('No se pudo enviar el codigo. Reintenta.');
+};
+window.authVerifyCode=async function(){
+  var code=(document.getElementById('auth-code').value||'').trim();
+  if(!code){ authMsg('Ingresa el codigo'); return; }
+  authMsg('Verificando...');
+  if(await sbOtpVerify(window._authEmail,code)){ hideAuthOverlay(); await bootAfterAuth(true); }
+  else authMsg('Codigo incorrecto o expirado.');
+};
+window.authBackToEmail=function(){
+  document.getElementById('auth-step-code').style.display='none';
+  document.getElementById('auth-step-email').style.display='block'; authMsg('');
+};
+
 // El API secret vive SOLO en localStorage, nunca en el bundle: el JS es publico
 // y con el secret se puede leer/escribir todo el estado. Se pide una vez por
 // dispositivo (prompt al iniciar o Settings → Cloud sync). Nunca se sincroniza.
@@ -188,9 +281,8 @@ async function pushToCloud(){
     // The server performs the authoritative read-merge-write and returns the
     // merged document. This makes a stale device structurally unable to clobber
     // fresher edits made elsewhere, regardless of this device's network state.
-    var r=await fetch(SYNC_PROXY,{
+    var r=await syncFetch({'Content-Type':'application/json'},{
       method:'POST',
-      headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},
       body:JSON.stringify(S)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -213,7 +305,7 @@ async function pushToCloud(){
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true; _pushFailCount++;
-    if(e.message==='HTTP 401'){ setSyncStatus('error','Secret invalido'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret no sirve
+    if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Sesion expirada'); showAuthOverlay(); } else setSyncStatus('error','Secret invalido'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret/token no sirve
     setSyncStatus('offline','⚠ Unsynced changes');
     if(_pushFailCount>=2&&navigator.onLine) showSyncBanner(true); // offline real ya tiene su propio aviso
     console.warn('push failed:',e.message);
@@ -224,7 +316,7 @@ async function pushToCloud(){
 async function pullFromCloud(quiet){
   try{
     if(!quiet) setSyncStatus('syncing','Loading...');
-    var r=await fetch(SYNC_PROXY,{headers:{'X-Api-Secret':VERCEL_SECRET}});
+    var r=await syncFetch(null,{});
     if(!r.ok) throw new Error('HTTP '+r.status);
     var res=await r.json();
     if(res.data){
@@ -256,7 +348,7 @@ async function pullFromCloud(quiet){
     if(!quiet) setSyncStatus('synced','Synced (no cloud data yet)');
     return false;
   }catch(e){
-    if(e.message==='HTTP 401') setSyncStatus('error','Secret invalido');
+    if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Sesion expirada'); showAuthOverlay(); } else setSyncStatus('error','Secret invalido'); }
     else setSyncStatus('offline','Offline (local only)');
     console.warn('pull failed:',e.message);
     return false;
@@ -450,7 +542,7 @@ function clearBinance(){
   save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets();
 }
 var BINANCE_AUTO_MS=5*60*60*1000; // 5 hours
-async function autoFetchBinance(){
+async function autoFetchBinance(){ if(!exchangesEnabled()) return;
   if(S.binanceBalance===null) return; // not connected, skip
   var age=S.binanceFetchedAt?Date.now()-S.binanceFetchedAt:Infinity;
   if(age<BINANCE_AUTO_MS) return;
@@ -481,14 +573,14 @@ function clearBibiBinance(){
   var s=document.getElementById('bbn-secret'); if(s) s.value='';
   save(); document.getElementById('bbn-status').textContent='Reset.'; renderWallets();
 }
-async function autoFetchBibiBinance(){
+async function autoFetchBibiBinance(){ if(!exchangesEnabled()) return;
   if(S.bibiBinanceBalance===null) return;
   var age=S.bibiBinanceFetchedAt?Date.now()-S.bibiBinanceFetchedAt:Infinity;
   if(age<BINANCE_AUTO_MS) return;
   try{ await fetchBibiBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
 }
 
-async function fetchBybitBalance(){
+async function fetchBybitBalance(){ if(!exchangesEnabled()) return;
   var r=await fetch(BYBIT_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('Bybit '+r.status);
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var list=(d.result&&d.result.list)||[]; var total=0;
@@ -502,7 +594,7 @@ async function testBybit(){
 }
 function clearBybit(){ S.bybitBalance=null; S.bybitUpdated=null; save(); document.getElementById('bb-status').textContent='Reset.'; renderWallets(); }
 
-async function fetchOKXBalance(){
+async function fetchOKXBalance(){ if(!exchangesEnabled()) return;
   var r=await fetch(OKX_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('OKX '+r.status);
   var d=await r.json(); if(d.error) throw new Error(d.error);
   var details=(d.data&&d.data[0]&&d.data[0].details)||[];
@@ -519,7 +611,7 @@ function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getE
 var TREZOR_ADDRESS = '0xe0c19374255aCDA45aC2727A5359f0Cfe59cF29B';
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
-async function fetchTrezorBalance(){
+async function fetchTrezorBalance(){ if(!exchangesEnabled()) return;
   var padded = '000000000000000000000000' + TREZOR_ADDRESS.slice(2).toLowerCase();
   var data   = '0x70a08231' + padded;
   var res = await fetch(BSC_RPC, {
@@ -534,7 +626,7 @@ async function fetchTrezorBalance(){
   save(); return S.trezorBalance;
 }
 
-async function fetchWalletHoldings(){
+async function fetchWalletHoldings(){ if(!exchangesEnabled()) return;
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
   var r=await fetch(ANKR_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({wallets:wallets})});
@@ -3006,15 +3098,29 @@ async function init(){
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
-  if(!VERCEL_SECRET){
+  if(MULTIUSER){
+    // Requiere sesion valida antes de sincronizar. Sin token o refresh fallido → login.
+    var authed=sbGet('sb_at') ? await sbRefresh() : false;
+    if(!authed){ showAuthOverlay(); return; }
+    hideAuthOverlay();
+  } else if(!VERCEL_SECRET){
     var sr=await appPrompt('Cloud sync','Ingresa el API secret de sync para este dispositivo (se guarda solo localmente). Puedes hacerlo despues en Settings → Cloud sync.','',{inputType:'text'});
     if(sr&&sr.value&&sr.value.trim()) setApiSecret(sr.value);
   }
+  await bootAfterAuth(false);
+}
+// Todo lo que necesita la sesion lista: pull inicial, migraciones, render, timers.
+// Separado de init para poder llamarlo justo despues del login sin re-enganchar
+// los listeners de una-sola-vez que quedan en init.
+async function bootAfterAuth(firstLogin){
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
   // Cambios locales sin pushear de una sesion anterior (cerro la app offline):
   // el pull respeta LWW asi que no se pisaron, ahora los propagamos a la nube.
   if(localStorage.getItem('ft13_dirty')){ _dirty=true; pushToCloud(); }
+  // Primer login multi-usuario: sube el estado local (migracion de tus datos al
+  // row de tu usuario). El merge del servidor evita cualquier clobber.
+  if(firstLogin){ _dirty=true; pushToCloud(); }
   // Migration: all Zelle wallet transactions → category Emily
   var migrated=S.transactions.filter(function(t){ return t.wallet==='Zelle'&&t.category!=='Emily'; });
   if(migrated.length){ migrated.forEach(function(t){ t.category='Emily'; t.updatedAt=stamp(); }); S.transactionsUpdatedAt=stamp(); save(); }
