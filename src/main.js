@@ -61,8 +61,10 @@ async function sbRefresh(){
 async function sbOtpRequest(email){
   try{
     var r=await fetch(SUPABASE_URL+'/auth/v1/otp',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({email:email})});
-    return r.ok;
-  }catch(e){ return false; }
+    if(r.ok) return {ok:true};
+    var j=await r.json().catch(function(){ return {}; });
+    return {ok:false, code:j.error_code||j.code||''}; // 'signup_disabled' = correo no autorizado
+  }catch(e){ return {ok:false, code:'network'}; }
 }
 async function sbOtpVerify(email,token){
   try{
@@ -101,11 +103,14 @@ window.authSendCode=async function(){
   var email=(document.getElementById('auth-email').value||'').trim().toLowerCase();
   if(!email||email.indexOf('@')<1){ authMsg('Correo invalido'); return; }
   authMsg('Enviando codigo...'); window._authEmail=email;
-  if(await sbOtpRequest(email)){
+  var res=await sbOtpRequest(email);
+  if(res.ok){
     document.getElementById('auth-step-email').style.display='none';
     document.getElementById('auth-step-code').style.display='block';
     authMsg('Codigo enviado a '+email);
     var c=document.getElementById('auth-code'); if(c) c.focus();
+  } else if(res.code==='signup_disabled'){
+    authMsg('Este correo no esta autorizado. Pide acceso al administrador.');
   } else authMsg('No se pudo enviar el codigo. Reintenta.');
 };
 window.authVerifyCode=async function(){
