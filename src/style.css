@@ -850,6 +850,11 @@ input::placeholder{color:var(--txt3)}
 .auth-card input:focus{border-color:var(--accent);outline:none}
 .auth-card .btn{width:100%;justify-content:center;padding:12px;border-radius:12px;margin-bottom:8px}
 .auth-msg{font-size:13px;color:var(--txt3);min-height:18px;margin-top:4px}
+/* Wallets de exchange custom */
+.xw-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:10px}
+.xw-item .xw-nm{font-weight:600;font-size:14px}
+.xw-item .xw-meta{font-size:12px;color:var(--txt3)}
+.xw-item .xw-bal{margin-left:auto;font-family:var(--font-num);font-size:14px;font-weight:600}
 .app-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:160;align-items:center;justify-content:center}
 .app-modal-overlay.open{display:flex}
 .app-modal{background:rgba(14,14,24,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:1.5rem 1.5rem 1.25rem;min-width:280px;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.6)}

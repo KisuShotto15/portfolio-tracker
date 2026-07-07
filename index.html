@@ -434,19 +434,6 @@
       <div id="bn-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
     <div class="fc">
-      <h3>Bibi Binance API</h3>
-      <p class="hint">Separate Binance keys for partner's wallet. Stored locally. Use read-only keys (no withdrawal or trading permissions).</p>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-        <input id="bbn-key" type="password" placeholder="API Key" oninput="S.bibiBinanceKey=this.value;save()" style="width:100%">
-        <input id="bbn-secret" type="password" placeholder="API Secret" oninput="S.bibiBinanceSecret=this.value;save()" style="width:100%">
-      </div>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn btnp" onclick="testBibiBinance()">Test connection</button>
-        <button class="btn" style="color:#E24B4A" onclick="clearBibiBinance()">Reset</button>
-      </div>
-      <div id="bbn-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
-    </div>
-    <div class="fc">
       <h3>Bybit API</h3>
       <p class="hint">Credentials stored in Cloudflare Worker env vars (BYBIT_KEY, BYBIT_SECRET).</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
@@ -464,13 +451,31 @@
       </div>
       <div id="okx-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
     </div>
-    <div class="fc">
-      <h3>Trezor (BSC)</h3>
-      <p class="hint">Tu direccion BSC para leer el balance USDT (BEP-20). Se guarda en tus datos, no en el codigo.</p>
-      <input id="trezor-addr" type="text" placeholder="0x..." oninput="S.trezorAddress=this.value.trim();S.trezorAddressUpdatedAt=stamp();save()" style="width:100%">
-      <div style="margin-top:8px"><button class="btn btnp" onclick="fetchTrezorBalance().then(function(){renderWallets();renderSummary();}).catch(function(){})">Actualizar balance</button></div>
     </div>
     </div>
+
+    <div class="set-section" id="set-exchange-wallets">
+    <span class="set-sec-lbl">Wallets de exchange</span>
+    <div class="set-grid"><div class="fc">
+      <p class="hint">Agrega tus propios exchanges. Binance usa tus API keys (read-only, sin retiro). Direccion BSC lee el balance USDT on-chain. Se guardan solo en tu cuenta.</p>
+      <div id="xw-list" style="display:flex;flex-direction:column;gap:8px;margin:10px 0"></div>
+      <div style="border-top:1px solid var(--line-soft);padding-top:12px;display:flex;flex-direction:column;gap:6px">
+        <input id="xw-name" type="text" placeholder="Nombre (ej: Mi Binance)" style="width:100%">
+        <select id="xw-type" onchange="toggleXwFields()" style="width:100%">
+          <option value="binance">Binance (API keys)</option>
+          <option value="bsc">Direccion BSC (0x...)</option>
+        </select>
+        <div id="xw-binance-fields" style="display:flex;flex-direction:column;gap:6px">
+          <input id="xw-key" type="password" placeholder="API Key" style="width:100%">
+          <input id="xw-secret" type="password" placeholder="API Secret" style="width:100%">
+        </div>
+        <div id="xw-bsc-fields" style="display:none">
+          <input id="xw-address" type="text" placeholder="0x..." style="width:100%">
+        </div>
+        <div><button class="btn btnp" onclick="addExchangeWallet()">Agregar wallet</button></div>
+        <div id="xw-status" style="font-size:13px;color:var(--color-text-secondary)"></div>
+      </div>
+    </div></div>
     </div>
 
     <div class="set-section">
