@@ -171,6 +171,11 @@ var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
   budgetTotal:600, budgetTotalUpdatedAt:null,
+  // Integraciones personales (Exchanges, Zelle/Remesas): toggle por usuario en
+  // Settings. null = aun sin derivar; se decide en deriveIntegrations() segun los
+  // datos del usuario (encendido si ya los usa, apagado para cuentas nuevas).
+  showExchanges:null, showExchangesUpdatedAt:null,
+  showZelle:null,     showZelleUpdatedAt:null,
   binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
@@ -487,7 +492,7 @@ function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoSt
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
-function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return true; return w?w.trackerOnly===true:false; }
+function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); if(!w&&name==='Zelle') return !!S.showZelle; return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
 
 async function fetchRate(force){
@@ -2515,10 +2520,50 @@ window.refreshAllWallets=async function(){
 };
 
 var WALLET_LOGOS={'Zelle':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1'};
+
+// ── Integraciones personales (toggles en Settings) ──────────────────────────
+// Deriva el estado inicial de los toggles la primera vez (null): encendido si el
+// usuario YA usa la integracion (dueno conserva lo suyo), apagado si no (cuenta
+// nueva limpia). Sin correos ni hardcodes: cada usuario decide en sus datos.
+function deriveIntegrations(){
+  if(S.showExchanges==null){
+    S.showExchanges=!!(S.binanceBalance!=null||S.bibiBinanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||S.trezorBalance!=null||(S.binanceKey&&S.binanceKey.length)||(S.bibiBinanceKey&&S.bibiBinanceKey.length));
+  }
+  if(S.showZelle==null){
+    S.showZelle=(S.transactions||[]).some(function(t){ return t.wallet==='Zelle'||t.category==='Emily'; });
+  }
+}
+var INTEGRATIONS=[{id:'showExchanges',label:'Exchanges'},{id:'showZelle',label:'Zelle / Remesas'}];
+function renderIntegrationToggles(){
+  var wrap=document.getElementById('integration-toggles'); if(!wrap) return;
+  wrap.innerHTML=INTEGRATIONS.map(function(t){
+    return '<button class="tool-toggle'+(S[t.id]?' on':'')+'" onclick="toggleIntegration(\''+t.id+'\')">'+t.label+'</button>';
+  }).join('');
+}
+// Muestra/oculta lo que depende de los toggles y que no se reconstruye en cada
+// render: la seccion de config de exchanges en Settings y la opcion de categoria
+// Emily en los dropdowns. Las cards de wallet y el tracker Zelle se gatean dentro
+// de renderWallets/populateWalletSelects/isTracker.
+function applyIntegrations(){
+  var ex=document.getElementById('set-exchanges'); if(ex) ex.style.display=S.showExchanges?'':'none';
+  ['tf-cat','tx-cat'].forEach(function(id){
+    var sel=document.getElementById(id); if(!sel) return;
+    var opt=Array.prototype.filter.call(sel.options,function(o){ return o.value==='Emily'; })[0];
+    if(S.showZelle&&!opt){ var o=document.createElement('option'); o.text='Emily'; sel.add(o); }
+    else if(!S.showZelle&&opt){ sel.remove(opt.index); }
+  });
+}
+window.toggleIntegration=function(id){
+  S[id]=!S[id]; S[id+'UpdatedAt']=stamp(); save();
+  applyIntegrations(); renderIntegrationToggles();
+  populateWalletSelects(); renderWallets(); renderSummary(); renderTx();
+};
+
 function renderWallets(){
   var grid=document.getElementById('w-grid'); var cards=[];
-  var apiTotal=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
-  var trackerNames=['Zelle'];
+  var showEx=!!S.showExchanges;
+  var apiTotal=showEx?((S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0)):0;
+  var trackerNames=S.showZelle?['Zelle']:[];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
   var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
   var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
@@ -2532,10 +2577,10 @@ function renderWallets(){
     return {nm:n,v:v,col:TRK_COLORS[i%TRK_COLORS.length]};
   });
   var wvA=[
-    {nm:'Binance',v:(S.binanceBalance||0)+(S.bibiBinanceBalance||0),col:'#9B70F0'},
-    {nm:'Bybit',v:S.bybitBalance||0,col:'#4ED9A4'},
-    {nm:'Trezor',v:S.trezorBalance||0,col:'#60A5FA'},
-    {nm:'OKX',v:S.okxBalance||0,col:'#FBBF24'}
+    {nm:'Binance',v:showEx?((S.binanceBalance||0)+(S.bibiBinanceBalance||0)):0,col:'#9B70F0'},
+    {nm:'Bybit',v:showEx?(S.bybitBalance||0):0,col:'#4ED9A4'},
+    {nm:'Trezor',v:showEx?(S.trezorBalance||0):0,col:'#60A5FA'},
+    {nm:'OKX',v:showEx?(S.okxBalance||0):0,col:'#FBBF24'}
   ].concat(trkEntries).concat([
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
   ]).filter(function(a){return a.v>0;}).sort(function(a,b){return b.v-a.v;});
@@ -2563,12 +2608,12 @@ function renderWallets(){
   }
 
   // ── Exchanges ─────────────────────────────────────────────────────────
-  var exRows=''
+  var exRows=!showEx?'':(''
     +apiRow('#9B70F0','B','Binance',S.binanceBalance!==null,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png?v=3')
     +apiRow('#FB923C','B','Binance Bibi',S.bibiBinanceBalance!==null,S.bibiBinanceBalance,S.bibiBinanceUpdated,'','/logo-binance.png?v=3')
     +apiRow('#4ED9A4','B','Bybit',S.bybitBalance!==null,S.bybitBalance,S.bybitUpdated,'','/logo-bybit.png?v=2')
     +apiRow('#FBBF24','O','OKX',S.okxBalance!==null,S.okxBalance,S.okxUpdated,'','/logo-okx.png?v=2')
-    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT','/logo-trezor.png?v=2');
+    +apiRow('#60A5FA','T','Trezor',true,S.trezorBalance,S.trezorUpdated,'BSC USDT','/logo-trezor.png?v=2'));
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){
@@ -2593,8 +2638,8 @@ function renderWallets(){
   }).join('');
 
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
-  var walletCount=5+trackerNames.length+manualNormalCount;
-  var notConn=[S.binanceBalance,S.bibiBinanceBalance,S.bybitBalance,S.okxBalance].filter(function(b){return b===null;}).length;
+  var walletCount=(showEx?5:0)+trackerNames.length+manualNormalCount;
+  var notConn=showEx?[S.binanceBalance,S.bibiBinanceBalance,S.bybitBalance,S.okxBalance].filter(function(b){return b===null;}).length:0;
 
   function htile(lbl,val,col){
     var pct=grand>0?(val/grand*100).toFixed(1):'0';
@@ -2609,7 +2654,7 @@ function renderWallets(){
           +'<div class="wm-hero-meta">'+walletCount+' wallets'+(notConn>0?' · '+notConn+' not connected':'')+'</div>'
         +'</div>'
         +'<div class="wm-hero-tiles">'
-          +htile('Exchanges',apiTotal,'#9B70F0')
+          +(showEx?htile('Exchanges',apiTotal,'#9B70F0'):'')
           +htile('Trackers',trackerTotal,'#2DD4BF')
           +htile('Manual',manualNormal,'#6B7280')
         +'</div>'
@@ -2620,8 +2665,8 @@ function renderWallets(){
         +'<div class="wm-legend">'+wvLeg+'</div>'
       +'</div>'
     +'</div>'
-    +'<div class="wm-cols wm-cols-3">'
-      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>'
+    +'<div class="wm-cols '+(showEx?'wm-cols-3':'wm-cols-2')+'">'
+      +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>':'')
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
     +'</div>';
@@ -2640,7 +2685,7 @@ function drawWalletDonut(data, grand){
 
 
 function populateWalletSelects(){
-  var names=['Binance','Zelle','Cash'];
+  var names=['Binance'].concat(S.showZelle?['Zelle']:[]).concat(['Cash']);
   S.manualWallets.forEach(function(w){ if(names.indexOf(w.name)<0) names.push(w.name); });
   ['tx-wallet','tf-wallet','rec-wallet'].forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
@@ -2768,7 +2813,7 @@ function showPage(id,btn,arg){
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); }
   else if(id==='history') renderHistory(arg||'snapshots');
-  else if(id==='settings') renderPresetsManage();
+  else if(id==='settings'){ renderPresetsManage(); renderIntegrationToggles(); applyIntegrations(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
   var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -3115,7 +3160,9 @@ async function init(){
   document.getElementById('tx-date').value=today;
   populateTxMonth(); // default: All months (value queda '')
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
+  deriveIntegrations();
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
+  applyIntegrations(); renderIntegrationToggles();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   if(MULTIUSER){
     // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
@@ -3139,6 +3186,7 @@ async function init(){
 async function bootAfterAuth(firstLogin){
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
+  deriveIntegrations(); applyIntegrations(); renderIntegrationToggles();
   // Cambios locales sin pushear de una sesion anterior (cerro la app offline):
   // el pull respeta LWW asi que no se pisaron, ahora los propagamos a la nube.
   if(localStorage.getItem('ft13_dirty')){ _dirty=true; pushToCloud(); }
