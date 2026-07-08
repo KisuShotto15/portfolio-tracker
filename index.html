@@ -172,7 +172,7 @@
       <button id="btn-redo" class="btn btns" style="padding:5px 8px" title="Redo" aria-label="Redo" disabled onclick="doRedo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <select id="tf-type" onchange="renderTx()" style="display:none"><option value="">All types</option><option>Debit</option><option>Credit</option></select>
       <div id="tx-filters-extra">
-        <select id="tf-cat" onchange="renderTx()"><option value="">Category</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
+        <select id="tf-cat" onchange="renderTx()"><option value="">Category</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select>
         <select id="tf-wallet" onchange="renderTx()"><option value="">All wallets</option></select>
         <select id="tf-month" onchange="renderTx()"></select>
       </div>
@@ -234,6 +234,21 @@
           <select id="ow-chain"><option value="evm">EVM</option><option value="btc">Bitcoin</option></select>
           <input type="text" id="ow-addr" placeholder="Address / xpub / zpub" style="flex:1;min-width:160px;font-family:var(--font-num)"/>
           <button class="btn btnp btns" onclick="saveOnchainWallet()">Add</button>
+        </div>
+      </div>
+    </div>
+    <div class="hld-wallets" id="hld-manual">
+      <button class="hld-wallets-head" onclick="toggleMhCard()">
+        <span class="cleg" id="mh-count" style="margin:0">Manual</span>
+        <svg class="bdg-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hld-wallets-body" id="mh-body">
+        <div id="mh-list"></div>
+        <div class="hld-add">
+          <input type="text" id="mh-label" placeholder="Label (opcional)"/>
+          <select id="mh-coin"></select>
+          <input type="number" id="mh-qty" step="any" placeholder="Cantidad" style="flex:1;min-width:120px;font-family:var(--font-num)"/>
+          <button class="btn btnp btns" onclick="addManualHolding()">Add</button>
         </div>
       </div>
     </div>
@@ -348,7 +363,7 @@
           <select id="rec-type"><option value="Debit">Debit</option><option value="Credit">Credit</option></select>
         </div>
         <div class="rec-form-row">
-          <select id="rec-cat"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select>
+          <select id="rec-cat"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select>
           <select id="rec-cur"><option value="USD">USD</option><option value="VES">VES</option></select>
         </div>
         <div class="rec-form-row">
@@ -537,7 +552,7 @@
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option></select></div>
+    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES</option></select></div>
     <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
   </div>

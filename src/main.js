@@ -18,6 +18,7 @@ var SYNC_PROXY    = location.hostname.endsWith('.vercel.app')
 var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
+var PRICE_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/prices';
 // ── Multi-usuario (Supabase) ──────────────────────────────────────────────
 // Si SUPABASE_URL/KEY estan configuradas, la app entra en modo multi-usuario:
 // login por codigo de correo, y el sync usa el token del usuario (Bearer) en vez
@@ -139,6 +140,11 @@ var AUTOFILL_RULES = [
 
 var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
+// 'Transfer' (deposito/retiro) NO va en SUMMARY_CATS ni CATS: asi queda fuera de
+// income/gasto, donut y budget automaticamente. Mueve el balance del wallet (via
+// type Credit/Debit, igual que cualquier tx) pero se netea del P&L como los flujos
+// de Investments (ver isExtFlow: dinero que entra/sale del portfolio, no ganancia).
+function isExtFlow(cat){ return cat==='Investments'||cat==='Transfer'; }
 var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8','Eating Out':'#FB923C',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
   Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Other:'#6B7280'};
@@ -163,6 +169,10 @@ var S = {
   exchangeMigrated:null, // marca que ya se migro Bibi/Trezor a exchangeWallets
   walletHoldings:[],   walletHoldingsUpdated:null,
   onchainWallets:[],   onchainWalletsUpdatedAt:null,
+  // Holdings manuales de cripto: pones la cantidad y el precio se trae de CoinGecko.
+  // NO cuentan para el net worth ni el P&L; solo alimentan la linea "+Holdings".
+  manualHoldings:[],   manualHoldingsUpdatedAt:null,
+  coinPrices:{},       coinPricesUpdatedAt:null, coinPricesFetchedAt:null,
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
@@ -524,6 +534,65 @@ var BINANCE_AUTO_MS=5*60*60*1000; // 5 hours
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
 
+// Monedas soportadas para holdings manuales: simbolo → id de CoinGecko + nombre.
+// El label del holding es libre; la moneda se elige de aca para que el precio resuelva.
+var COIN_LIST=[
+  {sym:'BTC', id:'bitcoin', name:'Bitcoin'},
+  {sym:'ETH', id:'ethereum', name:'Ethereum'},
+  {sym:'AVAX', id:'avalanche-2', name:'Avalanche'},
+  {sym:'UNI', id:'uniswap', name:'Uniswap'},
+  {sym:'AAVE', id:'aave', name:'Aave'},
+  {sym:'SOL', id:'solana', name:'Solana'},
+  {sym:'BNB', id:'binancecoin', name:'BNB'},
+  {sym:'MATIC', id:'matic-network', name:'Polygon'},
+  {sym:'ARB', id:'arbitrum', name:'Arbitrum'},
+  {sym:'OP', id:'optimism', name:'Optimism'},
+  {sym:'LINK', id:'chainlink', name:'Chainlink'},
+  {sym:'DOT', id:'polkadot', name:'Polkadot'},
+  {sym:'ADA', id:'cardano', name:'Cardano'},
+  {sym:'XRP', id:'ripple', name:'XRP'},
+  {sym:'DOGE', id:'dogecoin', name:'Dogecoin'},
+  {sym:'LTC', id:'litecoin', name:'Litecoin'},
+  {sym:'ATOM', id:'cosmos', name:'Cosmos'},
+  {sym:'NEAR', id:'near', name:'NEAR'},
+  {sym:'APT', id:'aptos', name:'Aptos'},
+  {sym:'SUI', id:'sui', name:'Sui'},
+  {sym:'INJ', id:'injective-protocol', name:'Injective'},
+  {sym:'RNDR', id:'render-token', name:'Render'},
+  {sym:'FTM', id:'fantom', name:'Fantom'},
+  {sym:'USDC', id:'usd-coin', name:'USD Coin'},
+  {sym:'USDT', id:'tether', name:'Tether'},
+  {sym:'DAI', id:'dai', name:'Dai'},
+];
+function coinIdBySym(sym){ for(var i=0;i<COIN_LIST.length;i++){ if(COIN_LIST[i].sym===sym) return COIN_LIST[i].id; } return null; }
+function coinNameBySym(sym){ for(var i=0;i<COIN_LIST.length;i++){ if(COIN_LIST[i].sym===sym) return COIN_LIST[i].name; } return null; }
+var COINPRICE_AUTO_MS=6*60*60*1000; // 6 horas
+// Trae precios spot (CoinGecko via proxy) para las monedas de los holdings manuales.
+// Un solo request batcheado; gateado por edad salvo force. Cache en S.coinPrices.
+async function fetchCoinPrices(force){
+  if(!canFetchExchanges()) return;
+  var coins={}; (S.manualHoldings||[]).forEach(function(h){ if(h.coin) coins[h.coin]=1; });
+  var syms=Object.keys(coins); if(!syms.length) return;
+  if(!force){ var age=S.coinPricesFetchedAt?Date.now()-S.coinPricesFetchedAt:Infinity; if(age<COINPRICE_AUTO_MS) return; }
+  var ids=syms.map(coinIdBySym).filter(Boolean);
+  if(!ids.length) return;
+  var r=await fetch(PRICE_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({ids:ids})});
+  if(!r.ok) throw new Error('Price '+r.status);
+  var j=await r.json(); if(j.error) throw new Error(j.error);
+  var prices=S.coinPrices||{};
+  syms.forEach(function(sym){ var id=coinIdBySym(sym); if(id&&j[id]&&typeof j[id].usd==='number') prices[sym]=j[id].usd; });
+  S.coinPrices=prices; S.coinPricesUpdatedAt=stamp(); S.coinPricesFetchedAt=Date.now(); save();
+  return prices;
+}
+// Valor total del tab Holdings: on-chain (Ankr) + manuales (cantidad x precio).
+// Alimenta la linea "+Holdings" del equity y se congela en cada snapshot.
+function holdingsTotalUsd(){
+  var t=0;
+  (S.walletHoldings||[]).forEach(function(h){ t+=h.balanceUsd||0; });
+  var prices=S.coinPrices||{};
+  (S.manualHoldings||[]).forEach(function(h){ t+=(h.qty||0)*(prices[h.coin]||0); });
+  return parseFloat(t.toFixed(2));
+}
 async function fetchWalletHoldings(){ if(!canFetchExchanges()) return;
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
@@ -538,16 +607,23 @@ async function fetchWalletHoldings(){ if(!canFetchExchanges()) return;
 function renderWalletHoldings(){
   var wrap=document.getElementById('wh-wrap');
   var upd=document.getElementById('wh-updated');
+  populateCoinSelect();
+  renderOnchainWallets();
+  renderManualHoldings();
   if(!wrap) return;
   if(upd&&S.walletHoldingsUpdated) upd.textContent=S.walletHoldingsUpdated;
-  renderOnchainWallets();
   var MIN_USD=1;
+  var prices=S.coinPrices||{};
   var data=(S.walletHoldings||[]).filter(function(h){ return h.balanceUsd>=MIN_USD; });
+  // Holdings manuales como pseudo-holdings (network 'manual') para fusionarlos en el
+  // total, donut y lista junto con los on-chain.
+  var manualH=(S.manualHoldings||[]).map(function(h){ var p=prices[h.coin]||0; return {symbol:h.coin,balance:h.qty||0,balanceUsd:(h.qty||0)*p,network:'manual',walletLabel:h.label}; }).filter(function(h){ return h.balanceUsd>=MIN_USD; });
+  data=data.concat(manualH);
   var wallets=S.onchainWallets||[];
-  if(!wallets.length){ wrap.innerHTML=''; return; }
-  if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Click Refresh to load live balances'); return; }
-  var netLabel={'eth':'Ethereum','arbitrum':'Arbitrum','base':'Base','bsc':'BNB Chain','bitcoin':'Bitcoin'};
-  var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#5BA4F5','bsc':'#EF9F27','bitcoin':'#F7931A'};
+  if(!wallets.length&&!(S.manualHoldings||[]).length){ wrap.innerHTML=''; return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Agrega un holding manual o una wallet, luego Refresh'); return; }
+  var netLabel={'eth':'Ethereum','arbitrum':'Arbitrum','base':'Base','bsc':'BNB Chain','bitcoin':'Bitcoin','manual':'Manual'};
+  var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#5BA4F5','bsc':'#EF9F27','bitcoin':'#F7931A','manual':'#9B70F0'};
   var TOKEN_COLOR={BTC:'#F7931A',ETH:'#627EEA',WETH:'#627EEA',USDC:'#2775CA',USDT:'#26A17B',DAI:'#F5AC37',ARB:'#9CA3AF',BNB:'#F0B90B',MATIC:'#8247E5',OP:'#FF0420',SOL:'#14F195'};
   var TOKEN_NAME={BTC:'Bitcoin',ETH:'Ethereum',WETH:'Wrapped Ether',USDC:'USD Coin',USDT:'Tether',DAI:'Dai',ARB:'Arbitrum',BNB:'BNB',MATIC:'Polygon',OP:'Optimism',SOL:'Solana'};
   var STABLE={USDC:1,USDT:1,DAI:1,BUSD:1,TUSD:1,USDP:1,FRAX:1,'USDC.e':1};
@@ -627,6 +703,10 @@ function toggleOwCard(){
   var card=document.getElementById('hld-wallets'); if(card) card.classList.toggle('open');
 }
 window.toggleOwCard=toggleOwCard;
+function toggleMhCard(){
+  var card=document.getElementById('hld-manual'); if(card) card.classList.toggle('open');
+}
+window.toggleMhCard=toggleMhCard;
 
 function renderOnchainWallets(){
   var wrap=document.getElementById('ow-list');
@@ -682,10 +762,51 @@ async function refreshWalletHoldings(){
   var wrap=document.getElementById('wh-wrap');
   if(btn){ btn.disabled=true; btn.textContent='Loading...'; }
   if(wrap) wrap.innerHTML='<div class="empty"><span class="spin"></span>Loading…</div>';
-  try{ await fetchWalletHoldings(); renderWalletHoldings(); }
+  try{ await Promise.allSettled([fetchWalletHoldings(),fetchCoinPrices(true)]); renderWalletHoldings(); }
   catch(e){ console.error('fetchWalletHoldings:',e); if(wrap) wrap.innerHTML='<div class="empty" style="color:#E24B4A">Error: '+(e.message||e.toString())+'</div>'; }
   finally{ if(btn){ btn.disabled=false; btn.textContent='↺ Refresh'; } }
 }
+// ── Holdings manuales ──────────────────────────────────────────────────────
+function populateCoinSelect(){
+  var sel=document.getElementById('mh-coin'); if(!sel||sel._filled) return;
+  sel.innerHTML=COIN_LIST.map(function(c){ return '<option value="'+c.sym+'">'+c.sym+' · '+c.name+'</option>'; }).join('');
+  sel._filled=1;
+}
+function renderManualHoldings(){
+  var wrap=document.getElementById('mh-list'); var cnt=document.getElementById('mh-count');
+  var list=S.manualHoldings||[];
+  if(cnt) cnt.textContent='Manual · '+list.length;
+  if(!wrap) return;
+  if(!list.length){ wrap.innerHTML='<p style="font-size:13px;color:var(--txt3);padding:6px 2px">No manual holdings yet.</p>'; return; }
+  var prices=S.coinPrices||{};
+  wrap.innerHTML=list.map(function(h){
+    var p=prices[h.coin]||0; var val=(h.qty||0)*p;
+    return '<div class="hld-wrow">'
+      +'<span class="hld-wbadge" style="--nc:#9B70F0">'+escHtml(h.coin)+'</span>'
+      +'<span class="hld-wlabel">'+escHtml(h.label)+'</span>'
+      +'<span class="hld-waddr">'+fmtBal(h.qty||0)+' '+escHtml(h.coin)+'</span>'
+      +(p>0?'<span class="hld-wval">'+fmtUSD(val)+'</span>':'<span class="hld-waddr">sin precio</span>')
+      +'<button class="hld-wbtn del" onclick="removeManualHolding('+h.id+')" title="Remove">✕</button>'
+      +'</div>';
+  }).join('');
+}
+window.addManualHolding=function(){
+  var label=(document.getElementById('mh-label').value||'').trim();
+  var coin=document.getElementById('mh-coin').value;
+  var qty=parseFloat(document.getElementById('mh-qty').value);
+  if(!coin||isNaN(qty)||qty<=0) return;
+  if(!label) label=coinNameBySym(coin)||coin;
+  if(!S.manualHoldings) S.manualHoldings=[];
+  S.manualHoldings.push({id:Date.now(),label:label,coin:coin,qty:qty});
+  S.manualHoldingsUpdatedAt=stamp(); save();
+  ['mh-label','mh-qty'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  renderManualHoldings(); renderWalletHoldings();
+  fetchCoinPrices(true).then(function(){ renderManualHoldings(); renderWalletHoldings(); }).catch(function(){});
+};
+window.removeManualHolding=function(id){
+  S.manualHoldings=(S.manualHoldings||[]).filter(function(h){ return h.id!==id; });
+  S.manualHoldingsUpdatedAt=stamp(); save(); renderManualHoldings(); renderWalletHoldings();
+};
 
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
 
@@ -1070,6 +1191,7 @@ var CAT_META={
   'Business':     {bg:'#0f4a4a', svg:'<rect x="1.5" y="6" width="13" height="8" rx="1.5"/><path d="M5 6V4.5A1.5 1.5 0 0 1 6.5 3h3A1.5 1.5 0 0 1 11 4.5V6"/><line x1="1.5" y1="10" x2="14.5" y2="10"/>'},
   'Support':      {bg:'#5a1515', svg:'<path d="M8 12.5C6 11 2 8.5 2 5.5A3 3 0 0 1 8 4 3 3 0 0 1 14 5.5C14 8.5 10 11 8 12.5z"/>'},
   'Savings':      {bg:'#0f3060', svg:'<rect x="1.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="7" cy="8" r="2.5"/><line x1="7" y1="8" x2="8.8" y2="6.5"/><line x1="12.5" y1="5.5" x2="14.5" y2="5.5"/><line x1="12.5" y1="10.5" x2="14.5" y2="10.5"/>'},
+  'Transfer':     {bg:'#334155', svg:'<polyline points="4 3 1 6 4 9"/><line x1="1" y1="6" x2="11" y2="6"/><polyline points="12 7 15 10 12 13"/><line x1="15" y1="10" x2="5" y2="10"/>'},
 };
 // Iconos personalizados por palabra clave de la nota (misma mecanica que el
 // autofill: se matchea contra las palabras de la nota). Pisan al icono de la
@@ -1302,7 +1424,9 @@ function getAvgMonthlyContribution(){
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
 
-// Investment flows attributed to the period (prevSnap, curSnap].
+// Flujos que mueven el total pero NO son ganancia (Investments + Transfer),
+// atribuidos al periodo (prevSnap, curSnap]. Se netean del P&L para que deployar
+// capital o un deposito/retiro no cuente como profit/perdida.
 // Only counts txs created at/before curSnap was recorded (by timestamp id), so an
 // investment added *after* the snapshot — even same day — isn't wrongly counted,
 // since curSnap's total doesn't reflect it yet (it belongs to the next period).
@@ -1312,7 +1436,7 @@ function investmentFlow(prevSnap, curSnap){
   // curSnap. Falls back to date bounds for legacy snapshots/txs without ids.
   var lo=prevSnap?prevSnap.date:'';
   var txs=(S.transactions||[]).filter(function(t){
-    if(t.category!=='Investments') return false;
+    if(!isExtFlow(t.category)) return false;
     // Upper bound: recorded at/before this snapshot.
     if(curSnap.id!=null && t.id!=null && t.id>curSnap.id) return false;
     // Lower bound: recorded after the previous snapshot (id), else by date.
@@ -1979,20 +2103,13 @@ function renderEquityChart(){
   }
   var labels=snaps.map(function(s){ return s.date; });
   var vals=snaps.map(function(s){ return s.total; });
-  // Cumulative deployed capital per snapshot. Only counts investments recorded
-  // at/before each snapshot (by timestamp id), so an investment added after a
-  // snapshot isn't folded into it — matching the Snapshot P&L logic.
-  var invTx=S.transactions.filter(function(t){ return t.category==='Investments'; });
-  var adjVals=snaps.map(function(s){
-    var cumOut=0,cumIn=0;
-    invTx.forEach(function(t){
-      if(t.date<=s.date&&(s.id==null||t.id==null||t.id<=s.id)){
-        if(t.type==='Debit') cumOut+=t.amountUSD; else cumIn+=t.amountUSD;
-      }
-    });
-    return parseFloat((s.total+cumOut-cumIn).toFixed(2));
-  });
-  // Skip rebuild when snapshots + investment flows are unchanged (adjVals folds in both).
+  // Linea "+Holdings" = net worth + valor del tab Holdings congelado en cada snapshot.
+  // Los Holdings NO cuentan para el net worth ni el P&L; son un overlay del patrimonio
+  // total. holdingsValue se captura al hacer el snapshot (ver recordSnapshot); los
+  // snapshots viejos sin el campo caen a 0 (la linea coincide con Tracked hasta que
+  // empieces a capturarlo).
+  var adjVals=snaps.map(function(s){ return parseFloat((s.total+(s.holdingsValue||0)).toFixed(2)); });
+  // Skip rebuild when snapshots + holdings values are unchanged (adjVals folds in both).
   var sig=JSON.stringify([labels,vals,adjVals]);
   if(sig===_eChartSig&&eChart) return;
   _eChartSig=sig;
@@ -2006,13 +2123,13 @@ function renderEquityChart(){
   if(eHist) eHist.innerHTML=olderAllSnaps.length>0?'<div class="hist-wrap"><button class="hist-btn" onclick="showPage(\'history\',null,\'snapshots\')" title="Snapshot history">'+HIST_ICON2+'</button><div class="hist-popup"><div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Last '+Math.min(3,olderAllSnaps.length)+' snapshots</div><div style="font-size:13px">'+olderSnapsPopup+'</div>'+(olderAllSnaps.length>3?'<div style="text-align:center;margin-top:.5rem;font-size:11px;color:#9B70F0">View all '+olderAllSnaps.length+' →</div>':'')+'</div></div>':'';
   if(wrap) wrap.innerHTML='<div style="display:flex;gap:12px;font-size:12px;color:var(--color-text-secondary);margin-bottom:.5rem">'
     +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#5DCAA5;display:inline-block"></span>Tracked</span>'
-    +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>Incl. deployed capital</span>'
+    +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>+ Holdings</span>'
     +'</div>'
     +'<div style="font-size:13px">'+latestSnap+'</div>';
   if(eChart){ eChart.destroy(); eChart=null; }
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
     {label:'Tracked',data:vals,borderColor:'#4ED9A4',backgroundColor:function(ctx){var c=ctx.chart,a=c.chartArea;if(!a)return 'rgba(78,217,164,0.2)';var g=c.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(78,217,164,0.4)');g.addColorStop(1,'rgba(78,217,164,0)');return g;},borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHitRadius:20,pointBackgroundColor:'#4ED9A4',tension:0.3,fill:true},
-    {label:'Incl. deployed',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]}
+    {label:'+ Holdings',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]}
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false}}}});}
 
 function getTotalBalance(){
@@ -2097,7 +2214,7 @@ async function recordSnapshot(){
     if(!ok) return;
     S.snapshots.splice(existing,1);
   }
-  S.snapshots.push({id:Date.now(),date:today,total:val});
+  S.snapshots.push({id:Date.now(),date:today,total:val,holdingsValue:holdingsTotalUsd()});
   S.snapshotsUpdatedAt=stamp();
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(sorted.length>=2){
@@ -3186,6 +3303,7 @@ async function bootAfterAuth(firstLogin){
   migrateExchangeWallets(); renderExchangeWallets();
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
+  fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){});
   // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; }catch(e){}
   applyRecurring(); renderRecurringManage();
@@ -3193,6 +3311,7 @@ async function bootAfterAuth(firstLogin){
   autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)
   setInterval(function(){ autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
+  setInterval(function(){ fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }, COINPRICE_AUTO_MS);
   // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
   // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
   _pullTimer=setInterval(autoPull, 25000);
@@ -3200,7 +3319,7 @@ async function bootAfterAuth(firstLogin){
   // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
   window.addEventListener('focus', function(){ autoPull().then(applyRecurring); });
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); });
+    if(!document.hidden) autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); });
   });
 }
 init();
