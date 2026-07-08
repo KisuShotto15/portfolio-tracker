@@ -1920,34 +1920,6 @@ window.deleteRecurringRule=function(id){
   save(); renderRecurringManage(); renderSummary();
 };
 
-function renderSnapshotPnL(){
-  var el=document.getElementById('snap-pnl-wrap'); if(!el) return;
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  var pnls=getSnapshotPnL();
-  var HIST_ICON='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><polyline points="12 7 12 12 15 14"/></svg>';
-  var simpleHdr='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem"><span class="cleg" style="margin:0">Snapshot P&amp;L</span></div>';
-  if(!snaps.length){ el.innerHTML=simpleHdr+emptyState('No snapshots yet','Record your first snapshot to begin tracking'); return; }
-  if(snaps.length<2){ el.innerHTML=simpleHdr+'<div style="color:var(--color-text-secondary);font-size:13px">Record a second snapshot to see P&L between periods.</div>'; return; }
-  function fmtSnapDate(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}); }
-  function makePnlRow(p){
-    var c=p.profit>0?'#1D9E75':p.profit<0?'#E24B4A':'#888';
-    var sign=p.profit>0?'+':'';
-    var adj=p.invOut>0||p.invIn>0?'<span class="pnl-adj">'+(p.invOut>0?'Invested '+fmtUSD(p.invOut):'')+(p.invIn>0?(p.invOut>0?' · ':'')+' Returned '+fmtUSD(p.invIn):'')+'</span>':'';
-    return '<div class="pnl-row">'
-      +'<div>'
-        +'<div class="pnl-period">'+fmtSnapDate(p.from)+' → '+fmtSnapDate(p.to)+'</div>'
-        +'<div class="pnl-range">'+fmtUSD(p.snap1)+' → '+fmtUSD(p.snap2)+'</div>'
-        +(adj?'<div>'+adj+'</div>':'')
-      +'</div>'
-      +'<div class="pnl-profit" style="color:'+c+'">'+sign+fmtUSD(p.profit)+'</div>'
-      +'</div>';
-  }
-  var last3=pnls.slice(-3).reverse();
-  var hasMore=pnls.length>3;
-  var hdr='<div class="snap-head"><span class="cleg" style="margin:0">Snapshot P&amp;L</span>'+(hasMore?'<button class="hist-btn-txt" onclick="showPage(\'history\',null,\'snapshots\')">'+HIST_ICON+' History</button>':'')+'</div>';
-  el.innerHTML=hdr+last3.map(makePnlRow).join('');
-}
-
 function renderGoal(){
   var el=document.getElementById('goal-wrap'); if(!el) return;
   var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
@@ -1987,7 +1959,6 @@ function renderSummary(){
   renderKPIStrip(month);
   renderHealthScore();
   renderAlerts();
-  renderSnapshotPnL();
   renderGoal();
   renderEquityChart(); renderMonthlyChart();
 }
@@ -2046,11 +2017,16 @@ function renderInsights(month){
 }
 
 function getLast6(){ var m=[]; var now=new Date(); for(var i=5;i>=0;i--){ m.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); } return m; }
+function getLast12(){ var m=[]; var now=new Date(); for(var i=11;i>=0;i--){ m.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); } return m; }
 
 function renderMonthlyChart(){
   var cv=document.getElementById('chart-monthly'); if(!cv||cv.offsetParent===null) return;
   if(!window.Chart){ ensureChart().then(renderMonthlyChart).catch(function(){}); return; }
-  var months=getLast6();
+  // Web (>=721px) ocupa el ancho completo → 12 meses para que no se vea vacio.
+  // Mobile mantiene 6 meses (columna angosta).
+  var isWeb=window.matchMedia('(min-width:721px)').matches;
+  var months=isWeb?getLast12():getLast6();
+  var mlbl=document.getElementById('mc-months-lbl'); if(mlbl) mlbl.textContent=(isWeb?'12':'6')+' Months';
   var SPEND_CATS=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
   var map=monthCatTotals();
   var cD=months.map(function(m){ return parseFloat(SPEND_CATS.reduce(function(s,c){ var e=map[m+'|'+c]; return s+(e?e.d:0); },0).toFixed(2)); });
@@ -2251,9 +2227,9 @@ async function deleteSnapshot(id){
       S.transactionsUpdatedAt=stamp();
     }
   }
-  save(); renderEquityChart(); renderSnapshotPnL();
+  save(); renderEquityChart();
 }
-async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=stamp(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); renderSnapshotPnL(); } }
+async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=stamp(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); } }
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; S.budgetTotalUpdatedAt=stamp(); save(); renderBudget(); } }
@@ -2266,36 +2242,6 @@ function saveCategoryBudget(cat,val){
 }
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
 window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
-window._budPctLive=function(cat,val){
-  var v=parseFloat(val)||0;
-  var total=S.budgetTotal||600;
-  var pct=v>0?parseFloat(((v/total)*100).toFixed(1)):0;
-  var barW=Math.min(100,pct);
-  var barCol=pct>25?'#E24B4A':pct>15?'#EF9F27':'#1D9E75';
-  var key=cat.replace(/ /g,'-');
-  var pctEl=document.getElementById('bud-pct-'+key);
-  var barEl=document.getElementById('bud-bar-'+key);
-  if(pctEl){ pctEl.textContent=v>0?pct+'%':'—'; pctEl.style.color=v>0?barCol:'rgba(255,255,255,0.25)'; pctEl.style.fontWeight=v>0?'600':'400'; }
-  if(barEl){ barEl.style.width=barW+'%'; barEl.style.background=barCol; }
-  // Update allocated total bar
-  var allocEl=document.getElementById('bud-alloc-bar');
-  if(allocEl){
-    var cats=Object.keys(S.categoryBudgets||{});
-    var sum=cats.reduce(function(s,c){ return s+(c===cat?v:((S.categoryBudgets||{})[c]||0)); },0);
-    // add cats not in S.categoryBudgets (the one being typed)
-    var sumAll=0;
-    document.querySelectorAll('.budget-limits-grid input[type="number"]').forEach(function(inp,i){
-      sumAll+=parseFloat(inp.value)||0;
-    });
-    var ap=total>0?((sumAll/total)*100):0;
-    var ac=Math.abs(sumAll-total)<1?'#1D9E75':sumAll>total?'#E24B4A':'#EF9F27';
-    allocEl.innerHTML='<span style="color:var(--color-text-secondary)">Allocated:</span>'
-      +'<span style="color:'+ac+';font-weight:600">'+fmtUSD(sumAll)+'</span>'
-      +'<span style="color:var(--color-text-secondary)">/ '+fmtUSD(total)+'</span>'
-      +'<span style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;max-width:140px"><span style="display:block;height:100%;width:'+Math.min(100,ap)+'%;background:'+ac+';border-radius:3px;transition:width .2s"></span></span>'
-      +'<span style="color:'+ac+';font-weight:600">'+ap.toFixed(1)+'%</span>';
-  }
-};
 function renderBudget(){
   var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
   var months=getMonths();
@@ -2367,7 +2313,7 @@ function renderBudget(){
       +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span><span class="bdg-cat-pct">'+cp+'%</span></div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-lim"><span>'+(catLim>0?'of '+fmtUSD(catLim):'no limit')+'</span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
+      +'<div class="bdg-cat-lim"><span class="bdg-lim-wrap">of $<input type="number" class="bdg-lim-inp" value="'+(catLim>0?catLim:'')+'" placeholder="—" step="1" min="0" inputmode="numeric" onchange="saveCategoryBudget(\''+cat+'\',this.value)"></span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
       +'</div>';
   });
   html+='</div>';
@@ -2421,27 +2367,7 @@ function renderBudget(){
           +'<span style="color:'+col+';font-weight:600">'+pct.toFixed(1)+'%</span>'
           +'</div>';
       })()
-      +'<div class="budget-limits-grid">'
-      +BUDGET_CATS.map(function(cat){
-        var v=(S.categoryBudgets||{})[cat]||0;
-        var pct=v>0&&S.budgetTotal>0?parseFloat(((v/S.budgetTotal)*100).toFixed(1)):0;
-        var barW=Math.min(100,pct);
-        var barCol=pct>25?'#E24B4A':pct>15?'#EF9F27':'#1D9E75';
-        return '<div>'
-          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
-            +'<span class="tag '+tagCat(cat)+'" style="font-size:10px">'+cat+'</span>'
-            +(v>0?'<span id="bud-pct-'+cat.replace(/ /g,'-')+'" style="font-size:10px;font-weight:600;color:'+barCol+'">'+pct+'%</span>':'<span id="bud-pct-'+cat.replace(/ /g,'-')+'" style="font-size:10px;color:rgba(255,255,255,0.25)">—</span>')
-          +'</div>'
-          +'<input type="number" placeholder="No limit" step="1" value="'+(v||'')+'" '
-          +'style="width:100%;padding:7px 10px;border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:13px" '
-          +'oninput="window._budPctLive(\''+cat+'\',this.value)" '
-          +'onchange="saveCategoryBudget(\''+cat+'\',this.value)"/>'
-          +'<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:5px;overflow:hidden">'
-            +'<div id="bud-bar-'+cat.replace(/ /g,'-')+'" style="height:100%;width:'+barW+'%;background:'+barCol+';border-radius:2px;transition:width .2s"></div>'
-          +'</div>'
-          +'</div>';
-      }).join('')
-      +'</div>'
+      +'<p style="font-size:12px;color:var(--txt3);margin:0">Edita el limite de cada categoria tocando el numero en su tarjeta arriba (&laquo;of $&raquo;).</p>'
       +'</div>';
   }
   html+='</div>';

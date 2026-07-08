@@ -102,16 +102,13 @@
       <!-- Monthly breakdown kept rendered (data integrity), hidden from view -->
       <div class="dash-hidden"><div id="sum-cards"></div></div>
 
-      <!-- Section 3 — Cash Flow + Snapshot P&L -->
-      <div class="span8">
+      <!-- Section 3 — Cash Flow (6 meses) -->
+      <div class="span12">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <span class="cleg" style="margin:0">6 Months</span>
+          <span class="cleg" id="mc-months-lbl" style="margin:0">6 Months</span>
           <div class="cleg" id="mc-leg" style="margin:0"></div>
         </div>
         <div style="position:relative;height:262px;overflow:hidden"><canvas id="chart-monthly"></canvas></div>
-      </div>
-      <div class="span4">
-        <div class="cw" id="snap-pnl-wrap"></div>
       </div>
     </div>
     <div id="mob-settings-link">
