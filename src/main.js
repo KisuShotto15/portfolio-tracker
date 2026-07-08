@@ -2573,14 +2573,45 @@ async function fetchExchangeWallet(w){
   } else {
     if(!w.key||!w.secret) return;
     if(!canFetchExchanges()) throw new Error('Sin sesion');
-    var r=await fetch(BINANCE_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret})});
-    if(!r.ok) throw new Error('Binance '+r.status);
-    var d=await r.json(); var usdt=Array.isArray(d)?d.find(function(a){return a.asset==='USDT';}):null;
-    w.balance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
+    if(w.type==='bybit'){
+      var rb=await fetch(BYBIT_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret})});
+      if(!rb.ok) throw new Error('Bybit '+rb.status);
+      var db=await rb.json(); if(db.error) throw new Error(db.error);
+      var lst=(db.result&&db.result.list)||[]; var tot=0;
+      lst.forEach(function(acc){ var u=acc.coin&&acc.coin.find(function(c){ return c.coin==='USDT'; }); if(u) tot+=parseFloat(u.walletBalance||0); });
+      w.balance=parseFloat(tot.toFixed(2));
+    } else if(w.type==='okx'){
+      var ro=await fetch(OKX_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret,passphrase:w.passphrase})});
+      if(!ro.ok) throw new Error('OKX '+ro.status);
+      var doo=await ro.json(); if(doo.error) throw new Error(doo.error);
+      var det=(doo.data&&doo.data[0]&&doo.data[0].details)||[];
+      var uo=det.find(function(c){ return c.ccy==='USDT'; });
+      w.balance=parseFloat(parseFloat((uo&&uo.cashBal)||0).toFixed(2));
+    } else {
+      var r=await fetch(BINANCE_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret})});
+      if(!r.ok) throw new Error('Binance '+r.status);
+      var d=await r.json(); var usdt=Array.isArray(d)?d.find(function(a){return a.asset==='USDT';}):null;
+      w.balance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
+    }
   }
   w.updated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); w.fetchedAt=Date.now();
   S.exchangeWalletsUpdatedAt=stamp(); save();
   return w.balance;
+}
+// Logo automatico por nombre: si el nombre contiene binance/bybit/okx/trezor/etc,
+// usa ese logo. Devuelve null si no matchea (se cae al monograma).
+var EXCHANGE_LOGOS=[
+  {kw:'binance',src:'/logo-binance.png?v=3'},
+  {kw:'bybit',  src:'/logo-bybit.png?v=2'},
+  {kw:'okx',    src:'/logo-okx.png?v=2'},
+  {kw:'trezor', src:'/logo-trezor.png?v=1'},
+  {kw:'zinli',  src:'/logo-zinli.png?v=1'},
+  {kw:'bdv',    src:'/logo-bdv.png?v=1'},
+];
+function exchangeLogoByName(name){
+  var n=(name||'').toLowerCase();
+  for(var i=0;i<EXCHANGE_LOGOS.length;i++){ if(n.indexOf(EXCHANGE_LOGOS[i].kw)>=0) return EXCHANGE_LOGOS[i].src; }
+  return null;
 }
 async function autoFetchExchangeWallets(){
   var list=S.exchangeWallets||[];
@@ -2609,17 +2640,20 @@ function migrateExchangeWallets(){
 function renderExchangeWallets(){
   var wrap=document.getElementById('xw-list'); if(!wrap) return;
   var list=S.exchangeWallets||[];
+  var TYPE_LBL={binance:'Binance',bybit:'Bybit',okx:'OKX',bsc:'BSC'};
   wrap.innerHTML=list.length?list.map(function(w){
-    var meta=w.type==='bsc'?('BSC '+(w.address||'').slice(0,10)+'…'):'Binance';
+    var meta=w.type==='bsc'?('BSC '+(w.address||'').slice(0,10)+'…'):(TYPE_LBL[w.type]||w.type);
     var bal=w.balance!=null?('$'+w.balance):'—';
     return '<div class="xw-item"><span class="xw-nm">'+escHtml(w.name)+'</span><span class="xw-meta">'+meta+'</span><span class="xw-bal">'+bal+'</span><button class="btn btns" style="color:#E24B4A" onclick="removeExchangeWallet('+w.id+')">Eliminar</button></div>';
   }).join(''):'<p class="hint">Aun no agregaste wallets de exchange.</p>';
 }
 window.toggleXwFields=function(){
   var type=document.getElementById('xw-type').value;
-  var b=document.getElementById('xw-binance-fields'), s=document.getElementById('xw-bsc-fields');
-  if(b) b.style.display=type==='binance'?'':'none';
+  var b=document.getElementById('xw-binance-fields'), s=document.getElementById('xw-bsc-fields'), p=document.getElementById('xw-pass');
+  // Binance/Bybit/OKX comparten los campos key/secret; solo BSC usa direccion.
+  if(b) b.style.display=type==='bsc'?'none':'';
   if(s) s.style.display=type==='bsc'?'':'none';
+  if(p) p.style.display=type==='okx'?'':'none';
 };
 window.addExchangeWallet=async function(){
   var st=document.getElementById('xw-status');
@@ -2635,10 +2669,14 @@ window.addExchangeWallet=async function(){
     w.key=(document.getElementById('xw-key').value||'').trim();
     w.secret=(document.getElementById('xw-secret').value||'').trim();
     if(!w.key||!w.secret){ if(st) st.textContent='Faltan key/secret'; return; }
+    if(type==='okx'){
+      w.passphrase=(document.getElementById('xw-pass').value||'').trim();
+      if(!w.passphrase){ if(st) st.textContent='OKX necesita passphrase'; return; }
+    }
   }
   if(!S.exchangeWallets) S.exchangeWallets=[];
   S.exchangeWallets.push(w); S.exchangeWalletsUpdatedAt=stamp(); save();
-  ['xw-name','xw-key','xw-secret','xw-address'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  ['xw-name','xw-key','xw-secret','xw-address','xw-pass'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   if(st) st.textContent='Agregado. Trayendo balance...';
   renderExchangeWallets(); renderWallets(); renderSummary();
   try{ await fetchExchangeWallet(w); if(st) st.textContent='Balance: $'+(w.balance||0); }
@@ -2706,7 +2744,8 @@ function renderWallets(){
   // ── Exchanges ─────────────────────────────────────────────────────────
   // Built-in (dueno) solo si estan conectados; + los wallets custom de cada usuario.
   function xwRow(w){
-    return apiRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),escHtml(w.name),w.balance!=null,w.balance,w.updated,w.type==='bsc'?'BSC USDT':'',w.type==='bsc'?null:'/logo-binance.png?v=3');
+    var logo=exchangeLogoByName(w.name)||(w.type==='bsc'?null:'/logo-binance.png?v=3');
+    return apiRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),escHtml(w.name),w.balance!=null,w.balance,w.updated,w.type==='bsc'?'BSC USDT':'',logo);
   }
   var exRows=!showEx?'':(''
     +(S.binanceBalance!==null?apiRow('#9B70F0','B','Binance',true,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png?v=3'):'')

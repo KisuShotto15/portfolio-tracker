@@ -409,17 +409,20 @@
     <div class="set-section" id="set-exchange-wallets">
     <span class="set-sec-lbl">Wallets de exchange</span>
     <div class="set-grid"><div class="fc">
-      <p class="hint">Agrega tus propios exchanges. Binance usa tus API keys (read-only, sin retiro). Direccion BSC lee el balance USDT on-chain. Se guardan solo en tu cuenta.</p>
+      <p class="hint">Agrega tus propios exchanges. Binance/Bybit/OKX usan tus API keys (read-only, sin retiro). Direccion BSC lee el balance USDT on-chain. Se guardan solo en tu cuenta.</p>
       <div id="xw-list" style="display:flex;flex-direction:column;gap:8px;margin:10px 0"></div>
       <div style="border-top:1px solid var(--line-soft);padding-top:12px;display:flex;flex-direction:column;gap:6px">
         <input id="xw-name" type="text" placeholder="Nombre (ej: Mi Binance)" style="width:100%">
         <select id="xw-type" onchange="toggleXwFields()" style="width:100%">
           <option value="binance">Binance (API keys)</option>
+          <option value="bybit">Bybit (API keys)</option>
+          <option value="okx">OKX (API keys)</option>
           <option value="bsc">Direccion BSC (0x...)</option>
         </select>
         <div id="xw-binance-fields" style="display:flex;flex-direction:column;gap:6px">
           <input id="xw-key" type="password" placeholder="API Key" style="width:100%">
           <input id="xw-secret" type="password" placeholder="API Secret" style="width:100%">
+          <input id="xw-pass" type="password" placeholder="Passphrase (OKX)" style="width:100%;display:none" data-okx-pass>
         </div>
         <div id="xw-bsc-fields" style="display:none">
           <input id="xw-address" type="text" placeholder="0x..." style="width:100%">
