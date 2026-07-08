@@ -14,26 +14,16 @@ async function verifySupabaseUser(req) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Secret, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Auth dual: el dueno via X-Api-Secret; cualquier usuario autorizado via JWT
-  // de Supabase. El dueno puede usar sus env keys; el usuario JWT SOLO sus propias
-  // key/secret del body — nunca puede tocar las env keys del dueno.
-  const apiSecret = process.env.API_SECRET;
-  const isOwner = !!(apiSecret && req.headers['x-api-secret'] === apiSecret);
-  const authed = isOwner || !!(await verifySupabaseUser(req));
-  if (!authed) return res.status(401).json({ error: 'Unauthorized' });
+  // Auth: JWT de Supabase. Cada usuario consulta SOLO con las key/secret que manda
+  // en el body (guardadas en SU fila, aisladas por RLS).
+  if (!(await verifySupabaseUser(req))) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { key, secret, account } = req.body || {};
-  let k = key, s = secret;
-  // env-fallback (claves del dueno) SOLO por el path X-Api-Secret.
-  if ((!k || !s) && isOwner) {
-    k = k || (account === 'bibi' ? process.env.BIBI_BINANCE_KEY : process.env.BINANCE_KEY);
-    s = s || (account === 'bibi' ? process.env.BIBI_BINANCE_SECRET : process.env.BINANCE_SECRET);
-  }
+  const { key: k, secret: s } = req.body || {};
   if (!k || !s) return res.status(400).json({ error: 'key and secret required' });
 
   const ts = Date.now();

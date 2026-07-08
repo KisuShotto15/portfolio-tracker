@@ -14,22 +14,16 @@ async function verifySupabaseUser(req) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Secret, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Auth dual (como binance-balance): el dueno via X-Api-Secret (puede usar sus env
-  // keys); cualquier usuario autorizado via JWT de Supabase → SOLO con las key/secret
-  // que manda en el body, jamas las env keys del dueno.
-  const apiSecret = process.env.API_SECRET;
-  const isOwner = !!(apiSecret && req.headers['x-api-secret'] === apiSecret);
-  const authed = isOwner || !!(await verifySupabaseUser(req));
-  if (!authed) return res.status(401).json({ error: 'Unauthorized' });
+  // Auth: JWT de Supabase. Cada usuario consulta SOLO con las key/secret que manda
+  // en el body (guardadas en SU fila, aisladas por RLS).
+  if (!(await verifySupabaseUser(req))) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { key: bKey, secret: bSecret } = req.body || {};
-  let key = bKey, secret = bSecret;
-  if ((!key || !secret) && isOwner) { key = key || process.env.BYBIT_KEY; secret = secret || process.env.BYBIT_SECRET; }
+  const { key, secret } = req.body || {};
   if (!key || !secret) return res.status(400).json({ error: 'key and secret required' });
 
   const ts = Date.now().toString();

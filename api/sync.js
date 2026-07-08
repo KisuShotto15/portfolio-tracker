@@ -89,59 +89,38 @@ export function mergeDocs(cloud, incoming) {
   return out;
 }
 
-// Adaptadores de storage segun el modo. Ambos exponen readDoc()/writeDoc(doc) y
-// el resto del handler (read-merge-write con mergeDocs) es identico. Multi-usuario
-// si estan SUPABASE_URL + SUPABASE_ANON_KEY; si no, legacy (secret + DATA_URL).
+// Storage adapter: multi-usuario con Supabase. Expone readDoc()/writeDoc(doc); el
+// resto del handler (read-merge-write con mergeDocs) es identico. Requiere
+// SUPABASE_URL + SUPABASE_ANON_KEY y el JWT del usuario (Bearer).
 async function makeStore(req, res) {
   const SB_URL = process.env.SUPABASE_URL;
   const SB_KEY = process.env.SUPABASE_ANON_KEY;
+  if (!SB_URL || !SB_KEY) { res.status(500).json({ error: 'Sync not configured' }); return null; }
 
-  if (SB_URL && SB_KEY) {
-    const jwt = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-    if (!jwt) { res.status(401).json({ error: 'Unauthorized' }); return null; }
-    // Verifica el token y obtiene el user id. El JWT lo firma Supabase; no confiamos
-    // en nada que mande el cliente para identificar al usuario.
-    const ur = await fetch(SB_URL + '/auth/v1/user', { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + jwt } });
-    if (!ur.ok) { res.status(401).json({ error: 'Unauthorized' }); return null; }
-    const uid = (await ur.json()).id;
-    const base = SB_URL + '/rest/v1/app_state';
-    // Reenviamos el JWT del usuario a PostgREST → RLS aplica de punta a punta:
-    // aunque este codigo tuviera un bug, la DB no deja tocar filas ajenas.
-    const h = { apikey: SB_KEY, Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' };
-    return {
-      async readDoc() {
-        const r = await fetch(base + '?select=doc', { headers: h });
-        if (!r.ok) throw { status: r.status };
-        const rows = await r.json();
-        return (rows[0] && rows[0].doc) || {};
-      },
-      async writeDoc(doc) {
-        const r = await fetch(base + '?on_conflict=user_id', {
-          method: 'POST',
-          headers: { ...h, Prefer: 'resolution=merge-duplicates,return=minimal' },
-          body: JSON.stringify({ user_id: uid, doc }),
-        });
-        if (!r.ok) throw { status: r.status };
-      },
-    };
-  }
-
-  // Legacy: secret compartido + blob unico.
-  const apiSecret = process.env.API_SECRET;
-  if (!apiSecret || req.headers['x-api-secret'] !== apiSecret) { res.status(401).json({ error: 'Unauthorized' }); return null; }
-  const dataUrl = process.env.DATA_URL, dataToken = process.env.DATA_TOKEN;
-  if (!dataUrl || !dataToken) { res.status(500).json({ error: 'Sync not configured' }); return null; }
-  const h = { Authorization: 'Bearer ' + dataToken };
+  const jwt = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+  if (!jwt) { res.status(401).json({ error: 'Unauthorized' }); return null; }
+  // Verifica el token y obtiene el user id. El JWT lo firma Supabase; no confiamos
+  // en nada que mande el cliente para identificar al usuario.
+  const ur = await fetch(SB_URL + '/auth/v1/user', { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + jwt } });
+  if (!ur.ok) { res.status(401).json({ error: 'Unauthorized' }); return null; }
+  const uid = (await ur.json()).id;
+  const base = SB_URL + '/rest/v1/app_state';
+  // Reenviamos el JWT del usuario a PostgREST → RLS aplica de punta a punta:
+  // aunque este codigo tuviera un bug, la DB no deja tocar filas ajenas.
+  const h = { apikey: SB_KEY, Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' };
   return {
     async readDoc() {
-      const r = await fetch(dataUrl + '/data', { headers: h });
-      if (r.status === 404) return {};
+      const r = await fetch(base + '?select=doc', { headers: h });
       if (!r.ok) throw { status: r.status };
-      const j = await r.json().catch(() => null);
-      return (j && j.data) || {};
+      const rows = await r.json();
+      return (rows[0] && rows[0].doc) || {};
     },
     async writeDoc(doc) {
-      const r = await fetch(dataUrl + '/data', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify(doc) });
+      const r = await fetch(base + '?on_conflict=user_id', {
+        method: 'POST',
+        headers: { ...h, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ user_id: uid, doc }),
+      });
       if (!r.ok) throw { status: r.status };
     },
   };
@@ -150,7 +129,7 @@ async function makeStore(req, res) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Secret, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(204).end();
 

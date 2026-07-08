@@ -369,43 +369,6 @@
     </div></div>
     </div>
 
-    <div class="set-section" id="set-exchanges">
-    <span class="set-sec-lbl">Exchanges</span>
-    <div class="set-grid">
-    <div class="fc">
-      <h3>Binance API</h3>
-      <p class="hint">Keys stored locally in browser. Requests go directly to Binance using your VPN. Use read-only keys (no withdrawal or trading permissions).</p>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-        <input id="bn-key" type="password" placeholder="API Key" oninput="S.binanceKey=this.value;save()" style="width:100%">
-        <input id="bn-secret" type="password" placeholder="API Secret" oninput="S.binanceSecret=this.value;save()" style="width:100%">
-      </div>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn btnp" onclick="testBinance()">Test connection</button>
-        <button class="btn" style="color:#E24B4A" onclick="clearBinance()">Reset</button>
-      </div>
-      <div id="bn-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
-    </div>
-    <div class="fc">
-      <h3>Bybit API</h3>
-      <p class="hint">Credentials stored in Cloudflare Worker env vars (BYBIT_KEY, BYBIT_SECRET).</p>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn btnp" onclick="testBybit()">Test connection</button>
-        <button class="btn" style="color:#E24B4A" onclick="clearBybit()">Reset</button>
-      </div>
-      <div id="bb-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
-    </div>
-    <div class="fc">
-      <h3>OKX API</h3>
-      <p class="hint">Credentials stored in Cloudflare Worker env vars (OKX_KEY, OKX_SECRET, OKX_PASSPHRASE).</p>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn btnp" onclick="testOKX()">Test connection</button>
-        <button class="btn" style="color:#E24B4A" onclick="clearOKX()">Reset</button>
-      </div>
-      <div id="okx-status" style="margin-top:9px;font-size:13px;color:var(--color-text-secondary)"></div>
-    </div>
-    </div>
-    </div>
-
     <div class="set-section" id="set-exchange-wallets">
     <span class="set-sec-lbl">Wallets de exchange</span>
     <div class="set-grid"><div class="fc">
@@ -438,15 +401,10 @@
     <div class="set-grid">
     <div class="fc">
       <h3>Cloud sync</h3>
-      <p class="hint">Data syncs automatically to Cloudflare KV on every change.</p>
+      <p class="hint">Tus datos se sincronizan automaticamente a tu cuenta en cada cambio.</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
         <button class="btn btns btnp" onclick="forcePull()">Pull from cloud</button>
         <button class="btn btns" onclick="forcePush()">Push to cloud</button>
-      </div>
-      <p class="hint">API secret: se guarda solo en este dispositivo, nunca en la nube ni en el codigo.</p>
-      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
-        <input type="password" id="sync-secret" placeholder="API secret" autocomplete="off" style="flex:1;min-width:180px;max-width:280px"/>
-        <button class="btn btns btnp" onclick="saveSyncSecret()">Save</button>
       </div>
       <div id="cloud-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
     </div>

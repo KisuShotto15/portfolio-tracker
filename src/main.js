@@ -74,11 +74,10 @@ async function sbOtpVerify(email,token){
     sbSetSession(j); return true;
   }catch(e){ return false; }
 }
-// Headers de auth para el proxy de sync segun el modo.
+// Headers de auth: siempre el token del usuario (Bearer) de Supabase.
 function syncAuthHeaders(base){
   var h=Object.assign({},base||{});
-  if(MULTIUSER) h['Authorization']='Bearer '+sbGet('sb_at');
-  else h['X-Api-Secret']=VERCEL_SECRET;
+  h['Authorization']='Bearer '+sbGet('sb_at');
   return h;
 }
 // fetch a SYNC_PROXY con refresh automatico del token en 401 (solo multi-usuario).
@@ -92,10 +91,6 @@ async function syncFetch(base,init){
   return r;
 }
 window.logout=function(){ sbClearSession(); try{ localStorage.removeItem('ft13'); localStorage.removeItem('ft13_dirty'); }catch(e){} location.reload(); };
-// Las funciones de exchange (Binance/Bybit/OKX/Trezor/holdings) usan el X-Api-Secret
-// del dueno. En multi-usuario los amigos no lo tienen → no deben ni intentar (evita
-// 401 y que vean cuentas ajenas). En legacy el secret siempre esta → sin cambio.
-function exchangesEnabled(){ return !!VERCEL_SECRET; }
 function showAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.add('open'); }
 function hideAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.remove('open'); }
 function authMsg(t){ var e=document.getElementById('auth-msg'); if(e) e.textContent=t||''; }
@@ -125,25 +120,6 @@ window.authBackToEmail=function(){
   document.getElementById('auth-step-email').style.display='block'; authMsg('');
 };
 
-// El API secret vive SOLO en localStorage, nunca en el bundle: el JS es publico
-// y con el secret se puede leer/escribir todo el estado. Se pide una vez por
-// dispositivo (prompt al iniciar o Settings → Cloud sync). Nunca se sincroniza.
-var VERCEL_SECRET='';
-try{ VERCEL_SECRET=localStorage.getItem('ft13_secret')||''; }catch(e){}
-function setApiSecret(v){
-  VERCEL_SECRET=(v||'').trim();
-  try{ localStorage.setItem('ft13_secret',VERCEL_SECRET); }catch(e){}
-}
-window.saveSyncSecret=async function(){
-  var inp=document.getElementById('sync-secret'); if(!inp||!inp.value.trim()) return;
-  setApiSecret(inp.value); inp.value='';
-  syncFailed=false; _pushFailCount=0; // el secret nuevo desbloquea el autoPull/retry
-  showSyncBanner(false);
-  var cs=document.getElementById('cloud-status'); if(cs) cs.textContent='Secret guardado. Probando...';
-  var ok=await pullFromCloud();
-  if(ok){ afterPull(); if(cs) cs.textContent='Secret valido. Sincronizado.'; }
-  else if(cs) cs.textContent='No se pudo sincronizar (secret invalido u offline).';
-};
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
 var AUTOFILL_RULES = [
@@ -542,123 +518,16 @@ function updateRateUI(){
   if(pb&&pb!==document.activeElement&&parseFloat(pb.value)!==iv){ pb.value=iv; calcProfit(); }
 }
 
-async function fetchBinanceBalance(){
-  var keyEl=document.getElementById('bn-key'); var secEl=document.getElementById('bn-secret');
-  if(keyEl&&keyEl.value) S.binanceKey=keyEl.value;
-  if(secEl&&secEl.value) S.binanceSecret=secEl.value;
-  // Sin keys locales, el proxy usa sus env vars (BINANCE_KEY/SECRET) si estan configuradas.
-  var body=S.binanceKey&&S.binanceSecret?{key:S.binanceKey,secret:S.binanceSecret}:{account:'main'};
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify(body)});
-  if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
-  var data=await r.json(); if(data.error) throw new Error(data.error);
-  var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
-  S.binanceBalance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
-  S.binanceUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); S.binanceFetchedAt=Date.now(); save(); return S.binanceBalance;
-}
-async function testBinance(){
-  var st=document.getElementById('bn-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
-  try{ await fetchBinanceBalance(); st.textContent='Connected - Funding USDT: $'+S.binanceBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
-  catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
-}
-function clearBinance(){
-  S.binanceBalance=null; S.binanceUpdated=null; S.binanceFetchedAt=null;
-  S.binanceKey=''; S.binanceSecret=''; // el proxy puede usar sus propias env vars (BINANCE_KEY/SECRET)
-  var k=document.getElementById('bn-key'); if(k) k.value='';
-  var s=document.getElementById('bn-secret'); if(s) s.value='';
-  save(); document.getElementById('bn-status').textContent='Reset.'; renderWallets();
-}
+// Exchanges: ya no hay cuentas fijas del dueno. Todo se agrega como wallet de
+// exchange (ver exchangeWallets + fetchExchangeWallet mas abajo).
 var BINANCE_AUTO_MS=5*60*60*1000; // 5 hours
-async function autoFetchBinance(){ if(!exchangesEnabled()) return;
-  if(S.binanceBalance===null) return; // not connected, skip
-  var age=S.binanceFetchedAt?Date.now()-S.binanceFetchedAt:Infinity;
-  if(age<BINANCE_AUTO_MS) return;
-  try{ await fetchBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
-}
-
-async function fetchBibiBinanceBalance(){
-  var keyEl=document.getElementById('bbn-key'); var secEl=document.getElementById('bbn-secret');
-  if(keyEl&&keyEl.value) S.bibiBinanceKey=keyEl.value;
-  if(secEl&&secEl.value) S.bibiBinanceSecret=secEl.value;
-  var body=S.bibiBinanceKey&&S.bibiBinanceSecret?{key:S.bibiBinanceKey,secret:S.bibiBinanceSecret}:{account:'bibi'};
-  var r=await fetch(BINANCE_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify(body)});
-  if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Vercel proxy error '+r.status); }
-  var data=await r.json(); if(data.error) throw new Error(data.error);
-  var usdt=Array.isArray(data)?data.find(function(b){return b.asset==='USDT';}):null;
-  S.bibiBinanceBalance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
-  S.bibiBinanceUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); S.bibiBinanceFetchedAt=Date.now(); save(); return S.bibiBinanceBalance;
-}
-async function testBibiBinance(){
-  var st=document.getElementById('bbn-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
-  try{ await fetchBibiBinanceBalance(); st.textContent='Connected - Funding USDT: $'+S.bibiBinanceBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
-  catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
-}
-function clearBibiBinance(){
-  S.bibiBinanceBalance=null; S.bibiBinanceUpdated=null; S.bibiBinanceFetchedAt=null;
-  S.bibiBinanceKey=''; S.bibiBinanceSecret=''; // el proxy puede usar sus propias env vars (BIBI_BINANCE_KEY/SECRET)
-  var k=document.getElementById('bbn-key'); if(k) k.value='';
-  var s=document.getElementById('bbn-secret'); if(s) s.value='';
-  save(); document.getElementById('bbn-status').textContent='Reset.'; renderWallets();
-}
-async function autoFetchBibiBinance(){ if(!exchangesEnabled()) return;
-  if(S.bibiBinanceBalance===null) return;
-  var age=S.bibiBinanceFetchedAt?Date.now()-S.bibiBinanceFetchedAt:Infinity;
-  if(age<BINANCE_AUTO_MS) return;
-  try{ await fetchBibiBinanceBalance(); renderWallets(); renderSummary(); }catch(e){}
-}
-
-async function fetchBybitBalance(){ if(!exchangesEnabled()) return;
-  var r=await fetch(BYBIT_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('Bybit '+r.status);
-  var d=await r.json(); if(d.error) throw new Error(d.error);
-  var list=(d.result&&d.result.list)||[]; var total=0;
-  list.forEach(function(acc){ var usdt=acc.coin&&acc.coin.find(function(c){ return c.coin==='USDT'; }); if(usdt) total+=parseFloat(usdt.walletBalance||0); });
-  S.bybitBalance=parseFloat(total.toFixed(2)); S.bybitUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return S.bybitBalance;
-}
-async function testBybit(){
-  var st=document.getElementById('bb-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
-  try{ await fetchBybitBalance(); st.textContent='Connected - USDT: $'+S.bybitBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
-  catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
-}
-function clearBybit(){ S.bybitBalance=null; S.bybitUpdated=null; save(); document.getElementById('bb-status').textContent='Reset.'; renderWallets(); }
-
-async function fetchOKXBalance(){ if(!exchangesEnabled()) return;
-  var r=await fetch(OKX_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:'{}'}); if(!r.ok) throw new Error('OKX '+r.status);
-  var d=await r.json(); if(d.error) throw new Error(d.error);
-  var details=(d.data&&d.data[0]&&d.data[0].details)||[];
-  var usdt=details.find(function(c){ return c.ccy==='USDT'; });
-  S.okxBalance=parseFloat(parseFloat((usdt&&usdt.cashBal)||0).toFixed(2)); S.okxUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return S.okxBalance;
-}
-async function testOKX(){
-  var st=document.getElementById('okx-status'); st.textContent='Connecting...'; st.style.color='var(--color-text-secondary)';
-  try{ await fetchOKXBalance(); st.textContent='Connected - USDT: $'+S.okxBalance.toFixed(2); st.style.color='#5DCAA5'; renderWallets(); renderSummary(); }
-  catch(e){ st.textContent='Error: '+e.message; st.style.color='#E24B4A'; }
-}
-function clearOKX(){ S.okxBalance=null; S.okxUpdated=null; save(); document.getElementById('okx-status').textContent='Reset.'; renderWallets(); }
-
 var BSC_RPC        = 'https://bsc-dataseed.binance.org/';
 var BSC_USDT       = '0x55d398326f99059fF775485246999027B3197955';
-// La direccion Trezor vive en los datos del usuario (S.trezorAddress), no en el
-// bundle publico. Sin direccion no se consulta nada.
-async function fetchTrezorBalance(){ if(!exchangesEnabled()) return;
-  var addr=(S.trezorAddress||'').trim();
-  if(!/^0x[0-9a-fA-F]{40}$/.test(addr)) return;
-  var padded = '000000000000000000000000' + addr.slice(2).toLowerCase();
-  var data   = '0x70a08231' + padded;
-  var res = await fetch(BSC_RPC, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jsonrpc:'2.0', method:'eth_call', params:[{to:BSC_USDT, data:data},'latest'], id:1 })
-  });
-  var json = await res.json();
-  if(json.error) throw new Error(json.error.message);
-  var balance = parseInt(json.result, 16) / 1e18;
-  S.trezorBalance = parseFloat(balance.toFixed(2));
-  S.trezorUpdated = new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  save(); return S.trezorBalance;
-}
 
-async function fetchWalletHoldings(){ if(!exchangesEnabled()) return;
+async function fetchWalletHoldings(){ if(!canFetchExchanges()) return;
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
-  var r=await fetch(ANKR_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({wallets:wallets})});
+  var r=await fetch(ANKR_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({wallets:wallets})});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Proxy error '+r.status); }
   var data=await r.json();
   if(data.error) throw new Error(data.error);
@@ -909,7 +778,7 @@ async function _uploadReceipt(){
   try{
     var dataUrl=await compressImage(file);
     var dataB64=dataUrl.split(',')[1];
-    var r=await fetch(BLOB_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Api-Secret':VERCEL_SECRET},body:JSON.stringify({filename:'receipt.jpg',dataB64:dataB64,contentType:'image/jpeg'})});
+    var r=await fetch(BLOB_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({filename:'receipt.jpg',dataB64:dataB64,contentType:'image/jpeg'})});
     if(!r.ok) throw new Error('upload failed');
     var j=await r.json();
     pendingReceiptUrl=j.url;
@@ -1565,11 +1434,7 @@ function renderKPIStrip(month){
 // ── Health Score ───────────────────────────────────────────────────────────
 function getWalletShares(){
   var shares={};
-  shares['Binance']=S.binanceBalance||0;
-  shares['Bibi Binance']=S.bibiBinanceBalance||0;
-  shares['Bybit']=S.bybitBalance||0;
-  shares['OKX']=S.okxBalance||0;
-  shares['Trezor']=S.trezorBalance||0;
+  (S.exchangeWallets||[]).forEach(function(w){ shares[w.name]=w.balance||0; });
   S.manualWallets.forEach(function(w){
     var bal=w.trackerOnly?(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)):w.balance;
     shares[w.name]=bal;
@@ -2151,7 +2016,7 @@ function renderEquityChart(){
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false}}}});}
 
 function getTotalBalance(){
-  var api=(S.binanceBalance||0)+(S.bibiBinanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+(S.trezorBalance||0);
+  var api=(S.exchangeWallets||[]).reduce(function(s,w){ return s+(w.balance||0); },0);
   var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
   var manualBal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
   return parseFloat((api+trackerBal+manualBal).toFixed(2));
@@ -2509,11 +2374,7 @@ window.refreshAllWallets=async function(){
   var btn=document.getElementById('refresh-all-btn');
   if(btn){ btn.disabled=true; btn.textContent='Refreshing...'; }
   document.querySelectorAll('#page-wallets .wm-bal').forEach(function(b){ b.classList.add('skeleton'); });
-  var fns=[
-    S.binanceBalance!==null?fetchBinanceBalance().then(function(){save();}).catch(function(){}):Promise.resolve(),
-    S.bybitBalance!==null?fetchBybitBalance().catch(function(){}):Promise.resolve(),
-    S.okxBalance!==null?fetchOKXBalance().catch(function(){}):Promise.resolve()
-  ].concat((S.exchangeWallets||[]).map(function(w){ return fetchExchangeWallet(w).catch(function(){}); }));
+  var fns=(S.exchangeWallets||[]).map(function(w){ return fetchExchangeWallet(w).catch(function(){}); });
   await Promise.allSettled(fns);
   save(); renderWallets(); renderSummary();
   if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
@@ -2527,7 +2388,7 @@ var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','P
 // nueva limpia). Sin correos ni hardcodes: cada usuario decide en sus datos.
 function deriveIntegrations(){
   if(S.showExchanges==null){
-    S.showExchanges=!!(S.binanceBalance!=null||S.bibiBinanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||S.trezorBalance!=null||(S.binanceKey&&S.binanceKey.length)||(S.bibiBinanceKey&&S.bibiBinanceKey.length));
+    S.showExchanges=!!((S.exchangeWallets&&S.exchangeWallets.length)||S.binanceBalance!=null||S.bibiBinanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||S.trezorBalance!=null||S.trezorAddress||(S.bibiBinanceKey&&S.bibiBinanceKey.length));
   }
 }
 var INTEGRATIONS=[{id:'showExchanges',label:'Exchanges'}];
@@ -2537,12 +2398,8 @@ function renderIntegrationToggles(){
     return '<button class="tool-toggle'+(S[t.id]?' on':'')+'" onclick="toggleIntegration(\''+t.id+'\')">'+t.label+'</button>';
   }).join('');
 }
-// Muestra/oculta la config de exchanges en Settings segun el toggle.
+// Muestra/oculta la seccion "Wallets de exchange" en Settings segun el toggle.
 function applyIntegrations(){
-  // La config built-in (Binance/Bybit/OKX del dueno) solo se muestra a quien ya la
-  // usa; los demas solo ven "Wallets de exchange" para agregar los suyos.
-  var hasBuiltin=(S.binanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||(S.binanceKey&&S.binanceKey.length));
-  var ex=document.getElementById('set-exchanges'); if(ex) ex.style.display=(S.showExchanges&&hasBuiltin)?'':'none';
   var xw=document.getElementById('set-exchange-wallets'); if(xw) xw.style.display=S.showExchanges?'':'none';
 }
 window.toggleIntegration=function(id){
@@ -2555,12 +2412,9 @@ window.toggleIntegration=function(id){
 // Cada usuario agrega los suyos con nombre propio + credenciales, desde la app.
 // Se guardan en SU fila de Supabase (aislada por RLS): el dueno no las ve. Tipo
 // 'binance' (key/secret via el proxy con SU token) o 'bsc' (direccion, RPC directo).
-function canFetchExchanges(){ return MULTIUSER ? !!sbGet('sb_at') : !!VERCEL_SECRET; }
+function canFetchExchanges(){ return !!sbGet('sb_at'); }
 function exchangeProxyHeaders(){
-  var h={'Content-Type':'application/json'};
-  if(MULTIUSER) h['Authorization']='Bearer '+sbGet('sb_at');
-  if(VERCEL_SECRET) h['X-Api-Secret']=VERCEL_SECRET;
-  return h;
+  return {'Content-Type':'application/json','Authorization':'Bearer '+sbGet('sb_at')};
 }
 async function fetchExchangeWallet(w){
   if(w.type==='bsc'){
@@ -2695,7 +2549,7 @@ function renderWallets(){
   var showEx=!!S.showExchanges;
   var xwList=showEx?(S.exchangeWallets||[]):[];
   var xwTotal=xwList.reduce(function(s,w){ return s+(w.balance||0); },0);
-  var apiTotal=showEx?((S.binanceBalance||0)+(S.bybitBalance||0)+(S.okxBalance||0)+xwTotal):0;
+  var apiTotal=showEx?xwTotal:0;
   var trackerNames=[];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
   var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
@@ -2711,11 +2565,7 @@ function renderWallets(){
   });
   var XW_COLS=['#FB923C','#60A5FA','#F472B6','#22D3EE','#A78BFA','#FBBF24'];
   var xwEntries=xwList.map(function(w,i){ return {nm:w.name,v:w.balance||0,col:XW_COLS[i%XW_COLS.length]}; });
-  var wvA=[
-    {nm:'Binance',v:showEx?(S.binanceBalance||0):0,col:'#9B70F0'},
-    {nm:'Bybit',v:showEx?(S.bybitBalance||0):0,col:'#4ED9A4'},
-    {nm:'OKX',v:showEx?(S.okxBalance||0):0,col:'#FBBF24'}
-  ].concat(xwEntries).concat(trkEntries).concat([
+  var wvA=xwEntries.concat(trkEntries).concat([
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
   ]).filter(function(a){return a.v>0;}).sort(function(a,b){return b.v-a.v;});
   var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
@@ -2747,12 +2597,8 @@ function renderWallets(){
     var logo=exchangeLogoByName(w.name)||(w.type==='bsc'?null:'/logo-binance.png?v=3');
     return apiRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),escHtml(w.name),w.balance!=null,w.balance,w.updated,w.type==='bsc'?'BSC USDT':'',logo);
   }
-  var exRows=!showEx?'':(''
-    +(S.binanceBalance!==null?apiRow('#9B70F0','B','Binance',true,S.binanceBalance,S.binanceUpdated,'','/logo-binance.png?v=3'):'')
-    +(S.bybitBalance!==null?apiRow('#4ED9A4','B','Bybit',true,S.bybitBalance,S.bybitUpdated,'','/logo-bybit.png?v=2'):'')
-    +(S.okxBalance!==null?apiRow('#FBBF24','O','OKX',true,S.okxBalance,S.okxUpdated,'','/logo-okx.png?v=2'):'')
-    +xwList.map(xwRow).join(''))
-    ||(showEx?'<p class="hint" style="padding:8px 4px">Agrega tus wallets de exchange en Settings.</p>':'');
+  var exRows=!showEx?'':(xwList.map(xwRow).join('')
+    ||'<p class="hint" style="padding:8px 4px">Agrega tus wallets de exchange en Settings.</p>');
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){
@@ -2774,7 +2620,7 @@ function renderWallets(){
   }).join('');
 
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
-  var exCount=showEx?((S.binanceBalance!==null?1:0)+(S.bybitBalance!==null?1:0)+(S.okxBalance!==null?1:0)+xwList.length):0;
+  var exCount=showEx?xwList.length:0;
   var walletCount=exCount+trackerNames.length+manualNormalCount;
   var notConn=0;
 
@@ -3225,20 +3071,7 @@ window.saveOnchainWallet = saveOnchainWallet;
 window.deleteOnchainWallet = deleteOnchainWallet;
 window.copyAddr = copyAddr;
 window.renderWallets = renderWallets;
-window.testBinance = testBinance;
-window.clearBinance = clearBinance;
-window.fetchBibiBinanceBalance = fetchBibiBinanceBalance;
-window.testBibiBinance = testBibiBinance;
-window.clearBibiBinance = clearBibiBinance;
-window.testBybit = testBybit;
-window.clearBybit = clearBybit;
-window.testOKX = testOKX;
-window.clearOKX = clearOKX;
-window.fetchBinanceBalance = fetchBinanceBalance;
-window.fetchTrezorBalance = fetchTrezorBalance;
 window.refreshWalletHoldings = refreshWalletHoldings;
-window.fetchBybitBalance = fetchBybitBalance;
-window.fetchOKXBalance = fetchOKXBalance;
 window.forcePull = forcePull;
 window.forcePush = forcePush;
 window.exportAllJSON = exportAllJSON;
@@ -3301,21 +3134,13 @@ async function init(){
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   applyIntegrations(); renderIntegrationToggles();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
-  if(MULTIUSER){
-    // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
-    var justLinked=sbConsumeHashSession();
-    // Requiere sesion valida antes de sincronizar. Sin token o refresh fallido → login.
-    var authed=justLinked||(sbGet('sb_at') ? await sbRefresh() : false);
-    if(!authed){ showAuthOverlay(); return; }
-    hideAuthOverlay();
-    await bootAfterAuth(justLinked);
-    return;
-  }
-  if(!VERCEL_SECRET){
-    var sr=await appPrompt('Cloud sync','Ingresa el API secret de sync para este dispositivo (se guarda solo localmente). Puedes hacerlo despues en Settings → Cloud sync.','',{inputType:'text'});
-    if(sr&&sr.value&&sr.value.trim()) setApiSecret(sr.value);
-  }
-  await bootAfterAuth(false);
+  // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
+  var justLinked=sbConsumeHashSession();
+  // Requiere sesion valida antes de sincronizar. Sin token o refresh fallido → login.
+  var authed=justLinked||(sbGet('sb_at') ? await sbRefresh() : false);
+  if(!authed){ showAuthOverlay(); return; }
+  hideAuthOverlay();
+  await bootAfterAuth(justLinked);
 }
 // Todo lo que necesita la sesion lista: pull inicial, migraciones, render, timers.
 // Separado de init para poder llamarlo justo despues del login sin re-enganchar
@@ -3365,9 +3190,9 @@ async function bootAfterAuth(firstLogin){
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; }catch(e){}
   applyRecurring(); renderRecurringManage();
   renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily();
-  autoFetchBinance(); autoFetchExchangeWallets();
+  autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)
-  setInterval(function(){ autoFetchBinance(); autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
+  setInterval(function(){ autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
   // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
   // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
   _pullTimer=setInterval(autoPull, 25000);
@@ -3375,7 +3200,7 @@ async function bootAfterAuth(firstLogin){
   // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
   window.addEventListener('focus', function(){ autoPull().then(applyRecurring); });
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) autoPull().then(function(){ applyRecurring(); autoFetchBinance(); autoFetchExchangeWallets(); });
+    if(!document.hidden) autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); });
   });
 }
 init();
