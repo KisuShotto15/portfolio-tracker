@@ -153,10 +153,6 @@ var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
   budgetTotal:600, budgetTotalUpdatedAt:null,
-  // Integraciones personales (Exchanges, Zelle/Remesas): toggle por usuario en
-  // Settings. null = aun sin derivar; se decide en deriveIntegrations() segun los
-  // datos del usuario (encendido si ya los usa, apagado para cuentas nuevas).
-  showExchanges:null, showExchangesUpdatedAt:null,
   binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
@@ -1127,6 +1123,24 @@ function toggleWmBalField(){
   var f=document.getElementById('wm-bal-field');
   if(f) f.style.display=document.getElementById('wm-type').value==='normal'?'flex':'none';
 }
+function openExchangeForm(){
+  var panel=document.getElementById('xw-form-panel'), ov=document.getElementById('xw-overlay');
+  if(!panel) return;
+  toggleXwFields();
+  var st=document.getElementById('xw-status'); if(st) st.textContent='';
+  void panel.offsetHeight;
+  panel.classList.add('open'); ov.classList.add('open');
+  _sheetPush('exchange');
+}
+function closeExchangeForm(fromPop){
+  var p=document.getElementById('xw-form-panel'); if(!p) return;
+  p.classList.remove('open'); p.style.bottom=''; p.style.maxHeight='';
+  document.getElementById('xw-overlay').classList.remove('open');
+  ['xw-name','xw-key','xw-secret','xw-pass','xw-address'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  if(fromPop!==true) _sheetPop();
+}
+window.openExchangeForm=openExchangeForm;
+window.closeExchangeForm=closeExchangeForm;
 function addTxOrUpdate(){
   if(receiptUploading){ txMsg('Wait for the receipt to finish uploading'); return; }
   if(editingTxId) updateTx(); else addTx();
@@ -2425,32 +2439,6 @@ window.refreshAllWallets=async function(){
 
 var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1'};
 
-// ── Integraciones personales (toggles en Settings) ──────────────────────────
-// Deriva el estado inicial de los toggles la primera vez (null): encendido si el
-// usuario YA usa la integracion (dueno conserva lo suyo), apagado si no (cuenta
-// nueva limpia). Sin correos ni hardcodes: cada usuario decide en sus datos.
-function deriveIntegrations(){
-  if(S.showExchanges==null){
-    S.showExchanges=!!((S.exchangeWallets&&S.exchangeWallets.length)||S.binanceBalance!=null||S.bibiBinanceBalance!=null||S.bybitBalance!=null||S.okxBalance!=null||S.trezorBalance!=null||S.trezorAddress||(S.bibiBinanceKey&&S.bibiBinanceKey.length));
-  }
-}
-var INTEGRATIONS=[{id:'showExchanges',label:'Exchanges'}];
-function renderIntegrationToggles(){
-  var wrap=document.getElementById('integration-toggles'); if(!wrap) return;
-  wrap.innerHTML=INTEGRATIONS.map(function(t){
-    return '<button class="tool-toggle'+(S[t.id]?' on':'')+'" onclick="toggleIntegration(\''+t.id+'\')">'+t.label+'</button>';
-  }).join('');
-}
-// Muestra/oculta la seccion "Wallets de exchange" en Settings segun el toggle.
-function applyIntegrations(){
-  var xw=document.getElementById('set-exchange-wallets'); if(xw) xw.style.display=S.showExchanges?'':'none';
-}
-window.toggleIntegration=function(id){
-  S[id]=!S[id]; S[id+'UpdatedAt']=stamp(); save();
-  applyIntegrations(); renderIntegrationToggles();
-  populateWalletSelects(); renderWallets(); renderSummary(); renderTx();
-};
-
 // ── Wallets de exchange personalizados (por usuario) ────────────────────────
 // Cada usuario agrega los suyos con nombre propio + credenciales, desde la app.
 // Se guardan en SU fila de Supabase (aislada por RLS): el dueno no las ve. Tipo
@@ -2573,11 +2561,9 @@ window.addExchangeWallet=async function(){
   }
   if(!S.exchangeWallets) S.exchangeWallets=[];
   S.exchangeWallets.push(w); S.exchangeWalletsUpdatedAt=stamp(); save();
-  ['xw-name','xw-key','xw-secret','xw-address','xw-pass'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-  if(st) st.textContent='Agregado. Trayendo balance...';
   renderExchangeWallets(); renderWallets(); renderSummary();
-  try{ await fetchExchangeWallet(w); if(st) st.textContent='Balance: $'+(w.balance||0); }
-  catch(e){ if(st) st.textContent='Agregado, pero no se pudo traer el balance: '+e.message; }
+  closeExchangeForm(); // cierre rapido; el balance aparece en la fila al resolver el fetch
+  try{ await fetchExchangeWallet(w); }catch(e){ /* balance queda en — hasta el proximo refresh */ }
   renderExchangeWallets(); renderWallets(); renderSummary();
 };
 window.removeExchangeWallet=function(id){
@@ -2589,7 +2575,8 @@ window.removeExchangeWallet=function(id){
 
 function renderWallets(){
   var grid=document.getElementById('w-grid'); var cards=[];
-  var showEx=!!S.showExchanges;
+  // Exchanges siempre visibles: no hay build-in, todo se agrega manualmente en Wallets.
+  var showEx=true;
   var xwList=showEx?(S.exchangeWallets||[]):[];
   var xwTotal=xwList.reduce(function(s,w){ return s+(w.balance||0); },0);
   var apiTotal=showEx?xwTotal:0;
@@ -2638,10 +2625,14 @@ function renderWallets(){
   // Built-in (dueno) solo si estan conectados; + los wallets custom de cada usuario.
   function xwRow(w){
     var logo=exchangeLogoByName(w.name)||(w.type==='bsc'?null:'/logo-binance.png?v=3');
-    return apiRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),escHtml(w.name),w.balance!=null,w.balance,w.updated,w.type==='bsc'?'BSC USDT':'',logo);
+    var metaExtra=w.type==='bsc'?'BSC USDT':'';
+    var meta=metaExtra+(metaExtra&&w.updated?' · ':'')+(w.updated?'Updated '+w.updated:'');
+    var right=w.balance!=null?balHtml(w.balance):'<span class="wm-bal" style="color:var(--txt3)">—</span>';
+    var acts='<button class="wico del" onclick="removeExchangeWallet('+w.id+')">'+icX+'</button>';
+    return wmRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),w.balance!=null?'on':'off',escHtml(w.name),meta||'Connected',right,acts,logo);
   }
   var exRows=!showEx?'':(xwList.map(xwRow).join('')
-    ||'<p class="hint" style="padding:8px 4px">Agrega tus wallets de exchange en Settings.</p>');
+    ||'<p class="hint" style="padding:8px 4px">Aun no agregaste exchanges.</p>');
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   var trRows=trackerNames.map(function(name){
@@ -2692,7 +2683,7 @@ function renderWallets(){
       +'</div>'
     +'</div>'
     +'<div class="wm-cols '+(showEx?'wm-cols-3':'wm-cols-2')+'">'
-      +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div></div>':'')
+      +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div><button class="wm-add" onclick="openExchangeForm()">+ Add exchange</button></div>':'')
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
     +'</div>';
@@ -2839,7 +2830,7 @@ function showPage(id,btn,arg){
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); }
   else if(id==='history') renderHistory(arg||'snapshots');
-  else if(id==='settings'){ renderPresetsManage(); renderIntegrationToggles(); applyIntegrations(); renderExchangeWallets(); toggleXwFields(); }
+  else if(id==='settings'){ renderPresetsManage(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
   var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -3007,8 +2998,11 @@ if(!window._sheetBackListener){
     window._activeSheet=null;
     var txOpen=document.getElementById('tx-form-panel').classList.contains('open');
     var wvOpen=document.getElementById('wv-form-panel').classList.contains('open');
+    var _xwp=document.getElementById('xw-form-panel');
+    var xwOpen=_xwp&&_xwp.classList.contains('open');
     if(s==='tx'||txOpen) closeTxForm(true);
     else if(s==='wallet'||wvOpen) closeWalletForm(true);
+    else if(s==='exchange'||xwOpen) closeExchangeForm(true);
   });
 }
 // Web: ESC cierra el form de tx (nueva o edicion). Solo actua si esta abierto.
@@ -3017,6 +3011,8 @@ if(!window._txEscListener){
   document.addEventListener('keydown',function(e){
     if(e.key!=='Escape') return;
     if(document.getElementById('tx-form-panel').classList.contains('open')) closeTxForm();
+    var _xwp=document.getElementById('xw-form-panel');
+    if(_xwp&&_xwp.classList.contains('open')) closeExchangeForm();
   });
 }
 // Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
@@ -3048,6 +3044,7 @@ function attachSheetDrag(panel, closeFn){
 }
 attachSheetDrag(document.getElementById('tx-form-panel'), function(){ closeTxForm(); });
 attachSheetDrag(document.getElementById('wv-form-panel'), function(){ closeWalletForm(); });
+attachSheetDrag(document.getElementById('xw-form-panel'), function(){ closeExchangeForm(); });
 // Keep the open bottom-sheet above the on-screen keyboard so the whole form stays scrollable
 if(window.visualViewport && !window._vvSheetBound){
   window._vvSheetBound=true;
@@ -3173,9 +3170,7 @@ async function init(){
   document.getElementById('tx-date').value=today;
   populateTxMonth(); // default: All months (value queda '')
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
-  deriveIntegrations();
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
-  applyIntegrations(); renderIntegrationToggles();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
   var justLinked=sbConsumeHashSession();
@@ -3191,7 +3186,6 @@ async function init(){
 async function bootAfterAuth(firstLogin){
   var pulled=await pullFromCloud();
   if(pulled){ populateWalletSelects(); updateRateUI(); }
-  deriveIntegrations(); applyIntegrations(); renderIntegrationToggles();
   // Cambios locales sin pushear de una sesion anterior (cerro la app offline):
   // el pull respeta LWW asi que no se pisaron, ahora los propagamos a la nube.
   if(localStorage.getItem('ft13_dirty')){ _dirty=true; pushToCloud(); }

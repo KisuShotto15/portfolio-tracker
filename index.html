@@ -210,6 +210,37 @@
     </div>
   </div>
 
+  <div class="tx-overlay" id="xw-overlay" onclick="closeExchangeForm()"></div>
+  <div class="tx-form-panel" id="xw-form-panel">
+    <div class="sheet-grabber"></div>
+    <div class="tx-panel-header">
+      <h3>Add exchange</h3>
+      <button class="btn btns" onclick="closeExchangeForm()" style="padding:4px 10px">&#x2715; Close</button>
+    </div>
+    <p class="hint" style="margin:0 0 12px">Binance/Bybit/OKX usan tus API keys (read-only, sin retiro). Direccion BSC lee el balance USDT on-chain. Se guardan solo en tu cuenta.</p>
+    <div class="field"><span class="field-lbl">Nombre</span><input id="xw-name" type="text" placeholder="Ej: Mi Binance"/></div>
+    <div class="field"><span class="field-lbl">Tipo</span>
+      <select id="xw-type" onchange="toggleXwFields()">
+        <option value="binance">Binance (API keys)</option>
+        <option value="bybit">Bybit (API keys)</option>
+        <option value="okx">OKX (API keys)</option>
+        <option value="bsc">Direccion BSC (0x...)</option>
+      </select>
+    </div>
+    <div class="field" id="xw-binance-fields"><span class="field-lbl">Credenciales</span>
+      <input id="xw-key" type="password" placeholder="API Key"/>
+      <input id="xw-secret" type="password" placeholder="API Secret" style="margin-top:6px"/>
+      <input id="xw-pass" type="password" placeholder="Passphrase (OKX)" style="margin-top:6px;display:none" data-okx-pass/>
+    </div>
+    <div class="field" id="xw-bsc-fields" style="display:none"><span class="field-lbl">Direccion</span>
+      <input id="xw-address" type="text" placeholder="0x..."/>
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:18px">
+      <button class="btn btnp" style="min-width:140px" onclick="addExchangeWallet()">Agregar</button>
+    </div>
+    <div id="xw-status" style="font-size:13px;color:var(--color-text-secondary);text-align:center;margin-top:10px"></div>
+  </div>
+
   <div id="page-holdings" class="page">
     <div class="dash-head">
       <span class="dash-eyebrow">Holdings</span>
@@ -373,40 +404,6 @@
     </div>
     </div>
 
-    <div class="set-section">
-    <span class="set-sec-lbl">Integraciones</span>
-    <div class="set-grid"><div class="fc">
-      <p class="hint">Activa solo lo que uses. Apagadas no aparecen en Wallets ni en las categorias.</p>
-      <div class="tool-toggle-row" id="integration-toggles"></div>
-    </div></div>
-    </div>
-
-    <div class="set-section" id="set-exchange-wallets">
-    <span class="set-sec-lbl">Wallets de exchange</span>
-    <div class="set-grid"><div class="fc">
-      <p class="hint">Agrega tus propios exchanges. Binance/Bybit/OKX usan tus API keys (read-only, sin retiro). Direccion BSC lee el balance USDT on-chain. Se guardan solo en tu cuenta.</p>
-      <div id="xw-list" style="display:flex;flex-direction:column;gap:8px;margin:10px 0"></div>
-      <div style="border-top:1px solid var(--line-soft);padding-top:12px;display:flex;flex-direction:column;gap:6px">
-        <input id="xw-name" type="text" placeholder="Nombre (ej: Mi Binance)" style="width:100%">
-        <select id="xw-type" onchange="toggleXwFields()" style="width:100%">
-          <option value="binance">Binance (API keys)</option>
-          <option value="bybit">Bybit (API keys)</option>
-          <option value="okx">OKX (API keys)</option>
-          <option value="bsc">Direccion BSC (0x...)</option>
-        </select>
-        <div id="xw-binance-fields" style="display:flex;flex-direction:column;gap:6px">
-          <input id="xw-key" type="password" placeholder="API Key" style="width:100%">
-          <input id="xw-secret" type="password" placeholder="API Secret" style="width:100%">
-          <input id="xw-pass" type="password" placeholder="Passphrase (OKX)" style="width:100%;display:none" data-okx-pass>
-        </div>
-        <div id="xw-bsc-fields" style="display:none">
-          <input id="xw-address" type="text" placeholder="0x..." style="width:100%">
-        </div>
-        <div><button class="btn btnp" onclick="addExchangeWallet()">Agregar wallet</button></div>
-        <div id="xw-status" style="font-size:13px;color:var(--color-text-secondary)"></div>
-      </div>
-    </div></div>
-    </div>
 
     <div class="set-section">
     <span class="set-sec-lbl">Datos y sync</span>
