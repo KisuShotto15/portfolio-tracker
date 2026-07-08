@@ -34,6 +34,7 @@ var TOOLS = [
   { id:'profit',   label:'Profit Calc'    },
   { id:'p2p',      label:'P2P Spread'     },
   { id:'bcvemily', label:'BCV→Emily USD' },
+  { id:'bdvlimits',label:'BDV Limits'    },
 ];
 
 export function renderToolToggles(){

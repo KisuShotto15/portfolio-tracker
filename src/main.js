@@ -195,6 +195,7 @@ var S = {
   categoryBudgets:{}, categoryBudgetsUpdatedAt:null,
   rateUpdatedAt:null,
   presets:[], presetsUpdatedAt:null,
+  bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
   recurringLog:[], recurringLogUpdatedAt:null,
   toolFees:{bpay:4.1, wally:3.745, zinli:3.75, emily:10}, toolFeesUpdatedAt:null
@@ -319,7 +320,7 @@ async function pushToCloud(){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
-        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage();
+        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
@@ -396,7 +397,7 @@ function afterPull(){
     case 'budget': renderBudget(); break;
     case 'wallets': renderWallets(); break;
     case 'holdings': renderOnchainWallets(); renderWalletHoldings(); break;
-    case 'tools': break;
+    case 'tools': renderBdvLimits(); break;
     case 'history': renderHistory(window._historyView||'snapshots'); break;
   }
 }
@@ -2908,7 +2909,7 @@ function showPage(id,btn,arg){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools'){ renderToolToggles(); renderToolGears(); }
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ renderPresetsManage(); renderIntegrationToggles(); applyIntegrations(); renderExchangeWallets(); toggleXwFields(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
@@ -3209,6 +3210,42 @@ window.save = save;
 
 
 // ── BDV Monthly Limits ───────────────────────────────────────────────
+function bdvLimitsState(){ if(!Array.isArray(S.bdvLimits)) S.bdvLimits=[]; return S.bdvLimits; }
+function bdvInitVirtual(){ return 10000; }
+function bdvInitFisica(name){ return String(name).trim().toLowerCase()==='jesusg'?10000:5000; }
+function _bdvFind(id){ return bdvLimitsState().filter(function(n){ return n.id===id; })[0]; }
+function renderBdvLimits(){
+  var wrap=document.getElementById('bdvl-list'); if(!wrap) return;
+  var list=bdvLimitsState();
+  if(!list.length){ wrap.innerHTML='<div class="bdvl-empty">No names yet. Add one below.</div>'; return; }
+  function stepper(id,key,val,on){
+    if(!on) return '<span class="bdvl-off">Off</span>';
+    return '<div class="bdvl-step">'
+      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',-500)">&#8722;</button>'
+      +'<input class="bdvl-amt" type="number" step="500" value="'+(val||0)+'" onchange="bdvSet('+id+',\''+key+'\',this.value)">'
+      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',500)">+</button>'
+    +'</div>';
+  }
+  wrap.innerHTML=list.map(function(n){
+    return '<div class="bdvl-card">'
+      +'<div class="bdvl-card-head"><span class="bdvl-name" onclick="renameBdvLimit('+n.id+')">'+escHtml(n.name)+'</span>'
+        +'<button class="wico del" onclick="deleteBdvLimit('+n.id+')" title="Delete">&#10005;</button></div>'
+      +'<div class="bdvl-opt"><span class="bdvl-opt-lbl">Virtual</span>'+stepper(n.id,'virtual',n.virtual,true)+'</div>'
+      +'<div class="bdvl-opt"><button class="bdvl-toggle'+(n.fisicaOn?' on':'')+'" onclick="toggleBdvFisica('+n.id+')">Fisica</button>'+stepper(n.id,'fisica',n.fisica,!!n.fisicaOn)+'</div>'
+    +'</div>';
+  }).join('');
+}
+window.renderBdvLimits=renderBdvLimits;
+// Every mutation stamps bdvLimitsUpdatedAt so cloud sync does correct last-writer-wins.
+function bdvSave(){ S.bdvLimitsUpdatedAt=stamp(); save(); renderBdvLimits(); }
+window.bdvAdj=function(id,key,delta){ var n=_bdvFind(id); if(!n) return; n[key]=Math.max(0,(n[key]||0)+delta); bdvSave(); };
+window.bdvSet=function(id,key,val){ var n=_bdvFind(id); if(!n) return; var v=parseFloat(val); n[key]=isNaN(v)?0:Math.max(0,v); bdvSave(); };
+window.toggleBdvFisica=function(id){ var n=_bdvFind(id); if(!n) return; n.fisicaOn=!n.fisicaOn; bdvSave(); };
+window.addBdvLimit=async function(){ var r=await appPrompt('Add name','Name for the new entry','',{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; var nm=r.value.trim(); bdvLimitsState().push({id:Date.now(),name:nm,virtual:bdvInitVirtual(),fisica:bdvInitFisica(nm),fisicaOn:true}); bdvSave(); };
+window.resetBdvLimits=async function(){ var list=bdvLimitsState(); if(!list.length) return; var ok=await appConfirm('Reset all limits?','Sets every Virtual to '+fmtUSD(bdvInitVirtual())+' and Fisica to its initial amount.','Reset'); if(!ok) return; list.forEach(function(n){ n.virtual=bdvInitVirtual(); n.fisica=bdvInitFisica(n.name); }); bdvSave(); };
+window.renameBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var r=await appPrompt('Rename',escHtml(n.name),n.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; n.name=r.value.trim(); bdvSave(); };
+window.deleteBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var ok=await appConfirm('Delete name?',escHtml(n.name),'Delete'); if(!ok) return; S.bdvLimits=bdvLimitsState().filter(function(x){ return x.id!==id; }); bdvSave(); };
+
 window.autofillFromNote = autofillFromNote;
 window.recordSnapshot = recordSnapshot;
 window.saveGoal = saveGoal;
@@ -3288,7 +3325,7 @@ async function bootAfterAuth(firstLogin){
   // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
   try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; }catch(e){}
   applyRecurring(); renderRecurringManage();
-  renderToolToggles(); renderToolGears(); calcProfit(); calcSpread(); calcBCVEmily();
+  renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily();
   autoFetchBinance(); autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)
   setInterval(function(){ autoFetchBinance(); autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
