@@ -174,7 +174,13 @@ var S = {
   deletedTxIds:[],
   transactionsUpdatedAt:null,
   dashGoal:0, dashGoalUpdatedAt:null,
-  categoryBudgets:{}, categoryBudgetsUpdatedAt:null,
+  categoryBudgets:{}, categoryBudgetsUpdatedAt:null, // legacy USD (migrado a pcts)
+  // Limites por categoria como % del Monthly Total (fuente de verdad). El USD se
+  // deriva: pct/100 * budgetTotal, asi cambiar el total rescala todo.
+  categoryBudgetPcts:{}, categoryBudgetPctsUpdatedAt:null,
+  // Overrides por mes: {'2026-07':{Groceries:30,...}}. Un mes sin override hereda
+  // el default; asi un mes con mas Discretionary/Health se ajusta puntualmente.
+  categoryBudgetPctsByMonth:{}, categoryBudgetPctsByMonthUpdatedAt:null,
   rateUpdatedAt:null,
   presets:[], presetsUpdatedAt:null,
   bdvLimits:[], bdvLimitsUpdatedAt:null,
@@ -2247,17 +2253,86 @@ async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; S.budgetTotalUpdatedAt=stamp(); save(); renderBudget(); } }
-function saveCategoryBudget(cat,val){
-  if(!S.categoryBudgets) S.categoryBudgets={};
-  var v=parseFloat(val);
-  if(v>0) S.categoryBudgets[cat]=v; else delete S.categoryBudgets[cat];
-  S.categoryBudgetsUpdatedAt=stamp();
-  save(); renderBudget();
+var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
+// % efectivo de una categoria para un mes: override del mes > default global.
+function catBudgetPct(cat,month){
+  var o=(S.categoryBudgetPctsByMonth||{})[month];
+  if(o&&o[cat]!=null) return o[cat];
+  var g=(S.categoryBudgetPcts||{})[cat];
+  return g!=null?g:0;
 }
+function catBudgetUsd(cat,month){ return catBudgetPct(cat,month)/100*(S.budgetTotal||0); }
+// Scope de edicion: 'default' escribe el % global, 'month' escribe el override
+// del mes visible. Solo afecta la edicion; la vista siempre muestra el efectivo.
+var _budEditScope='default';
+window._budScope=function(s){ _budEditScope=s; renderBudget(); };
+window._budResetMonth=function(){
+  if(S.categoryBudgetPctsByMonth&&S.categoryBudgetPctsByMonth[_budMonth]){
+    delete S.categoryBudgetPctsByMonth[_budMonth];
+    S.categoryBudgetPctsByMonthUpdatedAt=stamp(); save();
+  }
+  renderBudget();
+};
+window.saveCategoryPct=function(cat,val){
+  var v=parseFloat(val);
+  if(_budEditScope==='month'&&_budMonth){
+    if(!S.categoryBudgetPctsByMonth) S.categoryBudgetPctsByMonth={};
+    var o=S.categoryBudgetPctsByMonth[_budMonth]||(S.categoryBudgetPctsByMonth[_budMonth]={});
+    if(v>0) o[cat]=v; else delete o[cat];
+    if(!Object.keys(o).length) delete S.categoryBudgetPctsByMonth[_budMonth];
+    S.categoryBudgetPctsByMonthUpdatedAt=stamp();
+  } else {
+    if(!S.categoryBudgetPcts) S.categoryBudgetPcts={};
+    if(v>0) S.categoryBudgetPcts[cat]=v; else delete S.categoryBudgetPcts[cat];
+    S.categoryBudgetPctsUpdatedAt=stamp();
+  }
+  save(); renderBudget();
+};
+// Promedio de gasto por categoria en los 3 meses previos completos (meses sin
+// gasto no bajan el promedio).
+function _budHistAvg(){
+  var now=new Date(), months=[];
+  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
+  var avg={};
+  BUDGET_CATS.forEach(function(c){
+    var vals=months.map(function(m){ return catNetSpend(m,[c]); }).filter(function(v){ return v>0; });
+    avg[c]=vals.length?vals.reduce(function(s,v){ return s+v; },0)/vals.length:0;
+  });
+  return avg;
+}
+// Recomendaciones: 'hist' = % segun tu gasto promedio real; '503020' = 50%
+// esenciales / 30% estilo de vida / 10% business (10% libre como colchon),
+// repartido dentro de cada grupo proporcional al historial (equitativo sin datos).
+window.applyBudgetRec=function(kind){
+  var avg=_budHistAvg(), pcts={};
+  if(kind==='hist'){
+    var tot=S.budgetTotal||0; if(tot<=0) return;
+    BUDGET_CATS.forEach(function(c){ if(avg[c]>0) pcts[c]=parseFloat((avg[c]/tot*100).toFixed(1)); });
+  } else {
+    [[GROUP_ESSENTIAL,50],[GROUP_LIFESTYLE,30],[GROUP_BUSINESS,10]].forEach(function(g){
+      var cats=g[0], share=g[1];
+      var sum=cats.reduce(function(s,c){ return s+avg[c]; },0);
+      cats.forEach(function(c){
+        var w=sum>0?avg[c]/sum:1/cats.length;
+        var p=parseFloat((share*w).toFixed(1));
+        if(p>0) pcts[c]=p;
+      });
+    });
+  }
+  if(!Object.keys(pcts).length) return;
+  if(_budEditScope==='month'&&_budMonth){
+    if(!S.categoryBudgetPctsByMonth) S.categoryBudgetPctsByMonth={};
+    S.categoryBudgetPctsByMonth[_budMonth]=pcts;
+    S.categoryBudgetPctsByMonthUpdatedAt=stamp();
+  } else {
+    S.categoryBudgetPcts=pcts;
+    S.categoryBudgetPctsUpdatedAt=stamp();
+  }
+  save(); renderBudget();
+};
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
 window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
 function renderBudget(){
-  var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
   var months=getMonths();
   if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
   var month=_budMonth;
@@ -2268,6 +2343,13 @@ function renderBudget(){
   var remaining=S.budgetTotal-spent;
   var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
+  // Ritmo: proyeccion lineal a fin de mes (solo mes actual, desde el dia 3 para
+  // no proyectar ruido de los primeros dias).
+  var todayStr=localToday(), isCurMonth=month===todayStr.slice(0,7);
+  var dayNum=+todayStr.slice(8,10);
+  var dimP=month?(function(){ var p=month.split('-'); return new Date(+p[0],+p[1],0).getDate(); })():30;
+  var canPace=isCurMonth&&dayNum>=3;
+  var projTotal=canPace&&spent>0?spent/dayNum*dimP:null;
 
   var monthLabel=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'';
   var remColor=remaining>=0?'#4ED9A4':'#E24B4A';
@@ -2294,6 +2376,7 @@ function renderBudget(){
         +bstat('Income',fmtUSD(income),'#5DCAA5')
         +bstat('Spent',fmtUSD(spent),'')
         +bstat('Savings rate',savRate+'%','#9B70F0')
+        +(projTotal!=null?bstat('Proyeccion',fmtUSD(projTotal),projTotal>S.budgetTotal?'#E24B4A':'#4ED9A4'):'')
       +'</div>'
     +'</div>'
     +'<div class="bdg-donut-card">'
@@ -2308,13 +2391,29 @@ function renderBudget(){
   // Monthly insights
   html+='<div class="cw bdg-insights" id="insights-wrap"></div>';
 
-  // Categories grid
-  html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span><span class="bdg-cat-meta">'+BUDGET_CATS.length+' tracked</span></div>';
+  // Categories grid — header con scope de edicion (default vs solo este mes)
+  var mShort=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}):'';
+  var monthOvr=(S.categoryBudgetPctsByMonth||{})[month]||null;
+  var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length);
+  html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
+    +'<span class="bdg-scope">'
+    +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
+    +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">Solo '+mShort+'</button>'
+    +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
+    +'</span></div>';
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
-  BUDGET_CATS.forEach(function(cat){
-    var s=catNetSpend(month, [cat]);
-    var catLim=(S.categoryBudgets||{})[cat]||0;
+  // Pasada 1: datos por categoria (para el margen libre del rebalanceo).
+  var catInfo=BUDGET_CATS.map(function(cat){
+    var s=catNetSpend(month,[cat]);
+    var pcta=catBudgetPct(cat,month);
+    var lim=pcta>0?parseFloat((pcta/100*S.budgetTotal).toFixed(2)):0;
+    return {cat:cat,s:s,pct:pcta,lim:lim,ovr:!!(monthOvr&&monthOvr[cat]!=null)};
+  });
+  var freeOthers=catInfo.reduce(function(t,ci){ return t+(ci.lim>0&&ci.s<ci.lim?ci.lim-ci.s:0); },0);
+  // Pasada 2: tarjetas.
+  catInfo.forEach(function(ci){
+    var cat=ci.cat, s=ci.s, catLim=ci.lim;
     var limBase=catLim>0?catLim:S.budgetTotal;
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
@@ -2323,11 +2422,21 @@ function renderBudget(){
     var dPrev=catNetSpend(insMonth, [cat]); var dD=s-dPrev; var dShow=s>0||dPrev>0;
     var dCol=dD===0?'var(--txt3)':(dD>0?'#E24B4A':'#5DCAA5');
     var dTxt=!dShow?'':(dD===0?'· no change':(dD>0?'▲ +':'▼ -')+fmtUSD(Math.abs(dD)));
+    // Ritmo (#4): proyeccion a fin de mes si excede el limite. Rebalanceo (#5):
+    // si ya se paso, cuanto margen libre queda en las demas categorias.
+    var note='';
+    if(catLim>0&&s>catLim){
+      note='<div class="bdg-pace" style="color:#E24B4A">-'+fmtUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtUSD(freeOthers)+' libres en otras':'')+'</div>';
+    } else if(canPace&&catLim>0&&s>0){
+      var proj=s/dayNum*dimP;
+      if(proj>catLim) note='<div class="bdg-pace" style="color:#EF9F27">ritmo: ~'+fmtUSD(proj)+' a fin de mes</div>';
+    }
     html+='<div class="bdg-cat">'
       +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span><span class="bdg-cat-pct">'+cp+'%</span></div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-lim"><span class="bdg-lim-wrap">of $<input type="number" class="bdg-lim-inp" value="'+(catLim>0?catLim:'')+'" placeholder="—" step="1" min="0" inputmode="numeric" onchange="saveCategoryBudget(\''+cat+'\',this.value)"></span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
+      +'<div class="bdg-cat-lim"><span class="bdg-lim-wrap"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%'+(catLim>0?' · '+fmtUSD(catLim):'')+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'')+'</span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
+      +note
       +'</div>';
   });
   html+='</div>';
@@ -2368,20 +2477,24 @@ function renderBudget(){
       +'<input type="number" id="bud-total" value="'+S.budgetTotal+'" placeholder="Total USD" step="1"/>'
       +'<button class="btn btnp" onclick="saveBudget()">Save</button>'
       +'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Category Limits</div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Asignacion por categoria</div>'
       +(function(){
-        var total=BUDGET_CATS.reduce(function(s,c){ return s+((S.categoryBudgets||{})[c]||0); },0);
-        var pct=S.budgetTotal>0?((total/S.budgetTotal)*100):0;
-        var col=Math.abs(total-S.budgetTotal)<1?'#1D9E75':total>S.budgetTotal?'#E24B4A':'#EF9F27';
+        var sumPct=BUDGET_CATS.reduce(function(s,c){ return s+catBudgetPct(c,month); },0);
+        var usd=sumPct/100*S.budgetTotal;
+        var col=Math.abs(sumPct-100)<0.5?'#1D9E75':sumPct>100?'#E24B4A':'#EF9F27';
         return '<div id="bud-alloc-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;font-size:12px">'
-          +'<span style="color:var(--color-text-secondary)">Allocated:</span>'
-          +'<span style="color:'+col+';font-weight:600">'+fmtUSD(total)+'</span>'
-          +'<span style="color:var(--color-text-secondary)">/ '+fmtUSD(S.budgetTotal)+'</span>'
-          +'<span style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;max-width:140px"><span style="display:block;height:100%;width:'+Math.min(100,pct)+'%;background:'+col+';border-radius:3px;transition:width .2s"></span></span>'
-          +'<span style="color:'+col+';font-weight:600">'+pct.toFixed(1)+'%</span>'
+          +'<span style="color:var(--color-text-secondary)">Asignado:</span>'
+          +'<span style="color:'+col+';font-weight:600">'+sumPct.toFixed(1)+'%</span>'
+          +'<span style="color:var(--color-text-secondary)">de 100% · '+fmtUSD(usd)+' de '+fmtUSD(S.budgetTotal)+'</span>'
+          +'<span style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;max-width:140px"><span style="display:block;height:100%;width:'+Math.min(100,sumPct)+'%;background:'+col+';border-radius:3px;transition:width .2s"></span></span>'
           +'</div>';
       })()
-      +'<p style="font-size:12px;color:var(--txt3);margin:0">Edita el limite de cada categoria tocando el numero en su tarjeta arriba (&laquo;of $&raquo;).</p>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Recomendaciones</div>'
+      +'<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">'
+      +'<button class="btn btns" onclick="applyBudgetRec(\'hist\')">Segun tu historial (3m)</button>'
+      +'<button class="btn btns" onclick="applyBudgetRec(\'503020\')">50 / 30 / 20</button>'
+      +'</div>'
+      +'<p style="font-size:12px;color:var(--txt3);margin:0 0 4px">Las recomendaciones y la edicion aplican al scope activo (Default o Solo mes). Edita el % de cada categoria tocando el numero en su tarjeta; el monto USD se deriva del Monthly Total.</p>'
       +'</div>';
   }
   html+='</div>';
@@ -3103,7 +3216,6 @@ window.toggleVesHint = toggleVesHint;
 window.updateVesPreview = updateVesPreview;
 window.renderSummary = renderSummary;
 window.renderBudget = renderBudget;
-window.saveCategoryBudget = saveCategoryBudget;
 window.saveBudget = saveBudget;
 window.saveManualWallet = saveManualWallet;
 window.deleteManualWallet = deleteManualWallet;
@@ -3206,6 +3318,16 @@ async function bootAfterAuth(firstLogin){
       S.transactionsUpdatedAt=stamp();
     }
     S.zelleMigrated=1; save();
+  }
+  // Migration: limites por categoria pasan de USD fijos a % del Monthly Total.
+  if(!S.budgetPctMigrated){
+    var _cb=S.categoryBudgets||{};
+    if(Object.keys(_cb).length&&S.budgetTotal>0&&!Object.keys(S.categoryBudgetPcts||{}).length){
+      if(!S.categoryBudgetPcts) S.categoryBudgetPcts={};
+      Object.keys(_cb).forEach(function(c){ if(_cb[c]>0) S.categoryBudgetPcts[c]=parseFloat((_cb[c]/S.budgetTotal*100).toFixed(1)); });
+      S.categoryBudgetPctsUpdatedAt=stamp();
+    }
+    S.budgetPctMigrated=1; save();
   }
   // Migration: balanceOverride congelaba el balance tracker (las txs nuevas no lo
   // movian). Rebase a base equivalente: mismo valor mostrado, pero vivo.

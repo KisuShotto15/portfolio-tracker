@@ -479,7 +479,7 @@ input,select,textarea,button{font-family:inherit}
 .bdg-pf{height:100%;border-radius:99px}
 .bdg-hero-sub{display:flex;justify-content:space-between;align-items:center;margin-top:13px;font-size:14px;color:var(--txt2);font-family:var(--font-num)}
 .bdg-pct{color:var(--txt3)}
-.bdg-stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:26px;border-top:1px solid var(--line-soft);padding-top:22px}
+.bdg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));margin-top:26px;border-top:1px solid var(--line-soft);padding-top:22px}
 .bdg-stat{display:flex;flex-direction:column;gap:9px;text-align:center;border-right:1px solid var(--line-soft)}
 .bdg-stat:last-child{border-right:none}
 .bdg-stat-l{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
@@ -513,6 +513,12 @@ input,select,textarea,button{font-family:inherit}
 .bdg-lim-inp::-webkit-outer-spin-button,.bdg-lim-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .bdg-lim-inp:focus{outline:none;border-bottom-color:var(--accent);color:#fff}
 .bdg-lim-inp::placeholder{color:var(--txt3)}
+.bdg-scope{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.bdg-scope-btn{font-size:11px;padding:3px 11px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s}
+.bdg-scope-btn.on{border-color:var(--accent);color:#fff;background:rgba(155,112,240,0.14)}
+.bdg-scope-btn.reset{color:#E24B4A}
+.bdg-ovr-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);vertical-align:middle;margin-left:2px}
+.bdg-pace{margin-top:7px;font-size:11px;font-family:var(--font-num);font-weight:500}
 #insights-wrap .ins-list{display:none}
 .bdg-limits{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);overflow:hidden}
 .bdg-limits-head{width:100%;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:20px 26px;color:var(--txt)}
