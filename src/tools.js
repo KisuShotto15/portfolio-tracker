@@ -65,21 +65,25 @@ window.toggleTool=function(id){
 };
 window.renderToolToggles=renderToolToggles;
 
-export function calcProfit(){
+export function calcProfit(fromUser){
   var sellRate  = parseFloat(document.getElementById('pc-sell').value)||0;
   var spent     = parseFloat(document.getElementById('pc-amount').value)||0;
   var buyRate   = parseFloat(document.getElementById('pc-buy').value)||0;
   var cardComm  = parseFloat(document.getElementById('pc-card').value)||0;
   // sell/amount/fee se recuerdan en S.profitCalc (sync LWW via profitCalcUpdatedAt).
-  // buy NO: se autollena con la tasa Intervencion (main.js). Solo guardar si algo
-  // cambio de verdad — calcProfit corre en boot/pull/rate y no debe pushear en vano.
-  var S=_getState();
-  var vals={sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value, fee:document.getElementById('pc-card').value};
-  var prev=S.profitCalc||{};
-  if(vals.sell!==(prev.sell||'')||vals.amount!==(prev.amount||'')||vals.fee!==(prev.fee||'')){
-    S.profitCalc=vals;
-    if(_stamp) S.profitCalcUpdatedAt=_stamp();
-    _save();
+  // buy NO: se autollena con la tasa Intervencion (main.js). SOLO persistir cuando
+  // el cambio viene de un input del usuario (fromUser===true, via oninline del HTML):
+  // calcProfit tambien corre en boot/pull/rate-refresh con el DOM aun sin restaurar,
+  // y persistir ahi pisaba los valores sincronizados con un wipe vacio.
+  if(fromUser===true){
+    var S=_getState();
+    var vals={sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value, fee:document.getElementById('pc-card').value};
+    var prev=S.profitCalc||{};
+    if(vals.sell!==(prev.sell||'')||vals.amount!==(prev.amount||'')||vals.fee!==(prev.fee||'')){
+      S.profitCalc=vals;
+      if(_stamp) S.profitCalcUpdatedAt=_stamp();
+      _save();
+    }
   }
 
   var usdt         = (sellRate > 0 && spent > 0) ? spent * buyRate / sellRate : 0;
