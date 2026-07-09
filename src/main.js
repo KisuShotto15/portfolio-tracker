@@ -19,6 +19,8 @@ var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-ba
 var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
 var PRICE_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/prices';
+// Tasa USDT/VES del monitor P2P (mediana top-20 merchants BDV, lo fetchea 24/7).
+var USDT_RATE_URL = 'https://kisushotto-site.vercel.app/api/usdt-ves';
 // ── Multi-usuario (Supabase) ──────────────────────────────────────────────
 // Si SUPABASE_URL/KEY estan configuradas, la app entra en modo multi-usuario:
 // login por codigo de correo, y el sync usa el token del usuario (Bearer) en vez
@@ -548,6 +550,30 @@ function updateRateUI(){
   // (no pisar mientras el usuario lo esta editando).
   var pb=document.getElementById('pc-buy');
   if(pb&&pb!==document.activeElement&&parseFloat(pb.value)!==iv){ pb.value=iv; calcProfit(); }
+}
+
+// ── Tasa USDT/VES (monitor P2P) ─────────────────────────────────────────────
+// Solo display en el header de Transactions, junto a BCV/Intervencion. No se usa
+// (aun) para convertir txs. Cache en memoria; refetch cada 5 min.
+var _usdtRate=null,_usdtAt=0;
+function renderUsdtRate(){
+  var txt='-',title='';
+  if(_usdtRate){
+    txt=_usdtRate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    var age=Math.round((Date.now()-_usdtAt)/60000);
+    title='Mediana top-20 merchants BDV · hace '+age+' min';
+    if(age>30) txt+=' ⚠'; // dato viejo: el monitor no esta refrescando
+  }
+  var d=document.getElementById('rate-usdt'); if(d){ d.textContent=txt==='-'?'-':txt+' Bs/USDT'; d.title=title; }
+  var m=document.getElementById('rate-usdt-m'); if(m){ m.textContent=txt; m.title=title; }
+}
+async function fetchUsdtRate(){
+  try{
+    var r=await fetch(USDT_RATE_URL);
+    if(!r.ok) return;
+    var j=await r.json();
+    if(j&&j.rate>0){ _usdtRate=j.rate; _usdtAt=Date.parse(j.updatedAt)||Date.now(); renderUsdtRate(); }
+  }catch(e){}
 }
 
 // Exchanges: ya no hay cuentas fijas del dueno. Todo se agrega como wallet de
@@ -3417,6 +3443,7 @@ async function bootAfterAuth(firstLogin){
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
+  fetchUsdtRate(); setInterval(fetchUsdtRate, 5*60*1000);
   migrateExchangeWallets(); renderExchangeWallets();
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
