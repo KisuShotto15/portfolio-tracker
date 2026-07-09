@@ -572,8 +572,19 @@ async function fetchUsdtRate(){
     var r=await fetch(USDT_RATE_URL);
     if(!r.ok) return;
     var j=await r.json();
-    if(j&&j.rate>0){ _usdtRate=j.rate; _usdtAt=Date.parse(j.updatedAt)||Date.now(); renderUsdtRate(); }
+    if(j&&j.rate>0){
+      _usdtRate=j.rate; _usdtAt=Date.parse(j.updatedAt)||Date.now();
+      try{ localStorage.setItem('ft13_usdt',JSON.stringify({rate:_usdtRate,at:_usdtAt})); }catch(e){}
+      renderUsdtRate();
+    }
   }catch(e){}
+}
+// Cache por-dispositivo: las recurrentes corren al boot antes de que el fetch resuelva.
+try{ var _uc=JSON.parse(localStorage.getItem('ft13_usdt')||'null'); if(_uc&&_uc.rate>0){ _usdtRate=_uc.rate; _usdtAt=_uc.at||0; } }catch(e){}
+// Tasa efectiva para convertir VES→USD al anotar una tx: la USDT del monitor P2P
+// (refleja el USDT real gastado) si esta fresca (<24h); si no, cae al BCV.
+function vesTxRate(){
+  return (_usdtRate&&(Date.now()-_usdtAt)<24*60*60*1000)?_usdtRate:S.rate;
 }
 
 // Exchanges: ya no hay cuentas fijas del dueno. Todo se agrega como wallet de
@@ -882,7 +893,7 @@ function autofillFromNote(){
     return;
   }
 }
-function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; document.getElementById('usd-preview').textContent=(S.rate&&a>0)?(a/S.rate).toFixed(2):'-'; }
+function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; var vr=vesTxRate(); document.getElementById('usd-preview').textContent=(vr&&a>0)?(a/vr).toFixed(2):'-'; }
 
 var pendingReceiptUrl = null;
 var receiptUploading = false;
@@ -971,10 +982,11 @@ function addTx(){
   var amt=parseFloat(document.getElementById('tx-amount').value);
   if(!date||!desc||isNaN(amt)||amt<=0){ txMsg('Date, note and amount are required'); return; }
   var amtUSD=amt, amtVES=null;
-  if(cur==='VES'){ if(!S.rate){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=vesToUsd(amt,S.rate); }
+  var _vr=vesTxRate();
+  if(cur==='VES'){ if(!_vr){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=vesToUsd(amt,_vr); }
   snapshot();
   var _now=Date.now(), _ut=stamp();
-  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?S.rate:null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
+  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
@@ -1230,8 +1242,9 @@ function updateTx(){
       // Monto en Bs sin cambios: conserva el USD/tasa originales, no recalcules con la tasa de hoy
       amtUSD=t.amountUSD; rateUsed=t.rateUsed;
     }else{
-      if(!S.rate){ txMsg('Exchange rate not available'); return; }
-      amtUSD=vesToUsd(amt,S.rate); rateUsed=S.rate;
+      var _vr=vesTxRate();
+      if(!_vr){ txMsg('Exchange rate not available'); return; }
+      amtUSD=vesToUsd(amt,_vr); rateUsed=_vr;
     }
   }
   snapshot();
@@ -1906,7 +1919,7 @@ function applyRecurring(){
     if(!r.amount||r.amount<=0||!r.dayOfMonth) return;
     dueMonths(r, now).forEach(function(d){
       var cur=r.currency||'USD', amtUSD=r.amount, amtVES=null, rateUsed=null;
-      if(cur==='VES'){ if(!S.rate) return; amtVES=r.amount; amtUSD=vesToUsd(r.amount,S.rate); rateUsed=S.rate; }
+      if(cur==='VES'){ var _vr=vesTxRate(); if(!_vr) return; amtVES=r.amount; amtUSD=vesToUsd(r.amount,_vr); rateUsed=_vr; }
       var dateStr=d.y+'-'+String(d.m+1).padStart(2,'0')+'-'+String(d.dom).padStart(2,'0');
       var txId=Date.parse(dateStr+'T12:00:00')+(r.id%100000);
       if(deleted.has(txId)){ r.lastRun=d.ym; return; }                       // borrada por el usuario: no resucitar
