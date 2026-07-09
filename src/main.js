@@ -586,6 +586,15 @@ try{ var _uc=JSON.parse(localStorage.getItem('ft13_usdt')||'null'); if(_uc&&_uc.
 function vesTxRate(){
   return (_usdtRate&&(Date.now()-_usdtAt)<24*60*60*1000)?_usdtRate:S.rate;
 }
+// Popup de tasas en el header mobile: USDT fija, tap muestra BCV + Intervencion.
+window.toggleRatesPopup=function(e){
+  e.stopPropagation();
+  var p=document.getElementById('tx-rates-popup'); if(p) p.classList.toggle('open');
+};
+document.addEventListener('click',function(e){
+  var p=document.getElementById('tx-rates-popup');
+  if(p&&p.classList.contains('open')&&!(e.target.closest&&e.target.closest('#tx-rates-wrap'))) p.classList.remove('open');
+});
 
 // Exchanges: ya no hay cuentas fijas del dueno. Todo se agrega como wallet de
 // exchange (ver exchangeWallets + fetchExchangeWallet mas abajo).

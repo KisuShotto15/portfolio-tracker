@@ -531,6 +531,12 @@ input,select,textarea,button{font-family:inherit}
 .rec-lname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38%}
 .rec-lmeta{font-size:12px;color:var(--txt3);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rec-lacts{display:flex;gap:6px;flex-shrink:0}
+/* Tasas en header mobile de Transactions: USDT visible + popup con BCV/Int */
+.tx-rates-wrap{position:relative}
+.tx-rates-btn{display:flex;align-items:center;gap:5px;background:transparent;border:none;color:inherit;cursor:pointer;padding:4px 0;font:inherit}
+.tx-rates-popup{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:10px 14px;z-index:120;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.tx-rates-popup.open{display:flex;flex-direction:column;gap:8px}
+.tx-rate-row{display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:12px;color:var(--txt3)}
 #insights-wrap .ins-list{display:none}
 .bdg-limits{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);overflow:hidden}
 .bdg-limits-head{width:100%;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:20px 26px;color:var(--txt)}

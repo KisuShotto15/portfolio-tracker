@@ -134,17 +134,16 @@
     <!-- Mobile header -->
     <div class="tx-mob-hdr">
       <span class="dash-eyebrow" style="font-size:13px;letter-spacing:.06em">Transactions</span>
-      <div class="tx-mob-hdr-bcv" style="display:flex;align-items:center;gap:5px">
-        <span style="font-size:12px;color:var(--txt3)">BCV</span>
-        <span class="rval" id="rate-display-m">-</span>
-      </div>
-      <div class="tx-mob-hdr-int" style="display:flex;align-items:center;gap:5px">
-        <span style="font-size:12px;color:var(--txt3)">INT</span>
-        <span class="rval" id="rate-interv-m">-</span>
-      </div>
-      <div class="tx-mob-hdr-usdt" style="display:flex;align-items:center;gap:5px">
-        <span style="font-size:12px;color:var(--txt3)">USDT</span>
-        <span class="rval" id="rate-usdt-m">-</span>
+      <div class="tx-rates-wrap" id="tx-rates-wrap">
+        <button class="tx-rates-btn" onclick="toggleRatesPopup(event)" aria-label="Ver tasas">
+          <span style="font-size:12px;color:var(--txt3)">USDT</span>
+          <span class="rval" id="rate-usdt-m">-</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--txt3)"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="tx-rates-popup" id="tx-rates-popup">
+          <div class="tx-rate-row"><span>BCV</span><span class="rval" id="rate-display-m">-</span></div>
+          <div class="tx-rate-row"><span>Intervencion</span><span class="rval" id="rate-interv-m">-</span></div>
+        </div>
       </div>
     </div>
     <!-- Toolbar: en desktop es display:contents (tabs+rbar+frow como antes);
