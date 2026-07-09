@@ -3465,9 +3465,9 @@ async function bootAfterAuth(firstLogin){
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
-  // USDT: 60s con la pestana visible (el endpoint es un read con CDN 30s; barato).
-  // El refetch al volver el foco/visibilidad cubre el timer congelado en mobile.
-  fetchUsdtRate(); setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 60*1000);
+  // USDT: cada 5 min con la pestana visible (ahorra invocaciones Vercel; el
+  // refetch al volver el foco/visibilidad cubre el timer congelado en mobile).
+  fetchUsdtRate(); setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 5*60*1000);
   migrateExchangeWallets(); renderExchangeWallets();
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
