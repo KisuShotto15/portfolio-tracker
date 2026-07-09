@@ -3465,7 +3465,9 @@ async function bootAfterAuth(firstLogin){
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
-  fetchUsdtRate(); setInterval(fetchUsdtRate, 5*60*1000);
+  // USDT: 60s con la pestana visible (el endpoint es un read con CDN 30s; barato).
+  // El refetch al volver el foco/visibilidad cubre el timer congelado en mobile.
+  fetchUsdtRate(); setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 60*1000);
   migrateExchangeWallets(); renderExchangeWallets();
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
@@ -3483,9 +3485,9 @@ async function bootAfterAuth(firstLogin){
   _pullTimer=setInterval(autoPull, 25000);
   // Pull immediately whenever the tab regains focus or visibility, y corre las
   // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
-  window.addEventListener('focus', function(){ autoPull().then(applyRecurring); });
+  window.addEventListener('focus', function(){ fetchUsdtRate(); autoPull().then(applyRecurring); });
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); });
+    if(!document.hidden){ fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
   });
 }
 init();
