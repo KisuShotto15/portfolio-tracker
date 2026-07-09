@@ -110,7 +110,11 @@ async function makeStore(req, res) {
   const h = { apikey: SB_KEY, Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' };
   return {
     async readDoc() {
-      const r = await fetch(base + '?select=doc', { headers: h });
+      // Filtro explicito por user_id ADEMAS de RLS: antes la query confiaba solo en
+      // la policy y tomaba rows[0]; si la policy de select fuera permisiva, cada
+      // usuario leeria la fila de otro (y sus pulls pisarian lo propio). Con el
+      // filtro, una policy mal configurada devuelve como mucho la fila correcta.
+      const r = await fetch(base + '?select=doc&user_id=eq.' + encodeURIComponent(uid) + '&limit=1', { headers: h });
       if (!r.ok) throw { status: r.status };
       const rows = await r.json();
       return (rows[0] && rows[0].doc) || {};

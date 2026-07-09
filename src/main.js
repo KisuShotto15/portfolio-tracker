@@ -31,9 +31,15 @@ var MULTIUSER    = !!(SUPABASE_URL && SUPABASE_KEY);
 function sbGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
 function sbSetSession(j){
   try{
+    // Cambio de cuenta en el MISMO navegador (login con otro correo sin pasar por
+    // logout): no arrastrar el estado local del usuario anterior — se pushearia a
+    // la fila del usuario nuevo. Se limpia ft13 y se recarga con estado virgen.
+    var _prev=localStorage.getItem('sb_email')||'';
+    var _switch=!!(j.user&&j.user.email&&_prev&&_prev!==j.user.email);
     if(j.access_token)  localStorage.setItem('sb_at', j.access_token);
     if(j.refresh_token) localStorage.setItem('sb_rt', j.refresh_token);
     if(j.user&&j.user.email) localStorage.setItem('sb_email', j.user.email);
+    if(_switch){ localStorage.removeItem('ft13'); localStorage.removeItem('ft13_dirty'); location.reload(); }
   }catch(e){}
 }
 function sbClearSession(){ try{ ['sb_at','sb_rt','sb_email'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){} }
@@ -175,6 +181,9 @@ var S = {
   transactionsUpdatedAt:null,
   dashGoal:0, dashGoalUpdatedAt:null,
   categoryBudgets:{}, categoryBudgetsUpdatedAt:null, // legacy USD (migrado a pcts)
+  // Ultimos valores escritos del Profit Calculator (sell/amount/fee; buy se
+  // autollena con la tasa). Sync LWW normal via UpdatedAt.
+  profitCalc:{}, profitCalcUpdatedAt:null,
   // Limites por categoria como % del Monthly Total (fuente de verdad). El USD se
   // deriva: pct/100 * budgetTotal, asi cambiar el total rescala todo.
   categoryBudgetPcts:{}, categoryBudgetPctsUpdatedAt:null,
@@ -369,6 +378,17 @@ async function pullFromCloud(quiet){
   }
 }
 
+// Vuelca S.profitCalc a los inputs del Profit Calculator. No pisa el campo que
+// el usuario esta editando (activeElement), igual que el autofill de pc-buy.
+function restoreProfitCalc(){
+  var pc=S.profitCalc||{};
+  [['pc-sell','sell'],['pc-amount','amount'],['pc-card','fee']].forEach(function(p){
+    var el=document.getElementById(p[0]); if(!el||el===document.activeElement) return;
+    var v=pc[p[1]]!=null?String(pc[p[1]]):'';
+    if(el.value!==v) el.value=v;
+  });
+}
+
 // Re-render the surfaces that a fresh cloud pull can change.
 function _activePageId(){
   var p=document.querySelector('.page.active'); return p?p.id.replace(/^page-/,''):'';
@@ -385,7 +405,7 @@ function afterPull(){
     case 'budget': renderBudget(); break;
     case 'wallets': renderWallets(); break;
     case 'holdings': renderOnchainWallets(); renderWalletHoldings(); break;
-    case 'tools': renderBdvLimits(); break;
+    case 'tools': renderBdvLimits(); restoreProfitCalc(); calcProfit(); break;
     case 'history': renderHistory(window._historyView||'snapshots'); break;
   }
 }
@@ -1021,6 +1041,7 @@ var editingTxId = null;
 function editTx(id){
   var t=S.transactions.find(function(x){ return x.id===id; }); if(!t) return;
   editingTxId=id;
+  var rr=document.getElementById('tx-rec-row'); if(rr) rr.style.display='none'; // recurrente no aplica al editar una tx
   document.getElementById('tx-date').value=t.date;
   document.getElementById('tx-desc').value=t.desc;
   document.getElementById('tx-wallet').value=t.wallet||'';
@@ -1036,6 +1057,8 @@ function editTx(id){
   openTxForm();
 }
 function cancelEditTx(){
+  // Cancel de una edicion de regla recurrente: vuelve a modo crear sin cerrar el sheet.
+  if(_editingRecId){ cancelEditRecurring(); return; }
   closeTxForm();
 }
 function setDefaultWallet(){
@@ -1059,7 +1082,7 @@ function updateDateDisplay(){
 // ── Bottom-sheet history coordination (back button closes the sheet) ──
 function _sheetPush(name){ window._activeSheet=name; try{ history.pushState({sheet:name},''); }catch(e){} }
 function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(history.state&&history.state.sheet){ try{ history.back(); }catch(e){} } } }
-function txMsg(text){ var el=document.getElementById('tx-form-msg'); if(el) el.textContent=text||''; }
+function txMsg(text,ok){ var el=document.getElementById('tx-form-msg'); if(el){ el.textContent=text||''; el.style.color=ok?'#5DCAA5':'#E24B4A'; } }
 function openTxForm(){
   txMsg('');
   // Si el reset diferido del cierre anterior sigue pendiente, ejecutarlo ya
@@ -1095,6 +1118,17 @@ function _resetTxFields(){
   removeReceipt();
   toggleVesHint();
   updateDateDisplay();
+  // reset del modo recurrente
+  _editingRecId=null; _txRecListOpen=false;
+  var rc=document.getElementById('tx-recurring'); if(rc) rc.checked=false;
+  var rr=document.getElementById('tx-rec-row'); if(rr) rr.style.display='';
+  var rd=document.getElementById('tx-rec-day'); if(rd) rd.value='';
+  var rdf=document.getElementById('tx-rec-day-field'); if(rdf) rdf.style.display='none';
+  var df=document.getElementById('tx-date-field'); if(df) df.style.display='';
+  var tg=document.getElementById('tx-rec-toggle'); if(tg) tg.style.display='none';
+  var rl=document.getElementById('tx-rec-list'); if(rl) rl.style.display='none';
+  var pr=document.getElementById('tx-presets'); if(pr) pr.style.display='';
+  var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display='';
 }
 function closeTxForm(fromPop){
   editingTxId=null;
@@ -1149,6 +1183,8 @@ window.openExchangeForm=openExchangeForm;
 window.closeExchangeForm=closeExchangeForm;
 function addTxOrUpdate(){
   if(receiptUploading){ txMsg('Wait for the receipt to finish uploading'); return; }
+  var rec=document.getElementById('tx-recurring');
+  if(rec&&rec.checked){ addRecurringRule(); return; }
   if(editingTxId) updateTx(); else addTx();
 }
 function updateTx(){
@@ -1870,62 +1906,95 @@ window.dismissRecurringAlert=function(id){
   e.seen=true; S.recurringLogUpdatedAt=stamp(); save(); renderAlerts(); renderSummary();
 };
 
-function renderRecurringManage(){
-  var wrap=document.getElementById('recurring-manage'); if(!wrap) return;
-  if(!(S.recurring||[]).length){ wrap.innerHTML='<p style="font-size:13px;color:var(--txt3);padding:6px 2px">No hay reglas. Agrega una abajo.</p>'; return; }
+// ── Recurrentes: viven dentro del sheet de nueva transaccion ────────────────
+// El checkbox "Recurrente" voltea el form: oculta la fecha, muestra "dia del
+// mes" y la lista de reglas (editar/eliminar). Reusa los campos tx-* (nota,
+// monto, moneda, wallet, categoria, tipo); solo agrega el dia.
+var _editingRecId=null;
+var _txRecListOpen=false; // lista colapsada por defecto: no roba espacio al sheet
+function toggleTxRecurring(){
+  var on=document.getElementById('tx-recurring').checked;
+  // el "Dia del mes" ocupa el mismo slot que Date en el grid (swap 1:1)
+  var df=document.getElementById('tx-date-field'); if(df) df.style.display=on?'none':'';
+  var dayF=document.getElementById('tx-rec-day-field'); if(dayF) dayF.style.display=on?'':'none';
+  // en modo recurrente sobran: presets (agregarian una tx normal) y la factura
+  var pr=document.getElementById('tx-presets'); if(pr) pr.style.display=on?'none':'';
+  var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display=on?'none':'';
+  var list=document.getElementById('tx-rec-list'); if(list) list.style.display=on&&_txRecListOpen?'':'none';
+  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?(_editingRecId?'Guardar regla':'Add regla'):'Add';
+  txMsg('');
+  if(on) renderTxRecList(); else if(_editingRecId) cancelEditRecurring();
+}
+window.toggleTxRecurring=toggleTxRecurring;
+window.toggleTxRecList=function(){
+  _txRecListOpen=!_txRecListOpen;
+  var l=document.getElementById('tx-rec-list'); if(l) l.style.display=_txRecListOpen?'':'none';
+  renderTxRecList();
+};
+function renderTxRecList(){
+  var n=(S.recurring||[]).length;
+  var on=!!(document.getElementById('tx-recurring')&&document.getElementById('tx-recurring').checked);
+  var tg=document.getElementById('tx-rec-toggle');
+  if(tg){ tg.textContent=n+' '+(_txRecListOpen?'▴':'▾'); tg.title='Reglas guardadas'; tg.style.display=on&&n?'':'none'; }
+  var wrap=document.getElementById('tx-rec-list'); if(!wrap) return;
+  if(!n){ _txRecListOpen=false; wrap.style.display='none'; wrap.innerHTML=''; return; }
   wrap.innerHTML=S.recurring.slice().sort(function(a,b){ return (a.dayOfMonth||0)-(b.dayOfMonth||0); }).map(function(r){
     var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
-    var meta='Dia '+r.dayOfMonth+' · '+amt+' · '+escHtml(r.category||'-')+' · '+escHtml(r.wallet||'-')+' · '+(r.type||'Debit');
-    return '<div class="preset-mrow'+(_editingRecId===r.id?' editing':'')+'"><div class="preset-mrid"><span class="preset-mname">'+escHtml(r.label)+'</span><span class="preset-mmeta">'+meta+'</span></div>'
-      +'<div class="preset-macts"><button class="wico" onclick="editRecurringRule('+r.id+')" title="Editar">✎</button><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></div></div>';
+    return '<div class="rec-lrow'+(_editingRecId===r.id?' editing':'')+'">'
+      +'<span class="rec-lname">'+escHtml(r.label)+'</span>'
+      +'<span class="rec-lmeta">Dia '+r.dayOfMonth+' · '+amt+(r.category?' · '+escHtml(r.category):'')+'</span>'
+      +'<span class="rec-lacts"><button class="wico" onclick="editRecurringRule('+r.id+')" title="Editar">✎</button><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></span>'
+      +'</div>';
   }).join('');
 }
-var _editingRecId=null;
 window.editRecurringRule=function(id){
   var r=(S.recurring||[]).find(function(x){ return x.id===id; }); if(!r) return;
   _editingRecId=id;
-  document.getElementById('rec-label').value=r.label||'';
-  document.getElementById('rec-wallet').value=r.wallet||'';
-  document.getElementById('rec-type').value=r.type||'Debit';
-  document.getElementById('rec-cat').value=r.category||'';
-  document.getElementById('rec-cur').value=r.currency||'USD';
-  document.getElementById('rec-day').value=r.dayOfMonth||'';
-  document.getElementById('rec-amount').value=r.amount||'';
-  document.getElementById('rec-submit').textContent='Guardar cambios';
-  document.getElementById('rec-cancel').style.display='';
-  renderRecurringManage();
-  document.querySelector('.rec-form').scrollIntoView({behavior:'smooth',block:'nearest'});
+  document.getElementById('tx-desc').value=r.label||'';
+  if(r.wallet) document.getElementById('tx-wallet').value=r.wallet;
+  document.getElementById('tx-type').value=r.type||'Debit';
+  document.getElementById('tx-cat').value=r.category||'';
+  document.getElementById('tx-cur').value=r.currency||'USD';
+  document.getElementById('tx-amount').value=r.amount||'';
+  document.getElementById('tx-rec-day').value=r.dayOfMonth||'';
+  toggleVesHint();
+  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent='Guardar regla';
+  var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='';
+  renderTxRecList();
 };
 function cancelEditRecurring(){
   _editingRecId=null;
-  document.getElementById('rec-label').value=''; document.getElementById('rec-day').value=''; document.getElementById('rec-amount').value='';
-  document.getElementById('rec-submit').textContent='Agregar regla';
-  document.getElementById('rec-cancel').style.display='none';
-  renderRecurringManage();
+  document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value=''; document.getElementById('tx-rec-day').value='';
+  var on=document.getElementById('tx-recurring')&&document.getElementById('tx-recurring').checked;
+  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?'Add regla':'Add';
+  var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='none';
+  renderTxRecList();
 }
 window.cancelEditRecurring=cancelEditRecurring;
 window.addRecurringRule=function(){
-  var label=(document.getElementById('rec-label').value||'').trim();
-  var day=parseInt(document.getElementById('rec-day').value,10);
-  var amount=parseFloat(document.getElementById('rec-amount').value);
-  if(!label||isNaN(day)||day<1||day>31||isNaN(amount)||amount<=0){ alert('Nombre, dia (1-31) y monto son obligatorios'); return; }
+  var label=document.getElementById('tx-desc').value.trim();
+  var day=parseInt(document.getElementById('tx-rec-day').value,10);
+  var amount=parseFloat(document.getElementById('tx-amount').value);
+  if(!label||isNaN(day)||day<1||day>31||isNaN(amount)||amount<=0){ txMsg('Nota, dia (1-31) y monto son obligatorios'); return; }
   if(!S.recurring) S.recurring=[];
   var fields={label:label,dayOfMonth:day,
-    wallet:document.getElementById('rec-wallet').value,
-    type:document.getElementById('rec-type').value,
-    category:document.getElementById('rec-cat').value,
-    currency:document.getElementById('rec-cur').value,
+    wallet:document.getElementById('tx-wallet').value,
+    type:document.getElementById('tx-type').value,
+    category:document.getElementById('tx-cat').value,
+    currency:document.getElementById('tx-cur').value,
     amount:amount};
   if(_editingRecId){
     var r=S.recurring.find(function(x){ return x.id===_editingRecId; });
     if(r) Object.assign(r,fields); // conserva id, lastRun -> no re-agrega tx ya creadas
     cancelEditRecurring();
+    txMsg('Regla actualizada ✓',true);
   }else{
     S.recurring.push(Object.assign({id:Date.now(),lastRun:null},fields));
-    document.getElementById('rec-label').value=''; document.getElementById('rec-day').value=''; document.getElementById('rec-amount').value='';
+    document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value=''; document.getElementById('tx-rec-day').value='';
+    txMsg('Regla creada ✓',true);
   }
   S.recurringUpdatedAt=stamp(); save();
-  renderRecurringManage();
+  renderTxRecList();
   applyRecurring(); // si ya paso el dia este mes, se agrega de una
 };
 window.deleteRecurringRule=function(id){
@@ -1937,7 +2006,7 @@ window.deleteRecurringRule=function(id){
     if(S.recurringLog.length!==before) S.recurringLogUpdatedAt=stamp();
   }
   if(_editingRecId===id) cancelEditRecurring();
-  save(); renderRecurringManage(); renderSummary();
+  save(); renderTxRecList(); renderSummary();
 };
 
 function renderGoal(){
@@ -2817,7 +2886,7 @@ function drawWalletDonut(data, grand){
 function populateWalletSelects(){
   var names=['Binance','Cash'];
   S.manualWallets.forEach(function(w){ if(names.indexOf(w.name)<0) names.push(w.name); });
-  ['tx-wallet','tf-wallet','rec-wallet'].forEach(function(id){
+  ['tx-wallet','tf-wallet'].forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
     var cur=el.value; var isF=id.startsWith('tf');
     el.innerHTML=(isF?'<option value="">Wallet</option>':'')+names.map(function(n){ return '<option>'+n+'</option>'; }).join('');
@@ -2905,7 +2974,7 @@ function importJSON(file){
       var n=stamp();
       tsFields().forEach(function(f){ S[f]=n; });
       if(Array.isArray(S.transactions)) S.transactions.forEach(function(t){ t.updatedAt=n; });
-      save(); populateWalletSelects(); updateRateUI(); renderRecurringManage(); renderSummary();
+      save(); populateWalletSelects(); updateRateUI(); renderSummary();
       st.textContent='Restored: '+(S.transactions||[]).length+' transactions, '+(S.portfolio||[]).length+' holdings.';
       st.style.color='#5DCAA5';
       document.getElementById('json-inp').value='';
@@ -3282,6 +3351,12 @@ async function init(){
   document.getElementById('tx-date').value=today;
   populateTxMonth(); // default: All months (value queda '')
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
+  // Restaurar el Profit Calculator ANTES de updateRateUI: el autofill de pc-buy
+  // dispara calcProfit(), y con los campos vacios pisaria S.profitCalc.
+  if(!S.profitCalc||(!S.profitCalc.sell&&!S.profitCalc.amount&&!S.profitCalc.fee)){
+    try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell||_pc.amount){ S.profitCalc={sell:_pc.sell||'',amount:_pc.amount||'',fee:''}; S.profitCalcUpdatedAt=stamp(); } }catch(e){}
+  }
+  restoreProfitCalc();
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
@@ -3347,8 +3422,8 @@ async function bootAfterAuth(firstLogin){
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){});
   // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
-  try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell) document.getElementById('pc-sell').value=_pc.sell; if(_pc.amount) document.getElementById('pc-amount').value=_pc.amount; }catch(e){}
-  applyRecurring(); renderRecurringManage();
+  restoreProfitCalc(); // de nuevo tras el pull: la nube puede traer valores mas nuevos
+  applyRecurring();
   renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily();
   autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)

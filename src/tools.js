@@ -70,9 +70,17 @@ export function calcProfit(){
   var spent     = parseFloat(document.getElementById('pc-amount').value)||0;
   var buyRate   = parseFloat(document.getElementById('pc-buy').value)||0;
   var cardComm  = parseFloat(document.getElementById('pc-card').value)||0;
-  // Solo se cachean sell/amount: buy se autollena con la tasa Intervencion (main.js)
-  // y fee debe arrancar vacio siempre.
-  try{ localStorage.setItem('ft13_pc', JSON.stringify({sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value})); }catch(e){}
+  // sell/amount/fee se recuerdan en S.profitCalc (sync LWW via profitCalcUpdatedAt).
+  // buy NO: se autollena con la tasa Intervencion (main.js). Solo guardar si algo
+  // cambio de verdad — calcProfit corre en boot/pull/rate y no debe pushear en vano.
+  var S=_getState();
+  var vals={sell:document.getElementById('pc-sell').value, amount:document.getElementById('pc-amount').value, fee:document.getElementById('pc-card').value};
+  var prev=S.profitCalc||{};
+  if(vals.sell!==(prev.sell||'')||vals.amount!==(prev.amount||'')||vals.fee!==(prev.fee||'')){
+    S.profitCalc=vals;
+    if(_stamp) S.profitCalcUpdatedAt=_stamp();
+    _save();
+  }
 
   var usdt         = (sellRate > 0 && spent > 0) ? spent * buyRate / sellRate : 0;
   var bpayRecharge = spent > 0 ? spent / (1 + cardComm / 100) : 0;

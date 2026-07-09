@@ -519,6 +519,18 @@ input,select,textarea,button{font-family:inherit}
 .bdg-scope-btn.reset{color:#E24B4A}
 .bdg-ovr-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);vertical-align:middle;margin-left:2px}
 .bdg-pace{margin-top:7px;font-size:11px;font-family:var(--font-num);font-weight:500}
+.tx-rec-row{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+.tx-rec-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt2);cursor:pointer;padding:6px 0;user-select:none}
+/* especificidad extra: .tx-form-panel input (width:100%,height:42px) lo agrandaba */
+.tx-form-panel .tx-rec-check input{accent-color:var(--accent);width:16px;height:16px;flex:0 0 16px;padding:0;cursor:pointer;appearance:auto;-webkit-appearance:auto}
+.tx-form-panel .tx-rec-toggle{font-size:12px;padding:5px 12px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;margin-left:auto}
+#tx-rec-list{margin-top:8px;max-height:180px;overflow-y:auto}
+.rec-lrow{display:flex;align-items:center;gap:10px;padding:6px 2px;border-bottom:0.5px solid var(--line-soft);min-width:0}
+.rec-lrow:last-child{border-bottom:none}
+.rec-lrow.editing .rec-lname{color:var(--accent)}
+.rec-lname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38%}
+.rec-lmeta{font-size:12px;color:var(--txt3);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-lacts{display:flex;gap:6px;flex-shrink:0}
 #insights-wrap .ins-list{display:none}
 .bdg-limits{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);overflow:hidden}
 .bdg-limits-head{width:100%;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:20px 26px;color:var(--txt)}
