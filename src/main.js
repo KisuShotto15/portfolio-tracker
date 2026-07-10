@@ -2652,9 +2652,11 @@ var _trkKey=null,_trkMap=null;
 function trackerTxBalances(){
   var k=(S.transactionsUpdatedAt||0)+'|'+(S.manualWalletsUpdatedAt||0)+'|'+S.transactions.length;
   if(_trkMap&&_trkKey===k) return _trkMap;
-  // tracker = manualWallet con trackerOnly===true.
+  // tracker = manualWallet con trackerOnly===true. Si hay entradas duplicadas
+  // con el mismo nombre (una tracker y una manual), gana la tracker: si no, las
+  // txs del wallet no se cuentan y el balance queda congelado.
   var trk={};
-  S.manualWallets.forEach(function(w){ trk[w.name]=w.trackerOnly===true; });
+  S.manualWallets.forEach(function(w){ trk[w.name]=trk[w.name]||w.trackerOnly===true; });
   var map={};
   S.transactions.forEach(function(t){
     if(t.imported||!t.wallet||!trk[t.wallet]) return;
@@ -2664,7 +2666,9 @@ function trackerTxBalances(){
   return map;
 }
 function calcTrackerBal(name){
-  var mw=S.manualWallets.find(function(w){ return w.name===name; });
+  // Preferir la entrada tracker si hay duplicados con el mismo nombre.
+  var mw=S.manualWallets.find(function(w){ return w.name===name&&w.trackerOnly===true; })
+       ||S.manualWallets.find(function(w){ return w.name===name; });
   return (mw?mw.balance:0)+(trackerTxBalances()[name]||0);
 }
 
