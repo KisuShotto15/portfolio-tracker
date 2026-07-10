@@ -1945,7 +1945,9 @@ function applyRecurring(){
     added.forEach(function(a){ S.recurringLog.unshift(a); });
     S.recurringLog=S.recurringLog.slice(0,30);
     S.recurringLogUpdatedAt=ut;
-    save(); renderTx(); renderSummary(); renderAlerts();
+    // renderWallets: la tx nueva mueve el balance de los trackers — sin esto,
+    // parado en la tab Wallets el monto queda viejo hasta cambiar de tab.
+    save(); renderTx(); renderSummary(); renderAlerts(); renderWallets();
   }
 }
 window.dismissRecurringAlert=function(id){
@@ -2628,6 +2630,15 @@ function saveManualWallet(){
   if(!name){ return; }
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker'};
+  // Conversion Manual → Tracker (re-agregar con el mismo nombre): conservar el
+  // balance mostrado. El tracker suma sus txs, asi que la base se rebasa
+  // restando las txs existentes del wallet; sin esto arrancaria desde 0.
+  if(idx>=0&&type==='tracker'&&S.manualWallets[idx].trackerOnly!==true){
+    var _old=S.manualWallets[idx];
+    var txSum=S.transactions.reduce(function(s,t){ return (t.imported||t.wallet!==_old.name)?s:s+(t.type==='Credit'?1:-1)*t.amountUSD; },0);
+    obj.balance=parseFloat(((_old.balance||0)-txSum).toFixed(2));
+    obj.name=_old.name; // conservar el casing original: las txs matchean por nombre exacto
+  }
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   S.manualWalletsUpdatedAt=stamp();
   closeWalletForm();
