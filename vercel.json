@@ -2,6 +2,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "regions": ["sin1"],
+  "crons": [
+    { "path": "/api/backup", "schedule": "0 6 * * *" }
+  ],
   "headers": [
     { "source": "/sw.js", "headers": [{ "key": "Content-Type", "value": "application/javascript" }, { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }] },
     { "source": "/manifest.json", "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }] },
