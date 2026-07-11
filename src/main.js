@@ -2,6 +2,8 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
+import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay } from './auth.js';
 
 // BCV oficial via dolarvzla (rates.dolarvzla.com). Devuelve la ultima tasa BCV
 // PUBLICADA (el valor anunciado para el proximo dia habil, no el retraso de dolarapi),
@@ -21,113 +23,8 @@ var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upl
 var PRICE_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/prices';
 // Tasa USDT/VES del monitor P2P (mediana top-20 merchants BDV, lo fetchea 24/7).
 var USDT_RATE_URL = 'https://kisushotto-site.vercel.app/api/usdt-ves';
-// ── Multi-usuario (Supabase) ──────────────────────────────────────────────
-// Si SUPABASE_URL/KEY estan configuradas, la app entra en modo multi-usuario:
-// login por codigo de correo, y el sync usa el token del usuario (Bearer) en vez
-// del secret compartido. La URL y la publishable key son PUBLICAS por diseno
-// (RLS en la DB es lo que protege los datos). Vacias = modo mono-usuario actual.
-var SUPABASE_URL = 'https://fcrqrfpjpuscorbogjho.supabase.co';
-var SUPABASE_KEY = 'sb_publishable_1ru1s3pT8wJ75GEKa2ag5A_jlz0y1GQ';
-var MULTIUSER    = !!(SUPABASE_URL && SUPABASE_KEY);
-
-function sbGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
-function sbSetSession(j){
-  try{
-    // Cambio de cuenta en el MISMO navegador (login con otro correo sin pasar por
-    // logout): no arrastrar el estado local del usuario anterior — se pushearia a
-    // la fila del usuario nuevo. Se limpia ft13 y se recarga con estado virgen.
-    var _prev=localStorage.getItem('sb_email')||'';
-    var _switch=!!(j.user&&j.user.email&&_prev&&_prev!==j.user.email);
-    if(j.access_token)  localStorage.setItem('sb_at', j.access_token);
-    if(j.refresh_token) localStorage.setItem('sb_rt', j.refresh_token);
-    if(j.user&&j.user.email) localStorage.setItem('sb_email', j.user.email);
-    if(_switch){ localStorage.removeItem('ft13'); localStorage.removeItem('ft13_dirty'); location.reload(); }
-  }catch(e){}
-}
-function sbClearSession(){ try{ ['sb_at','sb_rt','sb_email'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){} }
-// Cuando el usuario llega desde un enlace de correo (confirmacion de registro o
-// magic link), Supabase pone la sesion en el fragmento de la URL (#access_token=...).
-// La tomamos, la guardamos y limpiamos el hash para no dejar tokens en la URL.
-function sbConsumeHashSession(){
-  var h=location.hash||'';
-  if(h.indexOf('access_token=')<0) return false;
-  try{
-    var p=new URLSearchParams(h.replace(/^#/,''));
-    var at=p.get('access_token'); if(!at) return false;
-    sbSetSession({access_token:at, refresh_token:p.get('refresh_token')||''});
-    history.replaceState(null,'',location.pathname+location.search);
-    return true;
-  }catch(e){ return false; }
-}
-async function sbRefresh(){
-  var rt=sbGet('sb_rt'); if(!rt) return false;
-  try{
-    var r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({refresh_token:rt})});
-    if(!r.ok) return false;
-    sbSetSession(await r.json()); return true;
-  }catch(e){ return false; }
-}
-async function sbOtpRequest(email){
-  try{
-    var r=await fetch(SUPABASE_URL+'/auth/v1/otp',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({email:email})});
-    if(r.ok) return {ok:true};
-    var j=await r.json().catch(function(){ return {}; });
-    return {ok:false, code:j.error_code||j.code||''}; // 'signup_disabled' = correo no autorizado
-  }catch(e){ return {ok:false, code:'network'}; }
-}
-async function sbOtpVerify(email,token){
-  try{
-    var r=await fetch(SUPABASE_URL+'/auth/v1/verify',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({email:email,token:token,type:'email'})});
-    if(!r.ok) return false;
-    var j=await r.json(); if(!j.access_token) return false;
-    sbSetSession(j); return true;
-  }catch(e){ return false; }
-}
-// Headers de auth: siempre el token del usuario (Bearer) de Supabase.
-function syncAuthHeaders(base){
-  var h=Object.assign({},base||{});
-  h['Authorization']='Bearer '+sbGet('sb_at');
-  return h;
-}
-// fetch a SYNC_PROXY con refresh automatico del token en 401 (solo multi-usuario).
-async function syncFetch(base,init){
-  init=init||{}; init.headers=syncAuthHeaders(base);
-  var r=await fetch(SYNC_PROXY,init);
-  if(r.status===401&&MULTIUSER&&await sbRefresh()){
-    init.headers=syncAuthHeaders(base);
-    r=await fetch(SYNC_PROXY,init);
-  }
-  return r;
-}
-window.logout=function(){ sbClearSession(); try{ localStorage.removeItem('ft13'); localStorage.removeItem('ft13_dirty'); }catch(e){} location.reload(); };
-function showAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.add('open'); }
-function hideAuthOverlay(){ var o=document.getElementById('auth-overlay'); if(o) o.classList.remove('open'); }
-function authMsg(t){ var e=document.getElementById('auth-msg'); if(e) e.textContent=t||''; }
-window.authSendCode=async function(){
-  var email=(document.getElementById('auth-email').value||'').trim().toLowerCase();
-  if(!email||email.indexOf('@')<1){ authMsg('Correo invalido'); return; }
-  authMsg('Enviando codigo...'); window._authEmail=email;
-  var res=await sbOtpRequest(email);
-  if(res.ok){
-    document.getElementById('auth-step-email').style.display='none';
-    document.getElementById('auth-step-code').style.display='block';
-    authMsg('Codigo enviado a '+email);
-    var c=document.getElementById('auth-code'); if(c) c.focus();
-  } else if(res.code==='signup_disabled'){
-    authMsg('Este correo no esta autorizado. Pide acceso al administrador.');
-  } else authMsg('No se pudo enviar el codigo. Reintenta.');
-};
-window.authVerifyCode=async function(){
-  var code=(document.getElementById('auth-code').value||'').trim();
-  if(!code){ authMsg('Ingresa el codigo'); return; }
-  authMsg('Verificando...');
-  if(await sbOtpVerify(window._authEmail,code)){ hideAuthOverlay(); await bootAfterAuth(true); }
-  else authMsg('Codigo incorrecto o expirado.');
-};
-window.authBackToEmail=function(){
-  document.getElementById('auth-step-code').style.display='none';
-  document.getElementById('auth-step-email').style.display='block'; authMsg('');
-};
+// Multi-usuario (Supabase): sesion, OTP y syncFetch viven en ./auth.js.
+initAuth({ syncProxy:SYNC_PROXY, onLogin:function(){ return bootAfterAuth(true); } });
 
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
@@ -149,10 +46,8 @@ var AUTOFILL_RULES = [
 var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
 // 'Transfer' (deposito/retiro) NO va en SUMMARY_CATS ni CATS: asi queda fuera de
-// income/gasto, donut y budget automaticamente. Mueve el balance del wallet (via
-// type Credit/Debit, igual que cualquier tx) pero se netea del P&L como los flujos
-// de Investments (ver isExtFlow: dinero que entra/sale del portfolio, no ganancia).
-function isExtFlow(cat){ return cat==='Investments'||cat==='Transfer'; }
+// income/gasto, donut y budget automaticamente. Mueve el balance del wallet pero
+// se netea del P&L como Investments (isExtFlow, ahora en finance-core.js).
 var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8','Eating Out':'#FB923C',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
   Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Other:'#6B7280'};
@@ -586,6 +481,11 @@ try{ var _uc=JSON.parse(localStorage.getItem('ft13_usdt')||'null'); if(_uc&&_uc.
 function vesTxRate(){
   return (_usdtRate&&(Date.now()-_usdtAt)<24*60*60*1000)?_usdtRate:S.rate;
 }
+// Fuente de la tasa que devolveria vesTxRate() ahora mismo ('p2p' | 'bcv').
+// Se guarda en cada tx (rateSrc) para poder auditar con que tasa se convirtio.
+function vesTxRateSrc(){
+  return (_usdtRate&&(Date.now()-_usdtAt)<24*60*60*1000)?'p2p':'bcv';
+}
 // Popup de tasas en el header mobile: USDT fija, tap muestra BCV + Intervencion.
 window.toggleRatesPopup=function(e){
   e.stopPropagation();
@@ -654,13 +554,7 @@ async function fetchCoinPrices(force){
 }
 // Valor total del tab Holdings: on-chain (Ankr) + manuales (cantidad x precio).
 // Alimenta la linea "+Holdings" del equity y se congela en cada snapshot.
-function holdingsTotalUsd(){
-  var t=0;
-  (S.walletHoldings||[]).forEach(function(h){ t+=h.balanceUsd||0; });
-  var prices=S.coinPrices||{};
-  (S.manualHoldings||[]).forEach(function(h){ t+=(h.qty||0)*(prices[h.coin]||0); });
-  return parseFloat(t.toFixed(2));
-}
+function holdingsTotalUsd(){ return holdingsTotalUsdCore(S.walletHoldings, S.manualHoldings, S.coinPrices); }
 async function fetchWalletHoldings(){ if(!canFetchExchanges()) return;
   var wallets = S.onchainWallets||[];
   if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
@@ -995,7 +889,7 @@ function addTx(){
   if(cur==='VES'){ if(!_vr){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=vesToUsd(amt,_vr); }
   snapshot();
   var _now=Date.now(), _ut=stamp();
-  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
+  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
@@ -1249,16 +1143,16 @@ function updateTx(){
     amtVES=amt;
     if(t&&t.originalCurrency==='VES'&&t.amountVES===amt){
       // Monto en Bs sin cambios: conserva el USD/tasa originales, no recalcules con la tasa de hoy
-      amtUSD=t.amountUSD; rateUsed=t.rateUsed;
+      amtUSD=t.amountUSD; rateUsed=t.rateUsed; var rateSrc=t.rateSrc||null;
     }else{
       var _vr=vesTxRate();
       if(!_vr){ txMsg('Exchange rate not available'); return; }
-      amtUSD=vesToUsd(amt,_vr); rateUsed=_vr;
+      amtUSD=vesToUsd(amt,_vr); rateUsed=_vr; rateSrc=vesTxRateSrc();
     }
   }
   snapshot();
   var _now=stamp();
-  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
+  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.rateSrc=cur==='VES'?(typeof rateSrc!=='undefined'?rateSrc:null):null; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
@@ -1355,7 +1249,8 @@ function txSepHtml(date){
   return '<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
 }
 function txRowHtml(t){
-  var orig=t.originalCurrency==='VES'&&t.amountVES?'Bs '+t.amountVES.toLocaleString('es-VE'):'';
+  var rateTip=t.rateUsed?('Tasa '+(t.rateSrc==='p2p'?'USDT P2P':t.rateSrc==='bcv'?'BCV':'')+' '+t.rateUsed):'';
+  var orig=t.originalCurrency==='VES'&&t.amountVES?'<span title="'+rateTip+'">Bs '+t.amountVES.toLocaleString('es-VE')+'</span>':'';
   var isTrk=isTracker(t.wallet,t);
   var trk=isTrk?'<span class="badge-t">tracker</span>':'';
   var wTag=t.wallet==='Binance'?'tBinance':'tX';
@@ -1492,23 +1387,13 @@ var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFEST
 var _mctRef=null, _mctTs=null, _mctMap=null;
 function monthCatTotals(){
   if(_mctMap&&_mctRef===S.transactions&&_mctTs===S.transactionsUpdatedAt) return _mctMap;
-  var map={};
-  S.transactions.forEach(function(t){
-    var k=t.date.slice(0,7)+'|'+t.category;
-    var e=map[k]||(map[k]={d:0,c:0});
-    if(t.type==='Debit') e.d+=t.amountUSD; else if(t.type==='Credit') e.c+=t.amountUSD;
-  });
-  _mctRef=S.transactions; _mctTs=S.transactionsUpdatedAt; _mctMap=map;
-  return map;
+  _mctRef=S.transactions; _mctTs=S.transactionsUpdatedAt; _mctMap=monthCatTotalsCore(S.transactions);
+  return _mctMap;
 }
 // Net spending for a category in a month: debits - credits (refunds reduce spend)
-function catNetSpend(month, cats){
-  var map=monthCatTotals(), d=0, c=0;
-  cats.forEach(function(cat){ var e=map[month+'|'+cat]; if(e){ d+=e.d; c+=e.c; } });
-  return Math.max(0, d-c);
-}
+function catNetSpend(month, cats){ return catNetSpendCore(monthCatTotals(), month, cats); }
 // Income del mes = creditos de la categoria Income.
-function monthIncome(month){ var e=monthCatTotals()[month+'|Income']; return e?e.c:0; }
+function monthIncome(month){ return monthIncomeCore(monthCatTotals(), month); }
 
 function getAvgMonthlyOutflows(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
@@ -1534,29 +1419,7 @@ function getAvgMonthlyContribution(){
 // Only counts txs created at/before curSnap was recorded (by timestamp id), so an
 // investment added *after* the snapshot — even same day — isn't wrongly counted,
 // since curSnap's total doesn't reflect it yet (it belongs to the next period).
-function investmentFlow(prevSnap, curSnap){
-  // Attribution by record time (id/timestamp) on BOTH ends: a tx belongs to the
-  // period (prevSnap, curSnap] if it was recorded after prevSnap and at/before
-  // curSnap. Falls back to date bounds for legacy snapshots/txs without ids.
-  var lo=prevSnap?prevSnap.date:'';
-  var txs=(S.transactions||[]).filter(function(t){
-    if(!isExtFlow(t.category)) return false;
-    // Upper bound: recorded at/before this snapshot.
-    if(curSnap.id!=null && t.id!=null && t.id>curSnap.id) return false;
-    // Lower bound: recorded after the previous snapshot (id), else by date.
-    if(prevSnap && prevSnap.id!=null && t.id!=null){
-      if(t.id<=prevSnap.id) return false;
-    } else {
-      if(!(t.date>lo)) return false;
-    }
-    // Date upper bound only when id upper bound unavailable.
-    if((curSnap.id==null||t.id==null) && !(t.date<=curSnap.date)) return false;
-    return true;
-  });
-  var invOut=txs.filter(function(t){ return t.type==='Debit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
-  var invIn=txs.filter(function(t){ return t.type==='Credit'; }).reduce(function(a,t){ return a+t.amountUSD; },0);
-  return {invOut:invOut,invIn:invIn};
-}
+function investmentFlow(prevSnap, curSnap){ return investmentFlowCore(S.transactions, prevSnap, curSnap); }
 // Memo: se llama ~5 veces por render del dashboard (KPIs actual+previo, health,
 // panel P&L) y cada computo es O(snapshots x txs). Invalida por timestamps+longitudes.
 var _pnlKey=null,_pnlVal=null;
@@ -1928,12 +1791,12 @@ function applyRecurring(){
     if(!r.amount||r.amount<=0||!r.dayOfMonth) return;
     dueMonths(r, now).forEach(function(d){
       var cur=r.currency||'USD', amtUSD=r.amount, amtVES=null, rateUsed=null;
-      if(cur==='VES'){ var _vr=vesTxRate(); if(!_vr) return; amtVES=r.amount; amtUSD=vesToUsd(r.amount,_vr); rateUsed=_vr; }
+      if(cur==='VES'){ var _vr=vesTxRate(); if(!_vr) return; amtVES=r.amount; amtUSD=vesToUsd(r.amount,_vr); rateUsed=_vr; var _rs=vesTxRateSrc(); } else { var _rs=null; }
       var dateStr=d.y+'-'+String(d.m+1).padStart(2,'0')+'-'+String(d.dom).padStart(2,'0');
       var txId=Date.parse(dateStr+'T12:00:00')+(r.id%100000);
       if(deleted.has(txId)){ r.lastRun=d.ym; return; }                       // borrada por el usuario: no resucitar
       if(S.transactions.some(function(t){ return t.id===txId; })){ r.lastRun=d.ym; return; }
-      S.transactions.push({id:txId,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,imported:false,receiptUrl:null,updatedAt:stamp(),auto:true,recurringId:r.id});
+      S.transactions.push({id:txId,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,rateSrc:_rs,imported:false,receiptUrl:null,updatedAt:stamp(),auto:true,recurringId:r.id});
       r.lastRun=d.ym;
       added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
     });
@@ -2374,12 +2237,7 @@ window.editSnapshot=editSnapshot;
 function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; S.budgetTotalUpdatedAt=stamp(); save(); renderBudget(); } }
 var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
 // % efectivo de una categoria para un mes: override del mes > default global.
-function catBudgetPct(cat,month){
-  var o=(S.categoryBudgetPctsByMonth||{})[month];
-  if(o&&o[cat]!=null) return o[cat];
-  var g=(S.categoryBudgetPcts||{})[cat];
-  return g!=null?g:0;
-}
+function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
 function catBudgetUsd(cat,month){ return catBudgetPct(cat,month)/100*(S.budgetTotal||0); }
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
 // del mes visible. Solo afecta la edicion; la vista siempre muestra el efectivo.
@@ -2652,18 +2510,8 @@ var _trkKey=null,_trkMap=null;
 function trackerTxBalances(){
   var k=(S.transactionsUpdatedAt||0)+'|'+(S.manualWalletsUpdatedAt||0)+'|'+S.transactions.length;
   if(_trkMap&&_trkKey===k) return _trkMap;
-  // tracker = manualWallet con trackerOnly===true. Si hay entradas duplicadas
-  // con el mismo nombre (una tracker y una manual), gana la tracker: si no, las
-  // txs del wallet no se cuentan y el balance queda congelado.
-  var trk={};
-  S.manualWallets.forEach(function(w){ trk[w.name]=trk[w.name]||w.trackerOnly===true; });
-  var map={};
-  S.transactions.forEach(function(t){
-    if(t.imported||!t.wallet||!trk[t.wallet]) return;
-    map[t.wallet]=(map[t.wallet]||0)+(t.type==='Credit'?1:-1)*t.amountUSD;
-  });
-  _trkKey=k; _trkMap=map;
-  return map;
+  _trkKey=k; _trkMap=trackerTxBalancesCore(S.manualWallets, S.transactions);
+  return _trkMap;
 }
 function calcTrackerBal(name){
   // Preferir la entrada tracker si hay duplicados con el mismo nombre.
@@ -2686,8 +2534,29 @@ var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','P
 
 // ── Wallets de exchange personalizados (por usuario) ────────────────────────
 // Cada usuario agrega los suyos con nombre propio + credenciales, desde la app.
-// Se guardan en SU fila de Supabase (aislada por RLS): el dueno no las ve. Tipo
-// 'binance' (key/secret via el proxy con SU token) o 'bsc' (direccion, RPC directo).
+// Los METADATOS (nombre, tipo, balance) van en S y se sincronizan; las API
+// keys/secrets viven SOLO en este dispositivo (localStorage ft13_xk) — no viajan
+// en el doc ni quedan en la nube. Otro dispositivo ve el balance sincronizado
+// pero para refrescarlo debe re-ingresar las keys (boton llave en la fila).
+var XK_LS='ft13_xk';
+function xkAll(){ try{ return JSON.parse(localStorage.getItem(XK_LS)||'{}'); }catch(e){ return {}; } }
+function xkGet(id){ return xkAll()[id]||null; }
+function xkSet(id,obj){ try{ var a=xkAll(); a[id]=obj; localStorage.setItem(XK_LS,JSON.stringify(a)); }catch(e){} }
+function xkDel(id){ try{ var a=xkAll(); delete a[id]; localStorage.setItem(XK_LS,JSON.stringify(a)); }catch(e){} }
+// Migracion: docs viejos traen key/secret/passphrase dentro del wallet. Se mueven
+// al almacen local de este dispositivo y se borran del doc (el proximo push
+// limpia la nube). Corre en cada boot; sin secretos en el doc es un no-op.
+function stripExchangeSecrets(){
+  var dirty=false;
+  (S.exchangeWallets||[]).forEach(function(w){
+    if(w.key||w.secret||w.passphrase){
+      xkSet(w.id,{key:w.key||'',secret:w.secret||'',passphrase:w.passphrase||''});
+      delete w.key; delete w.secret; delete w.passphrase;
+      dirty=true;
+    }
+  });
+  if(dirty){ S.exchangeWalletsUpdatedAt=stamp(); save(); }
+}
 function canFetchExchanges(){ return !!sbGet('sb_at'); }
 function exchangeProxyHeaders(){
   return {'Content-Type':'application/json','Authorization':'Bearer '+sbGet('sb_at')};
@@ -2701,24 +2570,25 @@ async function fetchExchangeWallet(w){
     var j=await res.json(); if(j.error) throw new Error(j.error.message);
     w.balance=parseFloat((parseInt(j.result,16)/1e18).toFixed(2));
   } else {
-    if(!w.key||!w.secret) return;
+    var xk=xkGet(w.id);
+    if(!xk||!xk.key||!xk.secret) return; // keys no estan en este dispositivo
     if(!canFetchExchanges()) throw new Error('Sin sesion');
     if(w.type==='bybit'){
-      var rb=await fetch(BYBIT_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret})});
+      var rb=await fetch(BYBIT_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:xk.key,secret:xk.secret})});
       if(!rb.ok) throw new Error('Bybit '+rb.status);
       var db=await rb.json(); if(db.error) throw new Error(db.error);
       var lst=(db.result&&db.result.list)||[]; var tot=0;
       lst.forEach(function(acc){ var u=acc.coin&&acc.coin.find(function(c){ return c.coin==='USDT'; }); if(u) tot+=parseFloat(u.walletBalance||0); });
       w.balance=parseFloat(tot.toFixed(2));
     } else if(w.type==='okx'){
-      var ro=await fetch(OKX_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret,passphrase:w.passphrase})});
+      var ro=await fetch(OKX_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:xk.key,secret:xk.secret,passphrase:xk.passphrase})});
       if(!ro.ok) throw new Error('OKX '+ro.status);
       var doo=await ro.json(); if(doo.error) throw new Error(doo.error);
       var det=(doo.data&&doo.data[0]&&doo.data[0].details)||[];
       var uo=det.find(function(c){ return c.ccy==='USDT'; });
       w.balance=parseFloat(parseFloat((uo&&uo.cashBal)||0).toFixed(2));
     } else {
-      var r=await fetch(BINANCE_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:w.key,secret:w.secret})});
+      var r=await fetch(BINANCE_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:xk.key,secret:xk.secret})});
       if(!r.ok) throw new Error('Binance '+r.status);
       var d=await r.json(); var usdt=Array.isArray(d)?d.find(function(a){return a.asset==='USDT';}):null;
       w.balance=parseFloat((usdt?parseFloat(usdt.free||0)+parseFloat(usdt.locked||0)+parseFloat(usdt.freeze||0)+parseFloat(usdt.withdrawing||0):0).toFixed(2));
@@ -2796,13 +2666,16 @@ window.addExchangeWallet=async function(){
     if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){ if(st) st.textContent='Direccion 0x invalida'; return; }
     w.address=addr;
   } else {
-    w.key=(document.getElementById('xw-key').value||'').trim();
-    w.secret=(document.getElementById('xw-secret').value||'').trim();
-    if(!w.key||!w.secret){ if(st) st.textContent='Faltan key/secret'; return; }
+    // Las credenciales van SOLO al almacen local del dispositivo, nunca a S.
+    var _k=(document.getElementById('xw-key').value||'').trim();
+    var _s=(document.getElementById('xw-secret').value||'').trim();
+    if(!_k||!_s){ if(st) st.textContent='Faltan key/secret'; return; }
+    var _p='';
     if(type==='okx'){
-      w.passphrase=(document.getElementById('xw-pass').value||'').trim();
-      if(!w.passphrase){ if(st) st.textContent='OKX necesita passphrase'; return; }
+      _p=(document.getElementById('xw-pass').value||'').trim();
+      if(!_p){ if(st) st.textContent='OKX necesita passphrase'; return; }
     }
+    xkSet(w.id,{key:_k,secret:_s,passphrase:_p});
   }
   if(!S.exchangeWallets) S.exchangeWallets=[];
   S.exchangeWallets.push(w); S.exchangeWalletsUpdatedAt=stamp(); save();
@@ -2814,8 +2687,22 @@ window.addExchangeWallet=async function(){
 window.removeExchangeWallet=function(id){
   if(!confirm('Eliminar este wallet de exchange?')) return;
   S.exchangeWallets=(S.exchangeWallets||[]).filter(function(w){ return w.id!==id; });
+  xkDel(id);
   S.exchangeWalletsUpdatedAt=stamp(); save();
   renderExchangeWallets(); renderWallets(); renderSummary();
+};
+// (Re)ingresar las keys en ESTE dispositivo para un wallet ya sincronizado
+// (las keys no viajan en el doc; cada dispositivo que quiera refrescar las pide).
+window.setExchangeKeys=async function(id){
+  var w=(S.exchangeWallets||[]).find(function(x){ return x.id===id; });
+  if(!w||w.type==='bsc') return;
+  var rk=await appPrompt('API Key',escHtml(w.name),''); if(!rk||!rk.value.trim()) return;
+  var rs=await appPrompt('API Secret',escHtml(w.name),''); if(!rs||!rs.value.trim()) return;
+  var rp={value:''};
+  if(w.type==='okx'){ rp=await appPrompt('Passphrase',escHtml(w.name),''); if(!rp||!rp.value.trim()) return; }
+  xkSet(id,{key:rk.value.trim(),secret:rs.value.trim(),passphrase:(rp.value||'').trim()});
+  try{ await fetchExchangeWallet(w); }catch(e){}
+  renderWallets(); renderSummary();
 };
 
 function renderWallets(){
@@ -2870,10 +2757,13 @@ function renderWallets(){
   // Built-in (dueno) solo si estan conectados; + los wallets custom de cada usuario.
   function xwRow(w){
     var logo=exchangeLogoByName(w.name)||(w.type==='bsc'?null:'/logo-binance.png?v=3');
-    var metaExtra=w.type==='bsc'?'BSC USDT':'';
+    var noKeys=w.type!=='bsc'&&!xkGet(w.id);
+    var metaExtra=w.type==='bsc'?'BSC USDT':(noKeys?'Keys no estan en este dispositivo':'');
     var meta=metaExtra+(metaExtra&&w.updated?' · ':'')+(w.updated?'Updated '+w.updated:'');
     var right=w.balance!=null?balHtml(w.balance):'<span class="wm-bal" style="color:var(--txt3)">—</span>';
-    var acts='<button class="wico del" onclick="removeExchangeWallet('+w.id+')">'+icX+'</button>';
+    var icK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>';
+    var acts=(noKeys?'<button class="wico" title="Ingresar API keys en este dispositivo" onclick="setExchangeKeys('+w.id+')">'+icK+'</button>':'')
+      +'<button class="wico del" onclick="removeExchangeWallet('+w.id+')">'+icX+'</button>';
     return wmRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),w.balance!=null?'on':'off',escHtml(w.name),meta||'Connected',right,acts,logo);
   }
   var exRows=!showEx?'':(xwList.map(xwRow).join('')
@@ -3407,6 +3297,58 @@ window.recordSnapshot = recordSnapshot;
 window.saveGoal = saveGoal;
 window.deleteSnapshot = deleteSnapshot;
 
+// ── Migraciones ordenadas ────────────────────────────────────────────────────
+// Una sola puerta: S.schemaVersion marca hasta cual corrio este doc. Cada entrada
+// debe ser IDEMPOTENTE (los flags viejos zelleMigrated/budgetPctMigrated se siguen
+// respetando para docs pre-schemaVersion). Para agregar una migracion: append con
+// v siguiente; corre una vez por doc, en orden, tras el pull inicial.
+var MIGRATIONS=[
+  { v:1, fn:function(){ // Zelle deja de ser especial → wallet tracker 'Emily'
+    if(S.zelleMigrated) return;
+    var zTx=S.transactions.filter(function(t){ return t.wallet==='Zelle'||t.category==='Emily'; });
+    if(zTx.length){
+      if(!S.manualWallets.some(function(w){ return w.name==='Emily'; })){
+        S.manualWallets.push({id:Date.now(),name:'Emily',trackerOnly:true,balance:0,balanceOverride:null});
+        S.manualWalletsUpdatedAt=stamp();
+      }
+      zTx.forEach(function(t){ if(t.wallet==='Zelle') t.wallet='Emily'; if(t.category==='Emily') t.category=''; t.updatedAt=stamp(); });
+      S.transactionsUpdatedAt=stamp();
+    }
+    S.zelleMigrated=1;
+  }},
+  { v:2, fn:function(){ // limites de budget: USD fijos → % del Monthly Total
+    if(S.budgetPctMigrated) return;
+    var cb=S.categoryBudgets||{};
+    if(Object.keys(cb).length&&S.budgetTotal>0&&!Object.keys(S.categoryBudgetPcts||{}).length){
+      if(!S.categoryBudgetPcts) S.categoryBudgetPcts={};
+      Object.keys(cb).forEach(function(c){ if(cb[c]>0) S.categoryBudgetPcts[c]=parseFloat((cb[c]/S.budgetTotal*100).toFixed(1)); });
+      S.categoryBudgetPctsUpdatedAt=stamp();
+    }
+    S.budgetPctMigrated=1;
+  }},
+  { v:3, fn:function(){ // balanceOverride congelado → rebase a base viva
+    var frozen=S.manualWallets.filter(function(w){ return w.trackerOnly&&w.balanceOverride!=null; });
+    if(!frozen.length) return;
+    frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; });
+    S.manualWalletsUpdatedAt=stamp();
+  }},
+];
+function runMigrations(){
+  var cur=S.schemaVersion||0, ran=false;
+  MIGRATIONS.forEach(function(m){
+    if(m.v<=cur) return;
+    try{ m.fn(); }catch(e){ console.error('migration v'+m.v+':',e); }
+    ran=true;
+  });
+  // v3 (override rebase) debe correr en cada boot mientras existan overrides
+  // (pueden llegar de un doc viejo via sync); por eso no se salta por version.
+  if(cur>=3){ try{ MIGRATIONS[2].fn(); }catch(e){} }
+  if(ran||cur<MIGRATIONS[MIGRATIONS.length-1].v){
+    S.schemaVersion=MIGRATIONS[MIGRATIONS.length-1].v;
+    save();
+  }
+}
+
 async function init(){
   loadLocal();
   initTools({ getState:function(){ return S; }, save:save, stamp:stamp });
@@ -3442,38 +3384,7 @@ async function bootAfterAuth(firstLogin){
   // Primer login multi-usuario: sube el estado local (migracion de tus datos al
   // row de tu usuario). El merge del servidor evita cualquier clobber.
   if(firstLogin){ _dirty=true; pushToCloud(); }
-  // Migration: Zelle deja de ser especial. Las tx del wallet 'Zelle' pasan al wallet
-  // 'Emily' (un tracker normal, con el logo de Zelle por nombre), y se limpia la
-  // categoria 'Emily' (ya no existe; el logo lo da el nombre/nota).
-  if(!S.zelleMigrated){
-    var zTx=S.transactions.filter(function(t){ return t.wallet==='Zelle'||t.category==='Emily'; });
-    if(zTx.length){
-      if(!S.manualWallets.some(function(w){ return w.name==='Emily'; })){
-        S.manualWallets.push({id:Date.now(),name:'Emily',trackerOnly:true,balance:0,balanceOverride:null});
-        S.manualWalletsUpdatedAt=stamp();
-      }
-      zTx.forEach(function(t){ if(t.wallet==='Zelle') t.wallet='Emily'; if(t.category==='Emily') t.category=''; t.updatedAt=stamp(); });
-      S.transactionsUpdatedAt=stamp();
-    }
-    S.zelleMigrated=1; save();
-  }
-  // Migration: limites por categoria pasan de USD fijos a % del Monthly Total.
-  if(!S.budgetPctMigrated){
-    var _cb=S.categoryBudgets||{};
-    if(Object.keys(_cb).length&&S.budgetTotal>0&&!Object.keys(S.categoryBudgetPcts||{}).length){
-      if(!S.categoryBudgetPcts) S.categoryBudgetPcts={};
-      Object.keys(_cb).forEach(function(c){ if(_cb[c]>0) S.categoryBudgetPcts[c]=parseFloat((_cb[c]/S.budgetTotal*100).toFixed(1)); });
-      S.categoryBudgetPctsUpdatedAt=stamp();
-    }
-    S.budgetPctMigrated=1; save();
-  }
-  // Migration: balanceOverride congelaba el balance tracker (las txs nuevas no lo
-  // movian). Rebase a base equivalente: mismo valor mostrado, pero vivo.
-  var frozen=S.manualWallets.filter(function(w){ return w.trackerOnly&&w.balanceOverride!=null; });
-  if(frozen.length){
-    frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; });
-    S.manualWalletsUpdatedAt=stamp(); save();
-  }
+  runMigrations();
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
   try{ var _p2pc=localStorage.getItem('ft13_p2pc'); if(_p2pc){ var el=document.getElementById('p2p-comm'); if(el) el.value=_p2pc; } }catch(e){}
@@ -3483,7 +3394,7 @@ async function bootAfterAuth(firstLogin){
   // USDT: cada 5 min con la pestana visible (ahorra invocaciones Vercel; el
   // refetch al volver el foco/visibilidad cubre el timer congelado en mobile).
   fetchUsdtRate(); setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 5*60*1000);
-  migrateExchangeWallets(); renderExchangeWallets();
+  migrateExchangeWallets(); stripExchangeSecrets(); renderExchangeWallets();
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){});
@@ -3514,8 +3425,26 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); });
     if(window.caches) caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); });
   } else {
-    navigator.serviceWorker.register('/sw.js');
+    navigator.serviceWorker.register('/sw.js').then(function(reg){
+      if(!reg) return;
+      // Toast de nueva version: el SW nuevo se activa solo (skipWaiting en sw.js);
+      // avisamos para recargar en vez de dejar a la pestana con el bundle viejo.
+      reg.addEventListener('updatefound', function(){
+        var nw=reg.installing; if(!nw) return;
+        nw.addEventListener('statechange', function(){
+          if(nw.state==='activated'&&navigator.serviceWorker.controller) showUpdateToast();
+        });
+      });
+      // PWA abierta dias: el navegador solo chequea el SW al navegar. Chequeo horario.
+      setInterval(function(){ reg.update().catch(function(){}); }, 60*60*1000);
+    }).catch(function(){});
   }
+}
+function showUpdateToast(){
+  if(document.getElementById('sw-toast')) return;
+  var b=document.createElement('div'); b.id='sw-toast'; b.className='sync-banner show';
+  b.innerHTML='<span>⬆ Nueva version disponible.</span><button onclick="location.reload()">Actualizar</button>';
+  document.body.appendChild(b);
 }
 
 // PWA install prompt
