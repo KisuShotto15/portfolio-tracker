@@ -1,4 +1,7 @@
-const CACHE = 'portfolio-v9';
+// Sello de build (lo inyecta vite.config.js): sin bytes nuevos en sw.js los
+// navegadores nunca detectan version nueva (ni updatefound, ni toast).
+const BUILD = '__BUILD__';
+const CACHE = 'portfolio-v9-' + BUILD;
 
 // Precache the app shell + hashed JS/CSS on install, reading the asset URLs out
 // of index.html. This guarantees offline works even on the first load after a

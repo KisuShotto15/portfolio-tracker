@@ -3435,8 +3435,10 @@ if('serviceWorker' in navigator){
           if(nw.state==='activated'&&navigator.serviceWorker.controller) showUpdateToast();
         });
       });
-      // PWA abierta dias: el navegador solo chequea el SW al navegar. Chequeo horario.
+      // PWA abierta dias: el navegador solo chequea el SW al navegar. Chequeo
+      // horario + al volver a la pestana (asi el toast sale a los segundos de volver).
       setInterval(function(){ reg.update().catch(function(){}); }, 60*60*1000);
+      document.addEventListener('visibilitychange', function(){ if(!document.hidden) reg.update().catch(function(){}); });
     }).catch(function(){});
   }
 }
