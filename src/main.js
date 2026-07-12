@@ -3397,6 +3397,12 @@ function runMigrations(){
 async function init(){
   loadLocal();
   initTools({ getState:function(){ return S; }, save:save, stamp:stamp });
+  // Restaurar la tab del hash YA, con los datos locales: antes se hacia recien en
+  // bootAfterAuth (despues del pull) y el Dashboard parpadeaba unos segundos.
+  // OJO: no tocar el hash de login (#access_token=...) — showPage lo reescribiria
+  // antes de que sbConsumeHashSession lo lea.
+  var _h0=(location.hash||'').replace('#','');
+  if(_h0&&_h0.indexOf('access_token')<0) showPage(_h0,null);
   var today=localToday();
   document.getElementById('tx-date').value=today;
   populateTxMonth(); // default: All months (value queda '')
