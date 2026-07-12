@@ -2381,7 +2381,17 @@ function renderBudget(){
   var mShort=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}):'';
   var monthOvr=(S.categoryBudgetPctsByMonth||{})[month]||null;
   var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length);
+  // Medidor de asignacion total: cuanto % del presupuesto esta repartido entre
+  // las categorias (con overrides del mes visible) y cuanto falta/sobra para 100%.
+  var sumPctHead=BUDGET_CATS.reduce(function(s,c){ return s+catBudgetPct(c,month); },0);
+  var allocDiff=Math.round((100-sumPctHead)*10)/10;
+  var allocCol=Math.abs(allocDiff)<0.5?'#1D9E75':allocDiff>0?'#EF9F27':'#E24B4A';
+  var allocTxt=Math.abs(allocDiff)<0.5?sumPctHead.toFixed(1)+'% ✓'
+    :allocDiff>0?sumPctHead.toFixed(1)+'% · faltan '+allocDiff+'%'
+    :sumPctHead.toFixed(1)+'% · sobran '+Math.abs(allocDiff)+'%';
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
+    +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Suma de los % asignados (meta: 100%)">'
+    +'<i class="bdg-alloc-mini"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></i>'+allocTxt+'</span>'
     +'<span class="bdg-scope">'
     +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
     +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">Solo '+mShort+'</button>'
@@ -2552,6 +2562,12 @@ window.refreshAllWallets=async function(){
 };
 
 var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1','Mercantil Panama':'/icon-merpa.png?v=1'};
+// Match insensible a mayusculas y acentos ("Mercantil Panamá" → "mercantil panama"):
+// el logo no debe depender de como se tipeo el nombre del wallet.
+var _WLOGOS_NORM={};
+Object.keys(WALLET_LOGOS).forEach(function(k){ _WLOGOS_NORM[_wnorm(k)]=WALLET_LOGOS[k]; });
+function _wnorm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function walletLogo(name){ return _WLOGOS_NORM[_wnorm(name)]||null; }
 
 // ── Wallets de exchange personalizados (por usuario) ────────────────────────
 // Cada usuario agrega los suyos con nombre propio + credenciales, desde la app.
@@ -2804,7 +2820,7 @@ function renderWallets(){
       acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
-    var tlogo=WALLET_LOGOS[name]||null;
+    var tlogo=walletLogo(name);
     return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
   }).join('');
   // Orden por balance (en USD), de mayor a menor.
@@ -2814,7 +2830,7 @@ function renderWallets(){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
     var isVes=w.currency==='VES';
     var meta=isVes?('Bs '+(w.balance||0).toLocaleString('es-VE')+' · tasa '+(vesTxRateSrc()==='p2p'?'USDT':'BCV')):'Manual balance';
-    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),meta,balHtml(manualWalletUsd(w)),acts,WALLET_LOGOS[w.name]||null);
+    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),meta,balHtml(manualWalletUsd(w)),acts,walletLogo(w.name));
   }).join('');
 
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
