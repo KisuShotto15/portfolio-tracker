@@ -204,7 +204,13 @@
       <button class="btn btns" onclick="closeWalletForm()" style="padding:4px 10px">&#x2715; Close</button>
     </div>
     <div class="field"><span class="field-lbl">Name</span><input type="text" id="wm-name" placeholder="Wallet name"/></div>
-    <div class="field" id="wm-bal-field"><span class="field-lbl">Balance USD</span><input type="number" id="wm-bal" placeholder="0.00" step="0.01"/></div>
+    <div class="field" id="wm-cur-field"><span class="field-lbl">Moneda</span>
+      <select id="wm-cur" onchange="toggleWmBalField()">
+        <option value="USD">USD</option>
+        <option value="VES">Bs — se valora solo a tasa USDT</option>
+      </select>
+    </div>
+    <div class="field" id="wm-bal-field"><span class="field-lbl" id="wm-bal-lbl">Balance USD</span><input type="number" id="wm-bal" placeholder="0.00" step="0.01"/></div>
     <div class="field"><span class="field-lbl">Type</span>
       <select id="wm-type" onchange="toggleWmBalField()">
         <option value="normal">Manual balance</option>

@@ -471,6 +471,8 @@ async function fetchUsdtRate(){
       _usdtRate=j.rate; _usdtAt=Date.parse(j.updatedAt)||Date.now();
       try{ localStorage.setItem('ft13_usdt',JSON.stringify({rate:_usdtRate,at:_usdtAt})); }catch(e){}
       renderUsdtRate();
+      // Los wallets VES se valoran con esta tasa: refrescar si la pagina esta visible.
+      if(_activePageId()==='wallets') renderWallets();
     }
   }catch(e){}
 }
@@ -1097,12 +1099,19 @@ function closeWalletForm(fromPop){
   document.getElementById('wm-name').value='';
   document.getElementById('wm-bal').value='';
   document.getElementById('wm-type').value='tracker';
+  var _wc=document.getElementById('wm-cur'); if(_wc) _wc.value='USD';
   toggleWmBalField();
   if(fromPop!==true) _sheetPop();
 }
 function toggleWmBalField(){
+  var isNormal=document.getElementById('wm-type').value==='normal';
   var f=document.getElementById('wm-bal-field');
-  if(f) f.style.display=document.getElementById('wm-type').value==='normal'?'flex':'none';
+  if(f) f.style.display=isNormal?'flex':'none';
+  // Moneda solo aplica a wallets manuales (los trackers suman txs en USD).
+  var cf=document.getElementById('wm-cur-field');
+  if(cf) cf.style.display=isNormal?'flex':'none';
+  var lbl=document.getElementById('wm-bal-lbl'), cur=document.getElementById('wm-cur');
+  if(lbl&&cur) lbl.textContent=cur.value==='VES'?'Balance en Bs':'Balance USD';
 }
 function openExchangeForm(){
   var panel=document.getElementById('xw-form-panel'), ov=document.getElementById('xw-overlay');
@@ -1160,7 +1169,7 @@ function updateTx(){
 async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.name=r.value.trim(); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('New balance',escHtml(w.name),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance en Bs':'New balance',escHtml(w.name)+(isVes?' · se convierte solo a $ con la tasa USDT':''),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
@@ -2113,7 +2122,7 @@ function renderEquityChart(){
 function getTotalBalance(){
   var api=(S.exchangeWallets||[]).reduce(function(s,w){ return s+(w.balance||0); },0);
   var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
-  var manualBal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
+  var manualBal=manualNormalTotal();
   return parseFloat((api+trackerBal+manualBal).toFixed(2));
 }
 
@@ -2487,7 +2496,8 @@ function saveManualWallet(){
   var name=document.getElementById('wm-name').value.trim(); var bal=parseFloat(document.getElementById('wm-bal').value)||0; var type=document.getElementById('wm-type').value;
   if(!name){ return; }
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
-  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker'};
+  var curSel=document.getElementById('wm-cur');
+  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker',currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
   // Conversion Manual → Tracker (re-agregar con el mismo nombre): conservar el
   // balance mostrado. El tracker suma sus txs, asi que la base se rebasa
   // restando las txs existentes del wallet; sin esto arrancaria desde 0.
@@ -2518,6 +2528,17 @@ function calcTrackerBal(name){
   var mw=S.manualWallets.find(function(w){ return w.name===name&&w.trackerOnly===true; })
        ||S.manualWallets.find(function(w){ return w.name===name; });
   return (mw?mw.balance:0)+(trackerTxBalances()[name]||0);
+}
+// Valor USD de un wallet manual. Los wallets en VES guardan el balance en Bs
+// (el numero que ves en el banco) y se valoran EN VIVO con la tasa USDT del
+// monitor (fallback BCV): el net worth refleja la tasa del momento sin tocar nada.
+function manualWalletUsd(w){
+  if(w.currency!=='VES') return w.balance||0;
+  var r=vesTxRate();
+  return r>0?parseFloat(((w.balance||0)/r).toFixed(2)):0;
+}
+function manualNormalTotal(){
+  return S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+manualWalletUsd(w); },0);
 }
 
 window.refreshAllWallets=async function(){
@@ -2715,7 +2736,7 @@ function renderWallets(){
   var trackerNames=[];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
   var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
-  var manualNormal=S.manualWallets.filter(function(w){ return !w.trackerOnly; }).reduce(function(s,w){ return s+w.balance; },0);
+  var manualNormal=manualNormalTotal();
   var grand=apiTotal+trackerTotal+manualNormal;
   // ── allocation bar data ──────────────────────────────────────────────
   // Each tracker wallet gets its own segment (palette avoids the exchange hues).
@@ -2783,9 +2804,14 @@ function renderWallets(){
     var tlogo=WALLET_LOGOS[name]||null;
     return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
   }).join('');
-  var mnRows=S.manualWallets.filter(function(w){return !w.trackerOnly;}).map(function(w){
+  // Wallets VES primero (el "total de Bs" del usuario va de primera en el grupo).
+  var mnList=S.manualWallets.filter(function(w){return !w.trackerOnly;})
+    .slice().sort(function(a,b){ return (b.currency==='VES'?1:0)-(a.currency==='VES'?1:0); });
+  var mnRows=mnList.map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
-    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),'Manual balance',balHtml(w.balance),acts,WALLET_LOGOS[w.name]||null);
+    var isVes=w.currency==='VES';
+    var meta=isVes?('Bs '+(w.balance||0).toLocaleString('es-VE')+' · tasa '+(vesTxRateSrc()==='p2p'?'USDT':'BCV')):'Manual balance';
+    return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),meta,balHtml(manualWalletUsd(w)),acts,WALLET_LOGOS[w.name]||null);
   }).join('');
 
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
