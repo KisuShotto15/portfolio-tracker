@@ -2561,7 +2561,7 @@ window.refreshAllWallets=async function(){
   if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
 };
 
-var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1','Mercantil Panama':'/icon-merpa.png?v=1'};
+var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1','Mercantil Panama':'/icon-merpa.png?v=2'};
 // Match insensible a mayusculas y acentos ("Mercantil Panamá" → "mercantil panama"):
 // el logo no debe depender de como se tipeo el nombre del wallet.
 var _WLOGOS_NORM={};
