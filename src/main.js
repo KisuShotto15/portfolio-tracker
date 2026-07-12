@@ -2551,7 +2551,7 @@ window.refreshAllWallets=async function(){
   if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
 };
 
-var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1'};
+var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1','Mercantil Panama':'/icon-merpa.png?v=1'};
 
 // ── Wallets de exchange personalizados (por usuario) ────────────────────────
 // Cada usuario agrega los suyos con nombre propio + credenciales, desde la app.
@@ -2735,6 +2735,9 @@ function renderWallets(){
   var apiTotal=showEx?xwTotal:0;
   var trackerNames=[];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
+  // Orden por balance, de mayor a menor.
+  var _trkVal=function(n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n); };
+  trackerNames.sort(function(a,b){ return _trkVal(b)-_trkVal(a); });
   var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
   var manualNormal=manualNormalTotal();
   var grand=apiTotal+trackerTotal+manualNormal;
@@ -2804,9 +2807,9 @@ function renderWallets(){
     var tlogo=WALLET_LOGOS[name]||null;
     return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
   }).join('');
-  // Wallets VES primero (el "total de Bs" del usuario va de primera en el grupo).
+  // Orden por balance (en USD), de mayor a menor.
   var mnList=S.manualWallets.filter(function(w){return !w.trackerOnly;})
-    .slice().sort(function(a,b){ return (b.currency==='VES'?1:0)-(a.currency==='VES'?1:0); });
+    .slice().sort(function(a,b){ return manualWalletUsd(b)-manualWalletUsd(a); });
   var mnRows=mnList.map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
     var isVes=w.currency==='VES';

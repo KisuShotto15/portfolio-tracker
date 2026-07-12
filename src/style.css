@@ -560,6 +560,21 @@ input,select,textarea,button{font-family:inherit}
 @media(max-width:820px){.bdg-top{grid-template-columns:1fr}}
 @media(max-width:1180px){.bdg-cats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){.bdg-cats{grid-template-columns:repeat(2,1fr)}}
+/* Mobile: 4 stats en una fila colisionaban; 2x2 sin bordes y numeros mas chicos */
+@media(max-width:720px){
+  .bdg-stats{grid-template-columns:1fr 1fr;row-gap:20px}
+  .bdg-stat{border-right:0}
+  .bdg-stat-v{font-size:19px}
+  .bdg-cat{padding:14px 12px}
+  .bdg-cat-lim{flex-wrap:wrap;row-gap:4px;gap:6px}
+  .bdg-cat-amt{font-size:21px}
+  /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
+     anterior, actual y delta) y baja la fuente */
+  .mvm-card{padding:18px 14px}
+  .mvm-row{grid-template-columns:1.3fr 1fr 1fr 1fr;gap:6px;font-size:13px}
+  .mvm-row > :nth-child(2){display:none}
+  .mvm-cat{gap:7px}
+}
 
 /* Holdings redesign */
 .hld-head-right{display:flex;align-items:center;gap:14px}
@@ -611,9 +626,9 @@ input,select,textarea,button{font-family:inherit}
 .hld-wallets.open .hld-wallets-body{display:block}
 .hld-wrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line-soft)}
 .hld-wbadge{font-size:10px;font-weight:600;letter-spacing:.04em;padding:3px 8px;border-radius:6px;flex-shrink:0;background:color-mix(in srgb,var(--nc) 16%,transparent);color:var(--nc)}
-.hld-wlabel{font-size:14px;font-weight:500;color:var(--txt);flex-shrink:0}
-.hld-waddr{font-size:12px;color:var(--txt3);font-family:var(--font-num);flex:1;min-width:0}
-.hld-wval{font-size:14px;font-weight:600;font-family:var(--font-num);color:var(--txt2);margin-right:4px}
+.hld-wlabel{font-size:14px;font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0}
+.hld-waddr{font-size:12px;color:var(--txt3);font-family:var(--font-num);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hld-wval{font-size:14px;font-weight:600;font-family:var(--font-num);color:var(--txt2);margin-right:4px;flex-shrink:0;white-space:nowrap;margin-left:auto}
 .hld-wbtn{background:none;border:none;color:var(--txt3);cursor:pointer;padding:5px 7px;border-radius:8px;font-size:13px;transition:color .15s,background .15s}
 .hld-wbtn:hover{color:var(--txt2);background:rgba(255,255,255,.05)}
 .hld-wbtn.del:hover{color:var(--red)}
