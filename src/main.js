@@ -1084,6 +1084,7 @@ function _lockScroll(on){ document.documentElement.classList.toggle('sheet-open'
 function openTxForm(){
   _lockScroll(true);
   populateNoteSuggestions();
+  renderTxRecList();
   txMsg('');
   // Si el reset diferido del cierre anterior sigue pendiente, ejecutarlo ya
   // (evita que borre lo que editTx/addTx acaban de poner en los campos).
@@ -1124,8 +1125,8 @@ function _resetTxFields(){
   var rd=document.getElementById('tx-rec-day'); if(rd) rd.value='';
   var rdf=document.getElementById('tx-rec-day-field'); if(rdf) rdf.style.display='none';
   var df=document.getElementById('tx-date-field'); if(df) df.style.display='';
-  var tg=document.getElementById('tx-rec-toggle'); if(tg) tg.style.display='none';
   var rl=document.getElementById('tx-rec-list'); if(rl) rl.style.display='none';
+  renderTxRecList();
   var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display='';
   _setNotePop(false);
 }
@@ -1921,7 +1922,7 @@ function renderTxRecList(){
   if(tg){
     tg.innerHTML=n+' <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     tg.classList.toggle('open',_txRecListOpen);
-    tg.title='Reglas guardadas'; tg.style.display=on&&n?'':'none';
+    tg.title='Reglas guardadas'; tg.style.display=n?'':'none';
   }
   var wrap=document.getElementById('tx-rec-list'); if(!wrap) return;
   if(!n){ _txRecListOpen=false; wrap.style.display='none'; wrap.innerHTML=''; return; }
