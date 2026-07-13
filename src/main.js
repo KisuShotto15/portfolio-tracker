@@ -89,7 +89,7 @@ var S = {
   // Overrides por mes: {'2026-07':{Groceries:30,...}}. Un mes sin override hereda
   // el default; asi un mes con mas Discretionary/Health se ajusta puntualmente.
   categoryBudgetPctsByMonth:{}, categoryBudgetPctsByMonthUpdatedAt:null,
-  rateUpdatedAt:null,
+  rateUpdatedAt:null, rateEur:null, rateEurUpdatedAt:null,
   presets:[], presetsUpdatedAt:null, // legacy (plantillas eliminadas; docs viejos lo traen)
   notePins:[], notePinsUpdatedAt:null, // notas fijadas con estrella: siempre primero en sugerencias
   bdvLimits:[], bdvLimitsUpdatedAt:null,
@@ -419,7 +419,7 @@ async function fetchRate(force){
   var stale=S.rateFetchedAt&&(Date.now()-S.rateFetchedAt>60*60*1000);
   if(!force&&S.rate&&S.rateDate&&!stale){ updateRateUI(); return; }
   document.getElementById('rate-display').textContent='...';
-  try{ var r=await fetch(RATE_URL); var d=await r.json(); var v=parseFloat(d.current&&d.current.usd); if(v>10){ S.rate=parseFloat(v.toFixed(2)); S.rateDate='BCV'+(d.current.date?' ('+d.current.date+')':''); S.rateFetchedAt=Date.now(); S.rateUpdatedAt=stamp(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
+  try{ var r=await fetch(RATE_URL); var d=await r.json(); var v=parseFloat(d.current&&d.current.usd); if(v>10){ S.rate=parseFloat(v.toFixed(2)); var _eu=parseFloat(d.current&&d.current.eur); if(_eu>10){ S.rateEur=parseFloat(_eu.toFixed(2)); S.rateEurUpdatedAt=stamp(); } S.rateDate='BCV'+(d.current.date?' ('+d.current.date+')':''); S.rateFetchedAt=Date.now(); S.rateUpdatedAt=stamp(); save(); updateRateUI(); return; } }catch(e){ console.warn('rate:',e.message); }
   if(!S.rate) showManualRate(); else updateRateUI();
 }
 // El BCV publica ~1 vez al dia, dias habiles por la tarde (hora Venezuela).
@@ -454,6 +454,11 @@ function updateRateUI(){
   var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=ivs+' Bs';
   var m=document.getElementById('rate-display-m'); if(m) m.textContent=v;
   var iem=document.getElementById('rate-interv-m'); if(iem) iem.textContent=ivs;
+  if(S.rateEur){
+    var evs=S.rateEur.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    var ee=document.getElementById('rate-eur'); if(ee) ee.textContent=evs+' Bs';
+    var eem=document.getElementById('rate-eur-m'); if(eem) eem.textContent=evs;
+  }
   // Profit Calc: el campo Buy sigue a la tasa Intervencion automaticamente
   // (no pisar mientras el usuario lo esta editando).
   var pb=document.getElementById('pc-buy');
