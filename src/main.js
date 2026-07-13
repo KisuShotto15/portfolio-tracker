@@ -3,7 +3,7 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, m
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
-import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay } from './auth.js';
+import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
 
 // BCV oficial via dolarvzla (rates.dolarvzla.com). Devuelve la ultima tasa BCV
 // PUBLICADA (el valor anunciado para el proximo dia habil, no el retraso de dolarapi),
@@ -3111,7 +3111,7 @@ function showPage(id,btn,arg){
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); fitAllCalcVals(); }
   else if(id==='history') renderHistory(arg||'snapshots');
-  else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; }
+  else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; renderPasskeys(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
   var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -3533,8 +3533,11 @@ async function init(){
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
   // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
   var justLinked=sbConsumeHashSession();
-  // Requiere sesion valida antes de sincronizar. Sin token o refresh fallido → login.
-  var authed=justLinked||(sbGet('sb_at') ? await sbRefresh() : false);
+  // Requiere sesion valida antes de sincronizar. Sin token o refresh rechazado
+  // por el servidor → login. 'net' (red caida / 5xx) NO expulsa: se arranca con
+  // el token guardado y syncFetch reintenta el refresh cuando haya red.
+  var ref=sbGet('sb_at') ? await sbRefresh() : false;
+  var authed=justLinked||ref===true||ref==='net';
   if(!authed){ showAuthOverlay(); return; }
   hideAuthOverlay();
   await bootAfterAuth(justLinked);

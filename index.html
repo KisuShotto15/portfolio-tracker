@@ -414,7 +414,12 @@
     <div class="fc">
       <h3>Cuenta</h3>
       <p class="hint" id="acct-email" style="margin-bottom:10px"></p>
-      <button class="btn btns" onclick="if(confirm('Cerrar sesion? Tus datos quedan sincronizados en la nube; al volver a entrar se restauran.'))logout()">Cerrar sesion</button>
+      <div id="pk-list" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btns btnp" onclick="passkeyRegister()">Crear passkey en este dispositivo</button>
+        <button class="btn btns" onclick="if(confirm('Cerrar sesion? Tus datos quedan sincronizados en la nube; al volver a entrar se restauran.'))logout()">Cerrar sesion</button>
+      </div>
+      <div id="pk-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
     </div>
     <div class="fc">
       <h3>Data</h3>
@@ -456,6 +461,7 @@
       <p class="auth-sub">Inicia sesion con tu correo</p>
       <input type="email" id="auth-email" placeholder="tucorreo@ejemplo.com" autocomplete="email" enterkeyhint="send" onkeydown="if(event.key==='Enter')authSendCode()">
       <button class="btn btnp" onclick="authSendCode()">Enviar codigo</button>
+      <button class="btn btns" style="margin-top:8px" onclick="authPasskey()">🔑 Entrar con passkey</button>
     </div>
     <div id="auth-step-code" style="display:none">
       <p class="auth-sub">Ingresa el codigo que te llego al correo</p>

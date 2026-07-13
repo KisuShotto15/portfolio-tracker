@@ -41,13 +41,16 @@ export function sbConsumeHashSession(){
     return true;
   }catch(e){ return false; }
 }
+// Devuelve true (sesion renovada), false (el servidor rechazo el token: sesion
+// realmente invalida) o 'net' (fallo de red o 5xx: NO invalidar la sesion local
+// — antes esto forzaba re-login cada vez que el boot pillaba la red caida).
 export async function sbRefresh(){
   var rt=sbGet('sb_rt'); if(!rt) return false;
   try{
     var r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({refresh_token:rt})});
-    if(!r.ok) return false;
-    sbSetSession(await r.json()); return true;
-  }catch(e){ return false; }
+    if(r.ok){ sbSetSession(await r.json()); return true; }
+    return r.status>=500 ? 'net' : false;
+  }catch(e){ return 'net'; }
 }
 async function sbOtpRequest(email){
   try{
@@ -110,3 +113,97 @@ window.authBackToEmail=function(){
   document.getElementById('auth-step-code').style.display='none';
   document.getElementById('auth-step-email').style.display='block'; authMsg('');
 };
+
+// ── Passkeys (WebAuthn, beta de Supabase) ────────────────────────────────────
+// GoTrue expone /auth/v1/passkeys/*: options entrega un challenge en base64url,
+// el navegador firma con navigator.credentials y verify canjea la firma.
+// Login es "discoverable": no pide correo, el authenticator sabe quien es.
+function b64uToBuf(s){
+  s=String(s).replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='=';
+  var bin=atob(s), a=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i);
+  return a.buffer;
+}
+function bufToB64u(b){
+  var a=new Uint8Array(b), s='';
+  for(var i=0;i<a.length;i++) s+=String.fromCharCode(a[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function pkSupported(){ return !!(window.PublicKeyCredential&&navigator.credentials&&navigator.credentials.create); }
+// Serializa el PublicKeyCredential al formato JSON que espera go-webauthn.
+// toJSON() nativo cuando existe; si no, base64url a mano campo por campo.
+function pkCredToJson(cred,kind){
+  if(typeof cred.toJSON==='function') return cred.toJSON();
+  var resp=cred.response;
+  var out={ id:cred.id, rawId:bufToB64u(cred.rawId), type:cred.type,
+    clientExtensionResults:(cred.getClientExtensionResults&&cred.getClientExtensionResults())||{} };
+  if(cred.authenticatorAttachment) out.authenticatorAttachment=cred.authenticatorAttachment;
+  if(kind==='create'){
+    out.response={ clientDataJSON:bufToB64u(resp.clientDataJSON), attestationObject:bufToB64u(resp.attestationObject) };
+    if(resp.getTransports) out.response.transports=resp.getTransports();
+  } else {
+    out.response={ clientDataJSON:bufToB64u(resp.clientDataJSON), authenticatorData:bufToB64u(resp.authenticatorData),
+      signature:bufToB64u(resp.signature), userHandle:resp.userHandle?bufToB64u(resp.userHandle):null };
+  }
+  return out;
+}
+// fetch a GoTrue con Bearer del usuario + un retry tras refresh en 401.
+async function sbAuthedFetch(path,method,body){
+  var mk=function(){ return {'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+sbGet('sb_at')}; };
+  var r=await fetch(SUPABASE_URL+'/auth/v1'+path,{method:method,headers:mk(),body:body});
+  if(r.status===401&&(await sbRefresh())===true) r=await fetch(SUPABASE_URL+'/auth/v1'+path,{method:method,headers:mk(),body:body});
+  return r;
+}
+window.authPasskey=async function(){
+  if(!pkSupported()){ authMsg('Este navegador no soporta passkeys'); return; }
+  authMsg('Esperando passkey...');
+  try{
+    var r=await fetch(SUPABASE_URL+'/auth/v1/passkeys/authentication/options',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:'{}'});
+    if(!r.ok){ authMsg('Passkeys no disponibles ahora mismo'); return; }
+    var j=await r.json(), o=j.options;
+    o.challenge=b64uToBuf(o.challenge);
+    (o.allowCredentials||[]).forEach(function(c){ c.id=b64uToBuf(c.id); });
+    var cred=await navigator.credentials.get({publicKey:o});
+    var v=await fetch(SUPABASE_URL+'/auth/v1/passkeys/authentication/verify',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({challenge_id:j.challenge_id,credential:pkCredToJson(cred,'get')})});
+    var t=await v.json().catch(function(){ return {}; });
+    if(v.ok&&t.access_token){ sbSetSession(t); hideAuthOverlay(); authMsg(''); await _onLogin(); }
+    else authMsg('Passkey rechazada'+(t.msg?': '+t.msg:''));
+  }catch(e){ authMsg(e&&e.name==='NotAllowedError'?'Cancelado':'Error con la passkey'); }
+};
+function pkStatus(t){ var e=document.getElementById('pk-status'); if(e) e.textContent=t||''; }
+window.passkeyRegister=async function(){
+  if(!pkSupported()){ pkStatus('Este navegador no soporta passkeys'); return; }
+  pkStatus('Creando passkey...');
+  try{
+    var r=await sbAuthedFetch('/passkeys/registration/options','POST','{}');
+    if(!r.ok){ var e1=await r.json().catch(function(){ return {}; }); pkStatus('No se pudo iniciar: '+(e1.msg||e1.error_code||r.status)); return; }
+    var j=await r.json(), o=j.options;
+    o.challenge=b64uToBuf(o.challenge);
+    o.user.id=b64uToBuf(o.user.id);
+    (o.excludeCredentials||[]).forEach(function(c){ c.id=b64uToBuf(c.id); });
+    var cred=await navigator.credentials.create({publicKey:o});
+    var v=await sbAuthedFetch('/passkeys/registration/verify','POST',JSON.stringify({challenge_id:j.challenge_id,credential:pkCredToJson(cred,'create')}));
+    var t=await v.json().catch(function(){ return {}; });
+    if(v.ok){ pkStatus('Passkey creada'); renderPasskeys(); }
+    else pkStatus('Fallo la verificacion: '+(t.msg||t.error_code||v.status));
+  }catch(e){ pkStatus(e&&e.name==='NotAllowedError'?'Cancelado':'Error: '+(e&&e.message||e)); }
+};
+window.passkeyDelete=async function(id){
+  if(!confirm('Eliminar esta passkey? El dispositivo que la usaba tendra que entrar por correo.')) return;
+  var r=await sbAuthedFetch('/passkeys/'+id,'DELETE');
+  if(r.ok) renderPasskeys(); else pkStatus('No se pudo eliminar');
+};
+export async function renderPasskeys(){
+  var el=document.getElementById('pk-list'); if(!el) return;
+  var r=await sbAuthedFetch('/passkeys/','GET').catch(function(){ return null; });
+  if(!r||!r.ok){ el.innerHTML=''; return; }
+  var list=await r.json();
+  if(!Array.isArray(list)||!list.length){ el.innerHTML=''; return; }
+  el.innerHTML=list.map(function(p){
+    var d=p.created_at?new Date(p.created_at).toLocaleDateString():'';
+    return '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0">'
+      +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🔑 '+(p.friendly_name||'Passkey')+'</span>'
+      +'<span style="color:var(--color-text-secondary)">'+d+'</span>'
+      +'<button class="btn btns" style="padding:2px 8px;font-size:11px;color:#E24B4A" onclick="passkeyDelete(\''+p.id+'\')">✕</button></div>';
+  }).join('');
+}
