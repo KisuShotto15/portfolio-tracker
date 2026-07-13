@@ -2513,24 +2513,29 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    // Change vs last month (shown inside the card on desktop)
-    var dPrev=catNetSpend(insMonth, [cat]); var dD=s-dPrev; var dShow=s>0||dPrev>0;
-    var dCol=dD===0?'var(--txt3)':(dD>0?'#E24B4A':'#5DCAA5');
-    var dTxt=!dShow?'':(dD===0?'· no change':(dD>0?'▲ +':'▼ -')+fmtUSD(Math.abs(dD)));
-    // Ritmo (#4): proyeccion a fin de mes si excede el limite. Rebalanceo (#5):
-    // si ya se paso, cuanto margen libre queda en las demas categorias.
+    // Delta vs mes pasado: compacto (flecha + monto redondeado), nada si no hubo cambio.
+    var dPrev=catNetSpend(insMonth, [cat]); var dD=s-dPrev;
+    var dCol=dD>0?'#E24B4A':'#5DCAA5';
+    var dTxt=(Math.abs(dD)<0.5||(s===0&&dPrev===0))?'':(dD>0?'▲ ':'▼ ')+fmtShortUSD(Math.abs(dD));
+    // Nota (solo si hay algo que decir): pasado del limite, o proyeccion que lo excede.
     var note='';
     if(catLim>0&&s>catLim){
-      note='<div class="bdg-pace" style="color:#E24B4A">-'+fmtUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtUSD(freeOthers)+' libres en otras':'')+'</div>';
+      note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtShortUSD(freeOthers)+' libres':'')+'</div>';
     } else if(canPace&&catLim>0&&s>0){
       var proj=s/dayNum*dimP;
-      if(proj>catLim) note='<div class="bdg-pace" style="color:#EF9F27">ritmo: ~'+fmtUSD(proj)+' a fin de mes</div>';
+      if(proj>catLim) note='<div class="bdg-pace" style="color:#EF9F27">~'+fmtShortUSD(proj)+' a fin de mes</div>';
     }
+    // Limite como texto discreto; tap para editar (muestra el input y enfoca).
+    var limView=(ci.pct>0?ci.pct+'% · '+fmtUSD(catLim):'sin limite')+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'');
     html+='<div class="bdg-cat">'
       +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span><span class="bdg-cat-pct">'+cp+'%</span></div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-lim"><span class="bdg-lim-wrap"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%'+(catLim>0?' · '+fmtUSD(catLim):'')+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'')+'</span>'+(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')+'</div>'
+      +'<div class="bdg-cat-lim">'
+        +'<span class="bdg-lim-view" title="Tocar para editar el limite" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+limView+'</span>'
+        +'<span class="bdg-lim-wrap" style="display:none"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%</span>'
+        +(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')
+      +'</div>'
       +note
       +'</div>';
   });
