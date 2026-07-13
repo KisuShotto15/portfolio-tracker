@@ -1207,7 +1207,10 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
    the native dropdown — no JS touched, no regression. */
 select{
   appearance:base-select;
+  /* nombres largos ("Mercantil Panama") no envuelven ni desbordan el recuadro */
+  white-space:nowrap;
 }
+selectedcontent{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 select::picker-icon{
   color:var(--txt3);
   transition:transform .2s ease;
