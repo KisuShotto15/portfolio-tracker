@@ -448,10 +448,10 @@ function showManualRate(){
 function updateRateUI(){
   if(!S.rate) return;
   var v=S.rate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('rate-display').textContent=v+' Bs/USD';
+  document.getElementById('rate-display').textContent=v+' Bs';
   var iv=Math.ceil(S.rate*1.005*100)/100; // Intervencion = BCV +0.5%, redondeado hacia arriba
   var ivs=iv.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
-  var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=ivs+' Bs/USD';
+  var ie=document.getElementById('rate-interv'); if(ie) ie.textContent=ivs+' Bs';
   var m=document.getElementById('rate-display-m'); if(m) m.textContent=v;
   var iem=document.getElementById('rate-interv-m'); if(iem) iem.textContent=ivs;
   // Profit Calc: el campo Buy sigue a la tasa Intervencion automaticamente
@@ -478,7 +478,7 @@ function renderUsdtRate(){
   var els=[document.getElementById('rate-usdt'),document.getElementById('rate-usdt-m')];
   els.forEach(function(el,i){
     if(!el) return;
-    el.textContent=(txt==='-')?'-':(i===0?txt+' Bs/USDT':txt)+(dir?(dir==='up'?' ↑':' ↓'):'');
+    el.textContent=(txt==='-')?'-':(i===0?txt+' Bs':txt)+(dir?(dir==='up'?' ↑':' ↓'):'');
     el.title=title;
     el.classList.remove('rate-up','rate-down');
     if(dir) el.classList.add('rate-'+dir);
@@ -486,7 +486,7 @@ function renderUsdtRate(){
   if(dir){
     clearTimeout(_usdtFlashT);
     _usdtFlashT=setTimeout(function(){
-      els.forEach(function(el,i){ if(!el) return; el.classList.remove('rate-up','rate-down'); el.textContent=(txt==='-')?'-':(i===0?txt+' Bs/USDT':txt); });
+      els.forEach(function(el,i){ if(!el) return; el.classList.remove('rate-up','rate-down'); el.textContent=(txt==='-')?'-':(i===0?txt+' Bs':txt); });
     },1600);
   }
 }
