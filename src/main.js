@@ -1,7 +1,7 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
-import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
+import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay } from './auth.js';
 
@@ -3020,7 +3020,7 @@ function showPage(id,btn,arg){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily(); }
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); fitAllCalcVals(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ renderPresetsManage(); var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
@@ -3454,7 +3454,11 @@ async function bootAfterAuth(firstLogin){
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
   var hash=(window.location.hash||'').replace('#','');
-  showPage(hash||'summary', null);
+  // La tab del hash ya se activo en init() (antes del pull). Re-navegarla aqui
+  // re-disparaba la animacion de entrada (doble render visible al recargar);
+  // si ya estamos en ella, solo refrescar su contenido con los datos del pull.
+  if(_activePageId()!==(hash||'summary')) showPage(hash||'summary', null);
+  else afterPull();
   fetchRate(false);
   // USDT: cada 5 min con la pestana visible (ahorra invocaciones Vercel; el
   // refetch al volver el foco/visibilidad cubre el timer congelado en mobile).

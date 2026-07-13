@@ -34,6 +34,12 @@ function renderCalcCards(cardsId, resultId, cards, small){
 // Ajuste medido: cada valor conserva su fuente normal y SOLO se encoge lo justo
 // si de verdad no entra en su card (depende del ancho real del dispositivo y de
 // la escala de fuente del sistema — nada de reglas por cantidad de digitos).
+// Medir las 3 calculadoras SIN reconstruirlas (para al abrir la tab Tools:
+// las cards renderizadas con la tab oculta no se pudieron medir).
+export function fitAllCalcVals(){
+  ['pc-cards','p2p-cards','be-cards'].forEach(function(id){ fitCalcVals(document.getElementById(id)); });
+}
+window.fitAllCalcVals=fitAllCalcVals;
 function fitCalcVals(wrap){
   if(!wrap) return;
   wrap.querySelectorAll('.tcalc-val').forEach(function(v){
