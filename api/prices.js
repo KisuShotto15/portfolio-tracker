@@ -1,21 +1,10 @@
-// Verifica el JWT de Supabase (mismo patron que sync.js). Devuelve el user o null.
-async function verifySupabaseUser(req) {
-  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_ANON_KEY;
-  if (!SB_URL || !SB_KEY) return null;
-  const jwt = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (!jwt) return null;
-  const r = await fetch(SB_URL + '/auth/v1/user', { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + jwt } });
-  if (!r.ok) return null;
-  return await r.json();
-}
+import { verifySupabaseUser, cors } from './_lib/web.js';
 
 // Proxy de precios spot via CoinGecko. El cliente manda { ids:['bitcoin','ethereum',...] }
 // (ids de CoinGecko) y recibe { bitcoin:{usd:65000}, ... }. Un solo request batcheado
 // para todos los holdings; el cliente lo llama cada varias horas, no por cada moneda.
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  cors(res);
 
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

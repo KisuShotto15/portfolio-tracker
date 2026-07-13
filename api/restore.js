@@ -10,9 +10,20 @@
 // IMPORTANTE (cliente): tras restaurar, en el dispositivo del usuario hay que
 // Logout → Login. Si no, su localStorage (con timestamps mas nuevos) re-pisa el
 // doc restaurado via LWW en el proximo push.
+import crypto from 'node:crypto';
+
+// Comparacion constant-time: hasheamos ambos lados a digest de largo fijo para
+// que timingSafeEqual no tire por longitudes distintas.
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(a).digest();
+  const hb = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET || '';
-  if (!secret || (req.headers['authorization'] || '') !== 'Bearer ' + secret) {
+  const auth = req.headers['authorization'] || '';
+  if (!secret || !safeEqual(auth, 'Bearer ' + secret)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const SB_URL = process.env.SUPABASE_URL, SB_SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -28,7 +39,7 @@ export default async function handler(req, res) {
     } catch (e) {}
 
     if (req.method === 'GET') {
-      const r = await fetch(SB_URL + '/rest/v1/app_state_backups?select=user_id,taken_at,doc&order=taken_at.desc', { headers: h });
+      const r = await fetch(SB_URL + '/rest/v1/app_state_backups?select=user_id,taken_at,doc&order=taken_at.desc&limit=100', { headers: h });
       if (!r.ok) throw new Error('read backups ' + r.status);
       const rows = await r.json();
       return res.status(200).json(rows.map((x) => ({

@@ -109,23 +109,45 @@ async function makeStore(req, res) {
   // aunque este codigo tuviera un bug, la DB no deja tocar filas ajenas.
   const h = { apikey: SB_KEY, Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' };
   return {
-    async readDoc() {
+    async readRow() {
       // Filtro explicito por user_id ADEMAS de RLS: antes la query confiaba solo en
       // la policy y tomaba rows[0]; si la policy de select fuera permisiva, cada
       // usuario leeria la fila de otro (y sus pulls pisarian lo propio). Con el
       // filtro, una policy mal configurada devuelve como mucho la fila correcta.
-      const r = await fetch(base + '?select=doc&user_id=eq.' + encodeURIComponent(uid) + '&limit=1', { headers: h });
+      // Trae updated_at como snapshot para el lock optimista del write.
+      const r = await fetch(base + '?select=doc,updated_at&user_id=eq.' + encodeURIComponent(uid) + '&limit=1', { headers: h });
       if (!r.ok) throw { status: r.status };
       const rows = await r.json();
-      return (rows[0] && rows[0].doc) || {};
+      return rows[0] || null;
     },
-    async writeDoc(doc) {
-      const r = await fetch(base + '?on_conflict=user_id', {
+    async readDoc() {
+      const row = await this.readRow();
+      return (row && row.doc) || {};
+    },
+    // Escritura con lock optimista: dos pushes casi simultaneos del mismo usuario
+    // hacian read-merge-write cruzado y el segundo pisaba lo que escribio el
+    // primero (lost update). Ahora el UPDATE exige que updated_at siga siendo el
+    // del snapshot leido (el trigger touch_updated_at lo cambia en cada write);
+    // si no coincide devuelve 0 filas → false → el handler re-lee y re-mergea.
+    async writeDocIf(doc, snapshotUpdatedAt) {
+      if (snapshotUpdatedAt) {
+        const r = await fetch(base + '?user_id=eq.' + encodeURIComponent(uid) + '&updated_at=eq.' + encodeURIComponent(snapshotUpdatedAt), {
+          method: 'PATCH',
+          headers: { ...h, Prefer: 'return=representation' },
+          body: JSON.stringify({ doc }),
+        });
+        if (!r.ok) throw { status: r.status };
+        return (await r.json()).length > 0;
+      }
+      // Sin fila previa: insert plano; 409 = otra request la creo en paralelo.
+      const r = await fetch(base, {
         method: 'POST',
-        headers: { ...h, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        headers: { ...h, Prefer: 'return=minimal' },
         body: JSON.stringify({ user_id: uid, doc }),
       });
+      if (r.status === 409) return false;
       if (!r.ok) throw { status: r.status };
+      return true;
     },
   };
 }
@@ -147,18 +169,23 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    // Read-merge-write. Si la lectura falla, abortar en vez de pisar con datos viejos.
-    let cloud;
-    try { cloud = await store.readDoc(); }
-    catch (e) { return res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync read failed, retry' }); }
+    // Read-merge-write con lock optimista: si otra request escribio entre la
+    // lectura y el write, se re-lee y re-mergea (hasta 3 intentos). Si la
+    // lectura falla, abortar en vez de pisar con datos viejos.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let row;
+      try { row = await store.readRow(); }
+      catch (e) { return res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync read failed, retry' }); }
 
-    const merged = mergeDocs(cloud, req.body || {});
+      const merged = mergeDocs((row && row.doc) || {}, req.body || {});
 
-    try { await store.writeDoc(merged); }
-    catch (e) { return res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync write failed, retry' }); }
-
-    res.status(200).json({ data: merged });
-    return;
+      try {
+        if (await store.writeDocIf(merged, row && row.updated_at)) {
+          return res.status(200).json({ data: merged });
+        }
+      } catch (e) { return res.status(e && e.status === 401 ? 401 : 503).json({ error: 'Sync write failed, retry' }); }
+    }
+    return res.status(503).json({ error: 'Sync conflict, retry' });
   }
 
   res.status(405).json({ error: 'Method not allowed' });

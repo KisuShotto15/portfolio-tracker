@@ -43,8 +43,11 @@ var AUTOFILL_RULES = [
   { keywords:['cashea'],                                                                                                                                                                                           type:'Debit',  category:'Home', currency:'VES', wallet:'Binance' },
 ];
 
-var SUMMARY_CATS = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
 var CATS         = ['Income','Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support','Investments','Savings'];
+// SUMMARY_CATS es el mismo set que CATS: dos nombres porque semanticamente son
+// cosas distintas (categorias que entran al resumen vs. todas las categorias),
+// aunque hoy coinciden en contenido.
+var SUMMARY_CATS = CATS;
 // 'Transfer' (deposito/retiro) NO va en SUMMARY_CATS ni CATS: asi queda fuera de
 // income/gasto, donut y budget automaticamente. Mueve el balance del wallet pero
 // se netea del P&L como Investments (isExtFlow, ahora en finance-core.js).
@@ -122,8 +125,7 @@ var _budMonth=null, _budSig=null;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
-var GROUP_FINANCIAL=['Investments','Savings'];
-var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={}, _rateTimer=null;
+var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={}, _rateTimer=null, _timersOn=false;
 var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0, _pullChanged=false;
 
 // Monotonic logical clock for last-writer-wins. Using a plain Date.now() lets a
@@ -701,8 +703,6 @@ function drawHoldingsDonut(assets, tokenColor){
 function hldHash(s){ var h=0; s=String(s); for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return h; }
 function fmtShortUSD(v){ return '$'+Math.round(v).toLocaleString('en-US'); }
 function fmtBal(b){ return b.toLocaleString('en-US',{maximumFractionDigits:6}); }
-function toggleWhCard(){}
-window.toggleWhCard=toggleWhCard;
 function toggleOwCard(){
   var card=document.getElementById('hld-wallets'); if(card) card.classList.toggle('open');
 }
@@ -1889,9 +1889,15 @@ function applyRecurring(){
       var cur=r.currency||'USD', amtUSD=r.amount, amtVES=null, rateUsed=null;
       if(cur==='VES'){ var _vr=vesTxRate(); if(!_vr) return; amtVES=r.amount; amtUSD=vesToUsd(r.amount,_vr); rateUsed=_vr; var _rs=vesTxRateSrc(); } else { var _rs=null; }
       var dateStr=d.y+'-'+String(d.m+1).padStart(2,'0')+'-'+String(d.dom).padStart(2,'0');
-      var txId=Date.parse(dateStr+'T12:00:00')+(r.id%100000);
-      if(deleted.has(txId)){ r.lastRun=d.ym; return; }                       // borrada por el usuario: no resucitar
-      if(S.transactions.some(function(t){ return t.id===txId; })){ r.lastRun=d.ym; return; }
+      // Id deterministico: fecha + (ruleId mod 1 dia). Antes era mod 100000, y dos
+      // reglas cuyos ids coincidieran en ese modulo generaban el MISMO id el mismo
+      // dia — la segunda nunca insertaba su tx (perdida silenciosa). Con mod 86400000
+      // (< separacion entre fechas) solo colisionan reglas creadas en el mismo ms del
+      // dia. oldId cubre txs ya generadas con el esquema viejo (y clientes sin actualizar).
+      var dayMs=Date.parse(dateStr+'T12:00:00');
+      var txId=dayMs+(r.id%86400000), oldId=dayMs+(r.id%100000);
+      if(deleted.has(txId)||deleted.has(oldId)){ r.lastRun=d.ym; return; }   // borrada por el usuario: no resucitar
+      if(S.transactions.some(function(t){ return t.id===txId||t.id===oldId||(t.recurringId===r.id&&t.date===dateStr); })){ r.lastRun=d.ym; return; }
       S.transactions.push({id:txId,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,rateSrc:_rs,imported:false,receiptUrl:null,updatedAt:stamp(),auto:true,recurringId:r.id});
       r.lastRun=d.ym;
       added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
@@ -2356,7 +2362,6 @@ function saveBudget(){
 var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
-function catBudgetUsd(cat,month){ return catBudgetPct(cat,month)/100*(S.budgetTotal||0); }
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
 // del mes visible. Solo afecta la edicion; la vista siempre muestra el efectivo.
 var _budEditScope='default';
@@ -2767,16 +2772,6 @@ function migrateExchangeWallets(){
   }
   S.exchangeMigrated=1; S.exchangeWalletsUpdatedAt=stamp(); save();
 }
-function renderExchangeWallets(){
-  var wrap=document.getElementById('xw-list'); if(!wrap) return;
-  var list=S.exchangeWallets||[];
-  var TYPE_LBL={binance:'Binance',bybit:'Bybit',okx:'OKX',bsc:'BSC'};
-  wrap.innerHTML=list.length?list.map(function(w){
-    var meta=w.type==='bsc'?('BSC '+(w.address||'').slice(0,10)+'…'):(TYPE_LBL[w.type]||w.type);
-    var bal=w.balance!=null?('$'+w.balance):'—';
-    return '<div class="xw-item"><span class="xw-nm">'+escHtml(w.name)+'</span><span class="xw-meta">'+meta+'</span><span class="xw-bal">'+bal+'</span><button class="btn btns" style="color:#E24B4A" onclick="removeExchangeWallet('+w.id+')">Eliminar</button></div>';
-  }).join(''):'<p class="hint">Aun no agregaste wallets de exchange.</p>';
-}
 window.toggleXwFields=function(){
   var type=document.getElementById('xw-type').value;
   var b=document.getElementById('xw-binance-fields'), s=document.getElementById('xw-bsc-fields'), p=document.getElementById('xw-pass');
@@ -2809,17 +2804,17 @@ window.addExchangeWallet=async function(){
   }
   if(!S.exchangeWallets) S.exchangeWallets=[];
   S.exchangeWallets.push(w); S.exchangeWalletsUpdatedAt=stamp(); save();
-  renderExchangeWallets(); renderWallets(); renderSummary();
+  renderWallets(); renderSummary();
   closeExchangeForm(); // cierre rapido; el balance aparece en la fila al resolver el fetch
   try{ await fetchExchangeWallet(w); }catch(e){ /* balance queda en — hasta el proximo refresh */ }
-  renderExchangeWallets(); renderWallets(); renderSummary();
+  renderWallets(); renderSummary();
 };
 window.removeExchangeWallet=function(id){
   if(!confirm('Eliminar este wallet de exchange?')) return;
   S.exchangeWallets=(S.exchangeWallets||[]).filter(function(w){ return w.id!==id; });
   xkDel(id);
   S.exchangeWalletsUpdatedAt=stamp(); save();
-  renderExchangeWallets(); renderWallets(); renderSummary();
+  renderWallets(); renderSummary();
 };
 // (Re)ingresar las keys en ESTE dispositivo para un wallet ya sincronizado
 // (las keys no viajan en el doc; cada dispositivo que quiera refrescar las pide).
@@ -3113,7 +3108,6 @@ function showPage(id,btn,arg){
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; renderPasskeys(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
-  var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
 }
 window._historyView='snapshots';
@@ -3216,7 +3210,6 @@ window.deleteSnapshotFromHistory=deleteSnapshotFromHistory;
 // Expose functions needed by inline HTML event handlers
 function toggleSidebar(){
   var sb=document.querySelector('.sb'); if(sb) sb.classList.toggle('open');
-  var ov=document.getElementById('overlay'); if(ov) ov.classList.toggle('open');
   document.body.classList.toggle('nav-open');
 }
 window.toggleSidebar = toggleSidebar;
@@ -3356,10 +3349,6 @@ if(window.visualViewport && !window._vvSheetBound){
   _vv.addEventListener('resize',adjustSheetForKeyboard);
   _vv.addEventListener('scroll',adjustSheetForKeyboard);
 }
-window.selectWvRow = function(el){
-  document.querySelectorAll('.wv-row.wv-exp').forEach(function(r){ if(r!==el) r.classList.remove('wv-exp'); });
-  el.classList.toggle('wv-exp');
-};
 if(!window._wvSelListener){
   window._wvSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.wv-row')) document.querySelectorAll('.wv-exp').forEach(function(r){ r.classList.remove('wv-exp'); }); });
@@ -3520,14 +3509,6 @@ async function init(){
   document.getElementById('tx-date').value=today;
   populateTxMonth(); // default: All months (value queda '')
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
-  // Restaurar el Profit Calculator ANTES de updateRateUI: el autofill de pc-buy
-  // dispara calcProfit(), y con los campos vacios pisaria S.profitCalc.
-  if(!S.profitCalc||(!S.profitCalc.sell&&!S.profitCalc.amount&&!S.profitCalc.fee)){
-    try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell||_pc.amount){ S.profitCalc={sell:_pc.sell||'',amount:_pc.amount||'',fee:''}; S.profitCalcUpdatedAt=stamp(); } }catch(e){}
-  }
-  if(!S.p2pCalc||S.p2pCalc.fee==null){
-    try{ var _p2f=localStorage.getItem('ft13_p2pc'); if(_p2f){ S.p2pCalc=Object.assign({},S.p2pCalc,{fee:_p2f}); S.p2pCalcUpdatedAt=stamp(); } }catch(e){}
-  }
   restoreProfitCalc();
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
@@ -3555,8 +3536,6 @@ async function bootAfterAuth(firstLogin){
   // row de tu usuario). El merge del servidor evita cualquier clobber.
   if(firstLogin){ _dirty=true; pushToCloud(); }
   runMigrations();
-  if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
-  if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
   var hash=(window.location.hash||'').replace('#','');
   // La tab del hash ya se activo en init() (antes del pull). Re-navegarla aqui
   // re-disparaba la animacion de entrada (doble render visible al recargar);
@@ -3564,10 +3543,8 @@ async function bootAfterAuth(firstLogin){
   if(_activePageId()!==(hash||'summary')) showPage(hash||'summary', null);
   else afterPull();
   fetchRate(false);
-  // USDT: cada 5 min con la pestana visible (ahorra invocaciones Vercel; el
-  // refetch al volver el foco/visibilidad cubre el timer congelado en mobile).
-  fetchUsdtRate(); setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 5*60*1000);
-  migrateExchangeWallets(); stripExchangeSecrets(); renderExchangeWallets();
+  fetchUsdtRate();
+  migrateExchangeWallets(); stripExchangeSecrets();
   renderOnchainWallets();
   fetchWalletHoldings().then(function(){ renderWalletHoldings(); }).catch(function(){});
   fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){});
@@ -3576,18 +3553,26 @@ async function bootAfterAuth(firstLogin){
   applyRecurring();
   renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily();
   autoFetchExchangeWallets();
-  scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay)
-  setInterval(function(){ autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
-  setInterval(function(){ fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }, COINPRICE_AUTO_MS);
-  // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
-  // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
-  _pullTimer=setInterval(autoPull, 25000);
-  // Pull immediately whenever the tab regains focus or visibility, y corre las
-  // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
-  window.addEventListener('focus', function(){ fetchUsdtRate(); autoPull().then(applyRecurring); });
-  document.addEventListener('visibilitychange', function(){
-    if(!document.hidden){ fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
-  });
+  scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay; re-entrante, hace clearTimeout)
+  // Timers y listeners globales: SOLO una vez por pestana. bootAfterAuth vuelve a
+  // correr en cada re-login sin recarga (sesion expirada → overlay → entrar) y
+  // sin este guard se acumulaban intervals/listeners duplicados para siempre.
+  if(!_timersOn){ _timersOn=true;
+    // USDT: cada 5 min con la pestana visible (ahorra invocaciones Vercel; el
+    // refetch al volver el foco/visibilidad cubre el timer congelado en mobile).
+    setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 5*60*1000);
+    setInterval(function(){ autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
+    setInterval(function(){ fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }, COINPRICE_AUTO_MS);
+    // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
+    // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
+    _pullTimer=setInterval(autoPull, 25000);
+    // Pull immediately whenever the tab regains focus or visibility, y corre las
+    // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
+    window.addEventListener('focus', function(){ fetchUsdtRate(); autoPull().then(applyRecurring); });
+    document.addEventListener('visibilitychange', function(){
+      if(!document.hidden){ fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
+    });
+  }
 }
 init();
 

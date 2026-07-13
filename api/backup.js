@@ -5,9 +5,20 @@
 //
 // Requiere env: SUPABASE_URL, SUPABASE_SERVICE_KEY (service role: bypasea RLS;
 // solo vive en el server), CRON_SECRET (Vercel lo manda como Bearer en los crons).
+import crypto from 'node:crypto';
+
+// Comparacion constant-time: hasheamos ambos lados a digest de largo fijo para
+// que timingSafeEqual no tire por longitudes distintas.
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(a).digest();
+  const hb = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET || '';
-  if (!secret || (req.headers['authorization'] || '') !== 'Bearer ' + secret) {
+  const auth = req.headers['authorization'] || '';
+  if (!secret || !safeEqual(auth, 'Bearer ' + secret)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const SB_URL = process.env.SUPABASE_URL, SB_SVC = process.env.SUPABASE_SERVICE_KEY;

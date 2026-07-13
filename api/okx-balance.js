@@ -1,20 +1,8 @@
 import crypto from 'node:crypto';
-
-// Verifica el JWT de Supabase (mismo patron que sync.js). Devuelve el user o null.
-async function verifySupabaseUser(req) {
-  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_ANON_KEY;
-  if (!SB_URL || !SB_KEY) return null;
-  const jwt = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (!jwt) return null;
-  const r = await fetch(SB_URL + '/auth/v1/user', { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + jwt } });
-  if (!r.ok) return null;
-  return await r.json();
-}
+import { verifySupabaseUser, cors } from './_lib/web.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  cors(res);
 
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -26,21 +14,25 @@ export default async function handler(req, res) {
   const { key, secret, passphrase } = req.body || {};
   if (!key || !secret || !passphrase) return res.status(400).json({ error: 'key, secret and passphrase required' });
 
-  const ts = new Date().toISOString();
-  const method = 'GET';
-  const path = '/api/v5/account/balance';
-  const sign = crypto.createHmac('sha256', secret).update(ts + method + path).digest('base64');
+  try {
+    const ts = new Date().toISOString();
+    const method = 'GET';
+    const path = '/api/v5/account/balance';
+    const sign = crypto.createHmac('sha256', secret).update(ts + method + path).digest('base64');
 
-  const r = await fetch(`https://www.okx.com${path}`, {
-    headers: {
-      'OK-ACCESS-KEY': key,
-      'OK-ACCESS-SIGN': sign,
-      'OK-ACCESS-TIMESTAMP': ts,
-      'OK-ACCESS-PASSPHRASE': passphrase,
-      'x-simulated-trading': '0',
-    },
-  });
-  const data = await r.json();
-  if (!r.ok || data.code !== '0') return res.status(502).json({ error: data.msg || JSON.stringify(data) });
-  res.json(data);
+    const r = await fetch(`https://www.okx.com${path}`, {
+      headers: {
+        'OK-ACCESS-KEY': key,
+        'OK-ACCESS-SIGN': sign,
+        'OK-ACCESS-TIMESTAMP': ts,
+        'OK-ACCESS-PASSPHRASE': passphrase,
+        'x-simulated-trading': '0',
+      },
+    });
+    const data = await r.json();
+    if (!r.ok || data.code !== '0') return res.status(502).json({ error: data.msg || JSON.stringify(data) });
+    res.json(data);
+  } catch (e) {
+    return res.status(502).json({ error: 'OKX fetch failed: ' + String(e.message || e) });
+  }
 }

@@ -43,6 +43,10 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
+  // /api/* nunca se cachea: son datos financieros vivos (sync, precios) y el
+  // Cache API indexa por URL, no por Authorization — serviria el doc de otra
+  // cuenta en un navegador compartido y congelaria el pull hasta el proximo deploy.
+  if (new URL(e.request.url).pathname.startsWith('/api/')) return;
 
   // Navigations (HTML): network-first so a new deploy applies immediately;
   // fall back to the cached shell when offline.

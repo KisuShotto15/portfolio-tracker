@@ -21,7 +21,8 @@ export function maxObservedStamp(o, tsFields){
 export function localFieldWins(cloudTs, localTs){ return (cloudTs || 0) < (localTs || 0); }
 
 // VES amount → USD at the given rate, rounded to 4 decimals (matches tx storage).
-export function vesToUsd(amountVES, rate){ return parseFloat((amountVES / rate).toFixed(4)); }
+// rate no finito o <=0 (dato corrupto/cero) → 0 en vez de Infinity/NaN.
+export function vesToUsd(amountVES, rate){ if(!isFinite(rate) || rate <= 0) return 0; return parseFloat((amountVES / rate).toFixed(4)); }
 
 // ── Tombstones ──────────────────────────────────────────────────────────────
 // Entrada legacy: id numerico (borrado irrevocable, comportamiento viejo).

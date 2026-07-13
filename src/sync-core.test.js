@@ -53,6 +53,11 @@ describe('vesToUsd', () => {
     expect(vesToUsd(360, 36)).toBe(10);
     expect(vesToUsd(100, 36)).toBe(2.7778);
   });
+  it('rate 0/negativo/NaN → 0 en vez de Infinity/NaN', () => {
+    expect(vesToUsd(100, 0)).toBe(0);
+    expect(vesToUsd(100, -36)).toBe(0);
+    expect(vesToUsd(100, NaN)).toBe(0);
+  });
 });
 
 describe('mergeTxArrays (per-tx last-writer-wins)', () => {

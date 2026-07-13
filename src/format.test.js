@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthKey, prevMonth, parseAmt } from './format.js';
+import { monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 
 describe('monthKey (mes local, nunca UTC)', () => {
   it('devuelve YYYY-MM con padding', () => {
@@ -33,5 +33,22 @@ describe('parseAmt', () => {
     expect(parseAmt('abc')).toBe(0);
     expect(parseAmt('')).toBe(0);
     expect(parseAmt(null)).toBe(0);
+  });
+});
+
+describe('fmtUSD', () => {
+  it('formatea con separador de miles y 2 decimales', () => {
+    expect(fmtUSD(1234.5)).toBe('$1,234.50');
+  });
+  it('valores no finitos (undefined/NaN/Infinity) → $0.00, nunca $NaN', () => {
+    expect(fmtUSD(undefined)).toBe('$0.00');
+    expect(fmtUSD(NaN)).toBe('$0.00');
+    expect(fmtUSD(Infinity)).toBe('$0.00');
+  });
+});
+
+describe('escHtml', () => {
+  it('escapa comilla simple ademas de & < > "', () => {
+    expect(escHtml(`O'Brien <b>"x"</b> & co`)).toBe('O&#39;Brien &lt;b&gt;&quot;x&quot;&lt;/b&gt; &amp; co');
   });
 });

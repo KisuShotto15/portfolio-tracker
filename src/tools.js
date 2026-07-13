@@ -124,12 +124,6 @@ export function calcProfit(fromUser){
 }
 window.calcProfit = calcProfit;
 
-function toggleP2PSettings(btn){
-  var p=document.getElementById('p2p-settings-popup'); var isOpen=p.classList.contains('open');
-  document.querySelectorAll('.hist-popup.open').forEach(function(el){ el.classList.remove('open'); });
-  if(!isOpen) p.classList.add('open');
-}
-window.toggleP2PSettings=toggleP2PSettings;
 document.addEventListener('click', function(e){
   if(!e.target.closest('#tc-p2p .hist-wrap')) document.querySelectorAll('#p2p-settings-popup').forEach(function(el){ el.classList.remove('open'); });
 });

@@ -44,13 +44,22 @@ export function sbConsumeHashSession(){
 // Devuelve true (sesion renovada), false (el servidor rechazo el token: sesion
 // realmente invalida) o 'net' (fallo de red o 5xx: NO invalidar la sesion local
 // — antes esto forzaba re-login cada vez que el boot pillaba la red caida).
-export async function sbRefresh(){
-  var rt=sbGet('sb_rt'); if(!rt) return false;
-  try{
-    var r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({refresh_token:rt})});
-    if(r.ok){ sbSetSession(await r.json()); return true; }
-    return r.status>=500 ? 'net' : false;
-  }catch(e){ return 'net'; }
+// Single-flight: GoTrue ROTA el refresh token en cada uso; si push y autoPull
+// reciben 401 a la vez y refrescan en paralelo con el mismo token, uno puede
+// perder y expulsar al usuario. Todos los llamadores comparten la misma promesa.
+var _refreshing=null;
+export function sbRefresh(){
+  if(_refreshing) return _refreshing;
+  _refreshing=(async function(){
+    var rt=sbGet('sb_rt'); if(!rt) return false;
+    try{
+      var r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({refresh_token:rt})});
+      if(r.ok){ sbSetSession(await r.json()); return true; }
+      return r.status>=500 ? 'net' : false;
+    }catch(e){ return 'net'; }
+  })();
+  _refreshing.finally(function(){ _refreshing=null; });
+  return _refreshing;
 }
 async function sbOtpRequest(email){
   try{
