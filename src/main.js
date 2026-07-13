@@ -1044,10 +1044,16 @@ window.toggleNotePin=function(btn){
   var inp=document.getElementById('tx-desc');
   if(inp&&inp.value.trim()) updateNoteSuggest(); else _renderNoteSuggest(_noteSuggestions.slice(0,12));
 };
+function _setNotePop(open){
+  var pop=document.getElementById('note-suggest-pop');
+  var btn=document.querySelector('.note-dd-btn');
+  if(pop) pop.classList.toggle('open',open);
+  if(btn) btn.classList.toggle('open',open); // chevron rota 180 como el ::picker-icon de los selects
+}
 function _renderNoteSuggest(list){
   var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
   pop.innerHTML=list.map(_noteRow).join('')||'<span style="padding:8px 12px;font-size:12px;color:var(--txt3)">Sin historial aun</span>';
-  pop.classList.add('open');
+  _setNotePop(true);
 }
 // Autocompletado mientras escribes, en el popup propio (el datalist nativo no
 // se puede estilar y desentonaba con la pagina).
@@ -1055,24 +1061,24 @@ window.updateNoteSuggest=function(){
   var pop=document.getElementById('note-suggest-pop'), inp=document.getElementById('tx-desc');
   if(!pop||!inp) return;
   var q=(inp.value||'').trim().toLowerCase();
-  if(!q){ pop.classList.remove('open'); return; }
+  if(!q){ _setNotePop(false); return; }
   var m=_noteSuggestions.filter(function(d){ var l=d.toLowerCase(); return l.indexOf(q)>=0&&l!==q; }).slice(0,8);
-  if(!m.length){ pop.classList.remove('open'); return; }
+  if(!m.length){ _setNotePop(false); return; }
   _renderNoteSuggest(m);
 };
 window.toggleNoteSuggest=function(e){
   e.stopPropagation(); e.preventDefault();
   var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
-  if(pop.classList.contains('open')){ pop.classList.remove('open'); return; }
+  if(pop.classList.contains('open')){ _setNotePop(false); return; }
   _renderNoteSuggest(_noteSuggestions.slice(0,12));
 };
 window.pickNoteSuggest=function(d){
   var inp=document.getElementById('tx-desc'); if(inp){ inp.value=d; autofillFromNote(); }
-  var pop=document.getElementById('note-suggest-pop'); if(pop) pop.classList.remove('open');
+  _setNotePop(false);
 };
 document.addEventListener('click',function(e){
   var pop=document.getElementById('note-suggest-pop');
-  if(pop&&pop.classList.contains('open')&&!(e.target.closest&&e.target.closest('.note-field-wrap'))) pop.classList.remove('open');
+  if(pop&&pop.classList.contains('open')&&!(e.target.closest&&e.target.closest('.note-field-wrap'))) _setNotePop(false);
 });
 function openTxForm(){
   populateNoteSuggestions();
@@ -1119,7 +1125,7 @@ function _resetTxFields(){
   var tg=document.getElementById('tx-rec-toggle'); if(tg) tg.style.display='none';
   var rl=document.getElementById('tx-rec-list'); if(rl) rl.style.display='none';
   var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display='';
-  var nsp=document.getElementById('note-suggest-pop'); if(nsp) nsp.classList.remove('open');
+  _setNotePop(false);
 }
 function closeTxForm(fromPop){
   editingTxId=null;
