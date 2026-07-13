@@ -3226,6 +3226,7 @@ function toggleTxSearch(){
 }
 window.setTxTab=setTxTab; window.toggleTxFilters=toggleTxFilters; window.toggleTxSearch=toggleTxSearch;
 window.fetchRate = fetchRate;
+window.fetchUsdtRate = fetchUsdtRate;
 window.addTx = addTx;
 window.deleteTx = deleteTx;
 window.editTx = editTx;
