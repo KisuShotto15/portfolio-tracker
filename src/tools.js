@@ -21,9 +21,6 @@ function feeOf(key){
 function renderCalcCards(cardsId, resultId, cards, small){
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
     var cls = c.green ? ' g' : c.red ? ' r' : '';
-    // Valores largos (Bs de 7 digitos) bajan de fuente para no salirse de la card
-    // (en telefonos angostos o con la escala de fuente del sistema subida).
-    if(String(c.value).length > 8) cls += ' xs';
     return '<div class="tcalc-card'+(small?' tcalc-sm':'')+'">'
       +'<div class="tcalc-lbl">'+c.label+'</div>'
       +'<div class="tcalc-val'+cls+'">'+c.value+'</div>'
@@ -31,6 +28,22 @@ function renderCalcCards(cardsId, resultId, cards, small){
       +'</div>';
   }).join('');
   document.getElementById(resultId).style.display = 'block';
+  fitCalcVals(document.getElementById(cardsId));
+}
+
+// Ajuste medido: cada valor conserva su fuente normal y SOLO se encoge lo justo
+// si de verdad no entra en su card (depende del ancho real del dispositivo y de
+// la escala de fuente del sistema — nada de reglas por cantidad de digitos).
+function fitCalcVals(wrap){
+  if(!wrap) return;
+  wrap.querySelectorAll('.tcalc-val').forEach(function(v){
+    v.style.fontSize='';
+    if(!v.clientWidth) return; // tab oculta: se re-ajusta al abrirla
+    if(v.scrollWidth>v.clientWidth){
+      var base=parseFloat(getComputedStyle(v).fontSize)||16;
+      v.style.fontSize=Math.max(10, base*v.clientWidth/v.scrollWidth-0.3)+'px';
+    }
+  });
 }
 
 var TOOLS = [

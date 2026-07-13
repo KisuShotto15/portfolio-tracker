@@ -3020,7 +3020,7 @@ function showPage(id,btn,arg){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); }
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ renderPresetsManage(); var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
