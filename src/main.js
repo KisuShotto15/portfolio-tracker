@@ -2181,6 +2181,9 @@ function renderEquityChart(){
   // snapshots viejos sin el campo caen a 0 (la linea coincide con Tracked hasta que
   // empieces a capturarlo).
   var adjVals=snaps.map(function(s){ return parseFloat((s.total+(s.holdingsValue||0)).toFixed(2)); });
+  // Piso del eje Y justo bajo el minimo real: con el pico de +Holdings la escala
+  // llegaba a ~1.4x del net worth y la curva Tracked se veia plana.
+  var _eqYMin=Math.max(0, Math.floor(Math.min.apply(null,vals)*0.96));
   // Skip rebuild when snapshots + holdings values are unchanged (adjVals folds in both).
   var sig=JSON.stringify([labels,vals,adjVals]);
   if(sig===_eChartSig&&eChart) return;
@@ -2202,7 +2205,7 @@ function renderEquityChart(){
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[
     {label:'Tracked',data:vals,borderColor:'#4ED9A4',backgroundColor:function(ctx){var c=ctx.chart,a=c.chartArea;if(!a)return 'rgba(78,217,164,0.2)';var g=c.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(78,217,164,0.4)');g.addColorStop(1,'rgba(78,217,164,0)');return g;},borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHitRadius:20,pointBackgroundColor:'#4ED9A4',tension:0.3,fill:true},
     {label:'+ Holdings',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false}}}});}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false,min:_eqYMin}}}});}
 
 function getTotalBalance(){
   var api=(S.exchangeWallets||[]).reduce(function(s,w){ return s+(w.balance||0); },0);
