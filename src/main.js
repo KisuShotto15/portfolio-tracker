@@ -1077,8 +1077,10 @@ function _sheetPush(name){ window._activeSheet=name; try{ history.pushState({she
 function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(history.state&&history.state.sheet){ try{ history.back(); }catch(e){} } } }
 function txMsg(text,ok){ var el=document.getElementById('tx-form-msg'); if(el){ el.textContent=text||''; el.style.color=ok?'#5DCAA5':'#E24B4A'; } }
 // Sugerencias de notas: tus descripciones mas frecuentes (ultimas ~400 txs).
+// datalist nativo (al teclear) + boton ▾ con dropdown propio (en mobile el
+// datalist no tiene flecha ni se abre sin escribir).
+var _noteSuggestions=[];
 function populateNoteSuggestions(){
-  var dl=document.getElementById('note-suggestions'); if(!dl) return;
   var freq={},order=[];
   for(var i=S.transactions.length-1;i>=0&&order.length<400;i--){
     var d=(S.transactions[i].desc||'').trim(); if(!d) continue;
@@ -1086,9 +1088,37 @@ function populateNoteSuggestions(){
     if(!freq[k]){ freq[k]={c:0,d:d}; order.push(k); }
     freq[k].c++;
   }
-  var top=order.map(function(k){ return freq[k]; }).sort(function(a,b){ return b.c-a.c; }).slice(0,30);
-  dl.innerHTML=top.map(function(t){ return '<option value="'+escHtml(t.d)+'">'; }).join('');
+  _noteSuggestions=order.map(function(k){ return freq[k]; }).sort(function(a,b){ return b.c-a.c; }).slice(0,30).map(function(t){ return t.d; });
 }
+// Autocompletado mientras escribes, en el popup propio (el datalist nativo no
+// se puede estilar y desentonaba con la pagina).
+window.updateNoteSuggest=function(){
+  var pop=document.getElementById('note-suggest-pop'), inp=document.getElementById('tx-desc');
+  if(!pop||!inp) return;
+  var q=(inp.value||'').trim().toLowerCase();
+  if(!q){ pop.classList.remove('open'); return; }
+  var m=_noteSuggestions.filter(function(d){ var l=d.toLowerCase(); return l.indexOf(q)>=0&&l!==q; }).slice(0,8);
+  if(!m.length){ pop.classList.remove('open'); return; }
+  pop.innerHTML=m.map(function(d){ return '<button type="button" onclick="pickNoteSuggest(this.textContent)">'+escHtml(d)+'</button>'; }).join('');
+  pop.classList.add('open');
+};
+window.toggleNoteSuggest=function(e){
+  e.stopPropagation(); e.preventDefault();
+  var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
+  if(pop.classList.contains('open')){ pop.classList.remove('open'); return; }
+  pop.innerHTML=_noteSuggestions.slice(0,12).map(function(d){
+    return '<button type="button" onclick="pickNoteSuggest(this.textContent)">'+escHtml(d)+'</button>';
+  }).join('')||'<span style="padding:8px 12px;font-size:12px;color:var(--txt3)">Sin historial aun</span>';
+  pop.classList.add('open');
+};
+window.pickNoteSuggest=function(d){
+  var inp=document.getElementById('tx-desc'); if(inp){ inp.value=d; autofillFromNote(); }
+  var pop=document.getElementById('note-suggest-pop'); if(pop) pop.classList.remove('open');
+};
+document.addEventListener('click',function(e){
+  var pop=document.getElementById('note-suggest-pop');
+  if(pop&&pop.classList.contains('open')&&!(e.target.closest&&e.target.closest('.note-field-wrap'))) pop.classList.remove('open');
+});
 function openTxForm(){
   populateNoteSuggestions();
   txMsg('');
@@ -1136,6 +1166,7 @@ function _resetTxFields(){
   var rl=document.getElementById('tx-rec-list'); if(rl) rl.style.display='none';
   var pr=document.getElementById('tx-presets'); if(pr) pr.style.display='';
   var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display='';
+  var nsp=document.getElementById('note-suggest-pop'); if(nsp) nsp.classList.remove('open');
 }
 function closeTxForm(fromPop){
   editingTxId=null;
@@ -3051,6 +3082,14 @@ var _pageInTimer=null;
 function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
+  // Cambiar de tab cierra cualquier bottom-sheet abierto (en mobile quedaban
+  // flotando sobre la tab nueva).
+  try{
+    if(document.getElementById('tx-form-panel').classList.contains('open')) closeTxForm();
+    if(document.getElementById('wv-form-panel').classList.contains('open')) closeWalletForm();
+    var _xwp=document.getElementById('xw-form-panel');
+    if(_xwp&&_xwp.classList.contains('open')) closeExchangeForm();
+  }catch(e){}
   document.querySelectorAll('.page.active').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nb.active,#mob-settings-btn.active').forEach(function(b){ b.classList.remove('active'); });
   var target=document.getElementById('page-'+id);
