@@ -118,7 +118,7 @@ var _mChartSig=null, _eChartSig=null;           // chart data signatures → ski
 var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=60, _txBase=60, _txFilterSig=''; // tx list pagination state
 var _txData=null, _txDayTotals=null; // cache del ultimo filtrado para append incremental
-var _budMonth=null, _budLimitsOpen=false, _budSig=null;
+var _budMonth=null, _budSig=null;
 var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
 var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
@@ -2342,7 +2342,12 @@ async function deleteSnapshot(id){
 async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=stamp(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); } }
 window.editSnapshot=editSnapshot;
 
-function saveBudget(){ var v=parseFloat(document.getElementById('bud-total').value); if(v>0){ S.budgetTotal=v; S.budgetTotalUpdatedAt=stamp(); save(); renderBudget(); } }
+function saveBudget(){
+  var el=document.getElementById('bud-total'); if(!el) return;
+  var v=evalMath(el.value);
+  if(v>0&&v!==S.budgetTotal){ S.budgetTotal=parseFloat(v.toFixed(2)); S.budgetTotalUpdatedAt=stamp(); save(); }
+  _budSig=null; renderBudget(); // cerrar el modo edicion aunque no cambie
+}
 var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
@@ -2416,7 +2421,6 @@ window.applyBudgetRec=function(kind){
   save(); renderBudget();
 };
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
-window._budLimitsToggle=function(){ _budLimitsOpen=!_budLimitsOpen; renderBudget(); };
 function renderBudget(){
   var months=getMonths();
   if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
@@ -2456,7 +2460,10 @@ function renderBudget(){
       +'<div class="bdg-hero-lbl">Remaining'+(monthLabel?' · '+monthLabel:'')+'</div>'
       +'<div class="bdg-hero-val" style="color:'+remColor+'">'+fmtUSD(Math.abs(remaining))+(remaining<0?' over':'')+'</div>'
       +'<div class="bdg-pb"><div class="bdg-pf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
-      +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '+fmtUSD(S.budgetTotal)+'</span><span class="bdg-pct">'+pct+'%</span></div>'
+      +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '
+        +'<span class="bdg-total-view" title="Tocar para editar el budget del mes" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(S.budgetTotal)+'</span>'
+        +'<span class="bdg-total-edit" style="display:none">$<input type="text" inputmode="decimal" id="bud-total" value="'+S.budgetTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"></span>'
+        +'</span><span class="bdg-pct">'+pct+'%</span></div>'
       +'<div class="bdg-stats">'
         +bstat('Income',fmtUSD(income),'#5DCAA5')
         +bstat('Spent',fmtUSD(spent),'')
@@ -2495,6 +2502,8 @@ function renderBudget(){
     +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
     +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">Solo '+mShort+'</button>'
     +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
+    +'<button class="bdg-scope-btn" title="Asignar % segun tu gasto promedio (3 meses)" onclick="applyBudgetRec(\'hist\')">Historial 3m</button>'
+    +'<button class="bdg-scope-btn" title="50% esenciales / 30% estilo de vida / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
     +'</span></div>';
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
@@ -2572,40 +2581,7 @@ function renderBudget(){
       +'</div>';
   })();
 
-  // Configure limits accordion
-  html+='<div class="bdg-limits'+(_budLimitsOpen?' open':'')+'">'
-    +'<button class="bdg-limits-head" onclick="window._budLimitsToggle()">'
-    +'<span class="cleg" style="margin:0">Configure limits</span>'
-    +'<svg class="bdg-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
-    +'</button>';
-  if(_budLimitsOpen){
-    html+='<div class="bdg-limits-body">'
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Monthly Total</div>'
-      +'<div class="fr" style="max-width:280px;margin-bottom:1.25rem">'
-      +'<input type="number" id="bud-total" value="'+S.budgetTotal+'" placeholder="Total USD" step="1"/>'
-      +'<button class="btn btnp" onclick="saveBudget()">Save</button>'
-      +'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Asignacion por categoria</div>'
-      +(function(){
-        var sumPct=BUDGET_CATS.reduce(function(s,c){ return s+catBudgetPct(c,month); },0);
-        var usd=sumPct/100*S.budgetTotal;
-        var col=Math.abs(sumPct-100)<0.5?'#1D9E75':sumPct>100?'#E24B4A':'#EF9F27';
-        return '<div id="bud-alloc-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;font-size:12px">'
-          +'<span style="color:var(--color-text-secondary)">Asignado:</span>'
-          +'<span style="color:'+col+';font-weight:600">'+sumPct.toFixed(1)+'%</span>'
-          +'<span style="color:var(--color-text-secondary)">de 100% · '+fmtUSD(usd)+' de '+fmtUSD(S.budgetTotal)+'</span>'
-          +'<span style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;max-width:140px"><span style="display:block;height:100%;width:'+Math.min(100,sumPct)+'%;background:'+col+';border-radius:3px;transition:width .2s"></span></span>'
-          +'</div>';
-      })()
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Recomendaciones</div>'
-      +'<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">'
-      +'<button class="btn btns" onclick="applyBudgetRec(\'hist\')">Segun tu historial (3m)</button>'
-      +'<button class="btn btns" onclick="applyBudgetRec(\'503020\')">50 / 30 / 20</button>'
-      +'</div>'
-      +'<p style="font-size:12px;color:var(--txt3);margin:0 0 4px">Las recomendaciones y la edicion aplican al scope activo (Default o Solo mes). Edita el % de cada categoria tocando el numero en su tarjeta; el monto USD se deriva del Monthly Total.</p>'
-      +'</div>';
-  }
-  html+='</div>';
+  // (la config del Monthly Total vive en el hero: 'of $X' tap-to-edit)
 
   // Solo tocar el DOM si el HTML cambio: preserva el canvas del donut (su chart
   // se salta el recreate via _cChartSig) y evita re-parsear la pagina entera.

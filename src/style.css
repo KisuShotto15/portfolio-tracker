@@ -1339,3 +1339,10 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 
 /* Fila bajo la barra: % usado (izq) y limite (der) */
 .bdg-cat-sub{display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:12px;font-family:var(--font-num);color:var(--txt3)}
+
+/* Budget del mes editable en el hero */
+.bdg-total-view{cursor:pointer;border-bottom:1px dashed var(--line);color:var(--txt2)}
+.bdg-total-view:hover{color:var(--txt);border-bottom-color:var(--txt3)}
+.bdg-total-edit{display:inline-flex;align-items:center;gap:2px;color:var(--txt2)}
+.bdg-total-edit input{width:76px;background:transparent;border:none;border-bottom:1px dashed var(--accent);color:#fff;font-family:var(--font-num);font-size:inherit;padding:0 2px;text-align:center}
+.bdg-total-edit input:focus{outline:none}
