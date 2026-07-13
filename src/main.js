@@ -1080,7 +1080,9 @@ document.addEventListener('click',function(e){
   var pop=document.getElementById('note-suggest-pop');
   if(pop&&pop.classList.contains('open')&&!(e.target.closest&&e.target.closest('.note-field-wrap'))) _setNotePop(false);
 });
+function _lockScroll(on){ document.documentElement.classList.toggle('sheet-open',!!on); }
 function openTxForm(){
+  _lockScroll(true);
   populateNoteSuggestions();
   txMsg('');
   // Si el reset diferido del cierre anterior sigue pendiente, ejecutarlo ya
@@ -1128,6 +1130,7 @@ function _resetTxFields(){
   _setNotePop(false);
 }
 function closeTxForm(fromPop){
+  _lockScroll(false);
   editingTxId=null;
   // Arrancar el slide-out en el mismo tick del tap; el reset de campos (10+ escrituras
   // DOM + recalc) se difiere a cuando el panel ya salio de pantalla.
@@ -1140,6 +1143,7 @@ function closeTxForm(fromPop){
   if(fromPop!==true) _sheetPop();
 }
 function openWalletForm(type){
+  _lockScroll(true);
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
   void panel.offsetHeight;
@@ -1147,6 +1151,7 @@ function openWalletForm(type){
   _sheetPush('wallet');
 }
 function closeWalletForm(fromPop){
+  _lockScroll(false);
   var _wvp=document.getElementById('wv-form-panel');
   _wvp.classList.remove('open'); _wvp.style.bottom=''; _wvp.style.maxHeight='';
   document.getElementById('wv-overlay').classList.remove('open');
@@ -1168,6 +1173,7 @@ function toggleWmBalField(){
   if(lbl&&cur) lbl.textContent=cur.value==='VES'?'Balance en Bs':'Balance USD';
 }
 function openExchangeForm(){
+  _lockScroll(true);
   var panel=document.getElementById('xw-form-panel'), ov=document.getElementById('xw-overlay');
   if(!panel) return;
   toggleXwFields();
@@ -1177,6 +1183,7 @@ function openExchangeForm(){
   _sheetPush('exchange');
 }
 function closeExchangeForm(fromPop){
+  _lockScroll(false);
   var p=document.getElementById('xw-form-panel'); if(!p) return;
   p.classList.remove('open'); p.style.bottom=''; p.style.maxHeight='';
   document.getElementById('xw-overlay').classList.remove('open');
