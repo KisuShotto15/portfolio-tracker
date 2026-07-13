@@ -533,14 +533,14 @@
       </div>
     </div>
     <div class="field" id="tx-rec-day-field" style="display:none"><span class="field-lbl">Dia del mes</span><input type="number" id="tx-rec-day" min="1" max="31" placeholder="1-31" inputmode="numeric"/></div>
-    <div class="field" style="grid-column:span 2"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote()"/></div>
+    <div class="field" style="grid-column:span 2"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote()" list="note-suggestions"/></div>
     <div class="field"><span class="field-lbl">Wallet</span><select id="tx-wallet" tabindex="2"></select></div>
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
     <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES</option></select></div>
-    <div class="field"><span class="field-lbl">Amount</span><input type="number" id="tx-amount" placeholder="0.00" step="0.01" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
+    <div class="field"><span class="field-lbl">Amount</span><input type="text" inputmode="decimal" id="tx-amount" placeholder="0.00" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
   </div>
   <div class="tx-rec-row" id="tx-rec-row">
     <label class="tx-rec-check"><input type="checkbox" id="tx-recurring" onchange="toggleTxRecurring()"/><span>Recurrente</span></label>
@@ -595,5 +595,6 @@
     <span class="nb-label">Tools</span>
   </button>
 </nav>
+<datalist id="note-suggestions"></datalist>
 </body>
 </html>

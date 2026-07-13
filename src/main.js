@@ -462,17 +462,32 @@ function updateRateUI(){
 // ── Tasa USDT/VES (monitor P2P) ─────────────────────────────────────────────
 // Solo display en el header de Transactions, junto a BCV/Intervencion. No se usa
 // (aun) para convertir txs. Cache en memoria; refetch cada 5 min.
-var _usdtRate=null,_usdtAt=0;
+var _usdtRate=null,_usdtAt=0,_usdtShown=null,_usdtFlashT=null;
 function renderUsdtRate(){
   var txt='-',title='';
   if(_usdtRate){
     txt=_usdtRate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
     var age=Math.round((Date.now()-_usdtAt)/60000);
-    title='Mediana top-20 merchants BDV · hace '+age+' min';
+    title='Mediana top-10 merchants BDV · hace '+age+' min';
     if(age>30) txt+=' ⚠'; // dato viejo: el monitor no esta refrescando
   }
-  var d=document.getElementById('rate-usdt'); if(d){ d.textContent=txt==='-'?'-':txt+' Bs/USDT'; d.title=title; }
-  var m=document.getElementById('rate-usdt-m'); if(m){ m.textContent=txt; m.title=title; }
+  // Pulso al cambiar: flecha + color 1.6s para que el movimiento de la tasa se note.
+  var dir=(_usdtShown!=null&&_usdtRate!=null&&_usdtRate!==_usdtShown)?(_usdtRate>_usdtShown?'up':'down'):null;
+  if(_usdtRate!=null) _usdtShown=_usdtRate;
+  var els=[document.getElementById('rate-usdt'),document.getElementById('rate-usdt-m')];
+  els.forEach(function(el,i){
+    if(!el) return;
+    el.textContent=(txt==='-')?'-':(i===0?txt+' Bs/USDT':txt)+(dir?(dir==='up'?' ↑':' ↓'):'');
+    el.title=title;
+    el.classList.remove('rate-up','rate-down');
+    if(dir) el.classList.add('rate-'+dir);
+  });
+  if(dir){
+    clearTimeout(_usdtFlashT);
+    _usdtFlashT=setTimeout(function(){
+      els.forEach(function(el,i){ if(!el) return; el.classList.remove('rate-up','rate-down'); el.textContent=(txt==='-')?'-':(i===0?txt+' Bs/USDT':txt); });
+    },1600);
+  }
 }
 async function fetchUsdtRate(){
   try{
@@ -492,6 +507,13 @@ async function fetchUsdtRate(){
 try{ var _uc=JSON.parse(localStorage.getItem('ft13_usdt')||'null'); if(_uc&&_uc.rate>0){ _usdtRate=_uc.rate; _usdtAt=_uc.at||0; } }catch(e){}
 // Tasa efectiva para convertir VES→USD al anotar una tx: la USDT del monitor P2P
 // (refleja el USDT real gastado) si esta fresca (<24h); si no, cae al BCV.
+// Aritmetica simple en campos de monto ("1000+2500*2"). Solo digitos y
+// + - * / ( ) . , — cualquier otra cosa da NaN. Coma = decimal (teclado VE).
+function evalMath(str){
+  var x=String(str==null?'':str).replace(/,/g,'.').replace(/\s+/g,'');
+  if(!x||!/^[0-9+\-*/().]+$/.test(x)) return NaN;
+  try{ var v=Function('"use strict";return('+x+')')(); return (typeof v==='number'&&isFinite(v))?v:NaN; }catch(e){ return NaN; }
+}
 function vesTxRate(){
   return (_usdtRate&&(Date.now()-_usdtAt)<24*60*60*1000)?_usdtRate:S.rate;
 }
@@ -810,7 +832,7 @@ function autofillFromNote(){
     return;
   }
 }
-function updateVesPreview(){ var a=parseFloat(document.getElementById('tx-amount').value)||0; var vr=vesTxRate(); document.getElementById('usd-preview').textContent=(vr&&a>0)?(a/vr).toFixed(2):'-'; }
+function updateVesPreview(){ var a=evalMath(document.getElementById('tx-amount').value)||0; var vr=vesTxRate(); document.getElementById('usd-preview').textContent=(vr&&a>0)?(a/vr).toFixed(2):'-'; }
 
 var pendingReceiptUrl = null;
 var receiptUploading = false;
@@ -896,7 +918,7 @@ function addTx(){
   var type=document.getElementById('tx-type').value;
   var cat=document.getElementById('tx-cat').value;
   var cur=document.getElementById('tx-cur').value;
-  var amt=parseFloat(document.getElementById('tx-amount').value);
+  var amt=evalMath(document.getElementById('tx-amount').value);
   if(!date||!desc||isNaN(amt)||amt<=0){ txMsg('Date, note and amount are required'); return; }
   var amtUSD=amt, amtVES=null;
   var _vr=vesTxRate();
@@ -908,7 +930,23 @@ function addTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
   closeTxForm();
+  showTxToast();
 }
+// Toast post-agregado con deshacer inmediato (el snapshot() de addTx ya dejo
+// el estado previo en el undo stack).
+var _txToastT=null;
+function showTxToast(){
+  var t=document.getElementById('tx-toast');
+  if(!t){
+    t=document.createElement('div'); t.id='tx-toast'; t.className='action-toast';
+    t.innerHTML='<span>Transaccion agregada</span><button onclick="doUndo();hideTxToast()">Deshacer</button>';
+    document.body.appendChild(t);
+  }
+  t.classList.add('show');
+  clearTimeout(_txToastT); _txToastT=setTimeout(hideTxToast,4000);
+}
+function hideTxToast(){ var t=document.getElementById('tx-toast'); if(t) t.classList.remove('show'); }
+window.hideTxToast=hideTxToast;
 
 async function deleteTx(id){
   var t=S.transactions.find(function(x){ return x.id===id; }); if(!t) return;
@@ -1038,7 +1076,21 @@ function updateDateDisplay(){
 function _sheetPush(name){ window._activeSheet=name; try{ history.pushState({sheet:name},''); }catch(e){} }
 function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(history.state&&history.state.sheet){ try{ history.back(); }catch(e){} } } }
 function txMsg(text,ok){ var el=document.getElementById('tx-form-msg'); if(el){ el.textContent=text||''; el.style.color=ok?'#5DCAA5':'#E24B4A'; } }
+// Sugerencias de notas: tus descripciones mas frecuentes (ultimas ~400 txs).
+function populateNoteSuggestions(){
+  var dl=document.getElementById('note-suggestions'); if(!dl) return;
+  var freq={},order=[];
+  for(var i=S.transactions.length-1;i>=0&&order.length<400;i--){
+    var d=(S.transactions[i].desc||'').trim(); if(!d) continue;
+    var k=d.toLowerCase();
+    if(!freq[k]){ freq[k]={c:0,d:d}; order.push(k); }
+    freq[k].c++;
+  }
+  var top=order.map(function(k){ return freq[k]; }).sort(function(a,b){ return b.c-a.c; }).slice(0,30);
+  dl.innerHTML=top.map(function(t){ return '<option value="'+escHtml(t.d)+'">'; }).join('');
+}
 function openTxForm(){
+  populateNoteSuggestions();
   txMsg('');
   // Si el reset diferido del cierre anterior sigue pendiente, ejecutarlo ya
   // (evita que borre lo que editTx/addTx acaban de poner en los campos).
@@ -1156,7 +1208,7 @@ function updateTx(){
   var type=document.getElementById('tx-type').value;
   var cat=document.getElementById('tx-cat').value;
   var cur=document.getElementById('tx-cur').value;
-  var amt=parseFloat(document.getElementById('tx-amount').value);
+  var amt=evalMath(document.getElementById('tx-amount').value);
   if(!date||!desc||isNaN(amt)||amt<=0){ txMsg('Date, note and amount are required'); return; }
   var t=S.transactions.find(function(x){ return x.id===editingTxId; });
   var amtUSD=amt, amtVES=null, rateUsed=null;
@@ -1181,11 +1233,11 @@ function updateTx(){
 async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.name=r.value.trim(); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance en Bs':'New balance',escHtml(w.name)+(isVes?' · se convierte solo a $ con la tasa USDT':''),w.balance); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance en Bs':'New balance',escHtml(w.name)+(isVes?' · se convierte solo a $ con la tasa USDT':'')+' · acepta sumas (1000+2500)',w.balance,{inputType:'text'}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
-async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name),cur); if(!r) return; var v=parseFloat(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · acepta sumas (1000+2500)',cur,{inputType:'text'}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
 
@@ -1360,7 +1412,7 @@ function renderTx(){
       if(cF&&t.category!==cF) return false;
       if(wF&&t.wallet!==wF) return false;
       if(mF&&!t.date.startsWith(mF)) return false;
-      if(sF&&!((t.desc||'').toLowerCase().indexOf(sF)>=0||(t.wallet||'').toLowerCase().indexOf(sF)>=0||(t.category||'').toLowerCase().indexOf(sF)>=0||(t.date||'').indexOf(sF)>=0)) return false;
+      if(sF&&!((t.desc||'').toLowerCase().indexOf(sF)>=0||(t.wallet||'').toLowerCase().indexOf(sF)>=0||(t.category||'').toLowerCase().indexOf(sF)>=0||(t.date||'').indexOf(sF)>=0||String(t.amountUSD).indexOf(sF)>=0||(t.amountVES!=null&&String(t.amountVES).indexOf(sF)>=0))) return false;
       return true;
     });
   }
@@ -3207,6 +3259,21 @@ if(!window._txEscListener){
     if(_xwp&&_xwp.classList.contains('open')) closeExchangeForm();
   });
 }
+// Atajos de teclado (web): N nueva tx, / buscar, 1-7 tabs. No actuan mientras
+// se escribe en un campo ni con el login abierto.
+if(!window._kbShortcuts){
+  window._kbShortcuts=true;
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey||e.metaKey||e.altKey) return;
+    var t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
+    var auth=document.getElementById('auth-overlay'); if(auth&&auth.classList.contains('open')) return;
+    if(e.key==='n'||e.key==='N'){ e.preventDefault(); showPage('transactions',null); openTxForm(); }
+    else if(e.key==='/'){ e.preventDefault(); showPage('transactions',null); var sIn=document.getElementById('tf-search'); if(sIn) sIn.focus(); }
+    else { var tabs={'1':'summary','2':'transactions','3':'budget','4':'wallets','5':'holdings','6':'tools','7':'settings'}; if(tabs[e.key]) showPage(tabs[e.key],null); }
+  });
+}
+
 // Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
 function attachSheetDrag(panel, closeFn){
   if(!panel||panel._dragBound) return; panel._dragBound=true;

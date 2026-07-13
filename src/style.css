@@ -1283,3 +1283,13 @@ select option::checkmark{
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+/* Toast post-agregar tx con Deshacer */
+.action-toast{position:fixed;left:50%;bottom:92px;transform:translate(-50%,16px);background:#1c1c26;border:1px solid var(--line);border-radius:99px;padding:9px 10px 9px 18px;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--txt2);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:300;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.action-toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.action-toast button{background:rgba(155,112,240,.16);border:none;color:#B79CF5;border-radius:99px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+@media(min-width:721px){.action-toast{bottom:28px}}
+/* Pulso de la tasa USDT en el header */
+.rval{transition:color .3s}
+.rval.rate-up{color:#4ED9A4}
+.rval.rate-down{color:#E24B4A}
