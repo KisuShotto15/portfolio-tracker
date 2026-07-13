@@ -81,6 +81,8 @@ var S = {
   // Ultimos valores escritos del Profit Calculator (sell/amount/fee; buy se
   // autollena con la tasa). Sync LWW normal via UpdatedAt.
   profitCalc:{}, profitCalcUpdatedAt:null,
+  p2pCalc:{}, p2pCalcUpdatedAt:null,     // P2P Spread: sell/buy/fee
+  bcvCalc:{}, bcvCalcUpdatedAt:null,     // BCV->Emily: usd/usdt
   // Limites por categoria como % del Monthly Total (fuente de verdad). El USD se
   // deriva: pct/100 * budgetTotal, asi cambiar el total rescala todo.
   categoryBudgetPcts:{}, categoryBudgetPctsUpdatedAt:null,
@@ -278,11 +280,21 @@ async function pullFromCloud(quiet){
 // Vuelca S.profitCalc a los inputs del Profit Calculator. No pisa el campo que
 // el usuario esta editando (activeElement), igual que el autofill de pc-buy.
 function restoreProfitCalc(){
-  var pc=S.profitCalc||{};
-  [['pc-sell','sell'],['pc-amount','amount'],['pc-card','fee']].forEach(function(p){
-    var el=document.getElementById(p[0]); if(!el||el===document.activeElement) return;
-    var v=pc[p[1]]!=null?String(pc[p[1]]):'';
-    if(el.value!==v) el.value=v;
+  var sets=[
+    [S.profitCalc||{}, [['pc-sell','sell'],['pc-amount','amount'],['pc-card','fee']], true],
+    [S.p2pCalc||{},    [['p2p-sell','sell'],['p2p-buy','buy'],['p2p-comm','fee']],    false],
+    [S.bcvCalc||{},    [['be-usd','usd'],['be-usdt','usdt']],                          false],
+  ];
+  sets.forEach(function(cfg){
+    var st=cfg[0], clearMissing=cfg[2];
+    cfg[1].forEach(function(p){
+      var el=document.getElementById(p[0]); if(!el||el===document.activeElement) return;
+      // clearMissing=false: sin valor guardado se respeta el default del HTML
+      // (ej: p2p-comm arranca en 3.6), no se borra.
+      if(st[p[1]]==null&&!clearMissing) return;
+      var v=st[p[1]]!=null?String(st[p[1]]):'';
+      if(el.value!==v) el.value=v;
+    });
   });
 }
 
@@ -302,7 +314,7 @@ function afterPull(){
     case 'budget': renderBudget(); break;
     case 'wallets': renderWallets(); break;
     case 'holdings': renderOnchainWallets(); renderWalletHoldings(); break;
-    case 'tools': renderBdvLimits(); restoreProfitCalc(); calcProfit(); break;
+    case 'tools': renderBdvLimits(); restoreProfitCalc(); calcProfit(); calcSpread(); calcBCVEmily(); break;
     case 'history': renderHistory(window._historyView||'snapshots'); break;
   }
 }
@@ -3412,6 +3424,9 @@ async function init(){
   if(!S.profitCalc||(!S.profitCalc.sell&&!S.profitCalc.amount&&!S.profitCalc.fee)){
     try{ var _pc=JSON.parse(localStorage.getItem('ft13_pc')||'{}'); if(_pc.sell||_pc.amount){ S.profitCalc={sell:_pc.sell||'',amount:_pc.amount||'',fee:''}; S.profitCalcUpdatedAt=stamp(); } }catch(e){}
   }
+  if(!S.p2pCalc||S.p2pCalc.fee==null){
+    try{ var _p2f=localStorage.getItem('ft13_p2pc'); if(_p2f){ S.p2pCalc=Object.assign({},S.p2pCalc,{fee:_p2f}); S.p2pCalcUpdatedAt=stamp(); } }catch(e){}
+  }
   restoreProfitCalc();
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
   if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
@@ -3438,7 +3453,6 @@ async function bootAfterAuth(firstLogin){
   runMigrations();
   if(S.binanceKey){ var bk=document.getElementById('bn-key'); if(bk) bk.value=S.binanceKey; }
   if(S.binanceSecret){ var bs=document.getElementById('bn-secret'); if(bs) bs.value=S.binanceSecret; }
-  try{ var _p2pc=localStorage.getItem('ft13_p2pc'); if(_p2pc){ var el=document.getElementById('p2p-comm'); if(el) el.value=_p2pc; } }catch(e){}
   var hash=(window.location.hash||'').replace('#','');
   showPage(hash||'summary', null);
   fetchRate(false);
