@@ -2536,13 +2536,26 @@ function renderBudget(){
   });
   html+='</div>';
 
-  // Month-vs-month comparison card (siempre desplegada, todas las categorias)
+  // Month-vs-month comparison card (siempre desplegada, todas las categorias).
+  // Con el mes en curso, comparar al MISMO corte de dia (May 1-12 vs Jun 1-12 vs
+  // Jul 1-12): comparar meses completos contra uno a medias no significaba nada.
+  // Viendo un mes pasado en el selector, meses completos como siempre.
   (function(){
     var m1=prevMonth(month), m2=prevMonth(m1);          // m2=mas viejo, month=mas nuevo
     var lbl=function(m){ return new Date(m+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}); };
+    var cut=isCurMonth?dayNum:32;                       // dia de corte (32 = mes completo)
+    var per={}, wanted={}; wanted[m2]=1; wanted[m1]=1; wanted[month]=1;
+    S.transactions.forEach(function(t){
+      var m=t.date.slice(0,7); if(!wanted[m]) return;
+      if(+t.date.slice(8,10)>cut) return;
+      var k=m+'|'+t.category;
+      var e=per[k]||(per[k]={d:0,c:0});
+      if(t.type==='Debit') e.d+=t.amountUSD; else if(t.type==='Credit') e.c+=t.amountUSD;
+    });
+    var cutVal=function(m,cat){ var e=per[m+'|'+cat]; return e?Math.max(0,e.d-e.c):0; };
     var rows='', t2=0, t1=0, t0=0;
     BUDGET_CATS.forEach(function(cat){
-      var v2=catNetSpend(m2,[cat]), v1=catNetSpend(m1,[cat]), v0=catNetSpend(month,[cat]);
+      var v2=cutVal(m2,cat), v1=cutVal(m1,cat), v0=cutVal(month,cat);
       t2+=v2; t1+=v1; t0+=v0;
       if(v2===0&&v1===0&&v0===0) return;
       var d=v0-v1, col=d===0?'var(--txt3)':(d>0?'#E24B4A':'#5DCAA5'), arr=d===0?'·':(d>0?'▲':'▼');
@@ -2552,7 +2565,7 @@ function renderBudget(){
     });
     var dT=t0-t1, colT=dT===0?'var(--txt3)':(dT>0?'#E24B4A':'#5DCAA5'), arrT=dT===0?'·':(dT>0?'▲':'▼');
     html+='<div class="mvm-card">'
-      +'<span class="cleg" style="margin-bottom:20px">Mes vs mes</span>'
+      +'<span class="cleg" style="margin-bottom:20px">Mes vs mes'+(isCurMonth?' <span style="text-transform:none;letter-spacing:0;color:var(--txt3)">· al dia '+dayNum+'</span>':'')+'</span>'
       +'<div class="mvm-row mvm-head"><span class="mvm-cat">Categoria</span><span class="mvm-num">'+lbl(m2)+'</span><span class="mvm-num">'+lbl(m1)+'</span><span class="mvm-num">'+lbl(month)+'</span><span class="mvm-num">Δ</span></div>'
       +(rows||'<div style="font-size:14px;color:var(--txt3);padding:10px 2px">Sin gastos en estos meses.</div>')
       +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num mvm-pre">'+fmtUSD(t2)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(t1)+'</span><span class="mvm-num">'+fmtUSD(t0)+'</span><span class="mvm-num mvm-delta" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
