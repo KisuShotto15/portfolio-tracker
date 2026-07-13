@@ -90,7 +90,8 @@ var S = {
   // el default; asi un mes con mas Discretionary/Health se ajusta puntualmente.
   categoryBudgetPctsByMonth:{}, categoryBudgetPctsByMonthUpdatedAt:null,
   rateUpdatedAt:null,
-  presets:[], presetsUpdatedAt:null,
+  presets:[], presetsUpdatedAt:null, // legacy (plantillas eliminadas; docs viejos lo traen)
+  notePins:[], notePinsUpdatedAt:null, // notas fijadas con estrella: siempre primero en sugerencias
   bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
   recurringLog:[], recurringLogUpdatedAt:null,
@@ -216,7 +217,7 @@ async function pushToCloud(){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
-        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderPresetsManage(); renderBdvLimits();
+        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderBdvLimits();
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
@@ -960,76 +961,6 @@ async function deleteTx(id){
   S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary();
 }
 
-// ── Quick-add presets ──────────────────────────────────────────────────
-var _presetsSig=null;
-function renderPresets(){
-  var wrap=document.getElementById('tx-presets'); if(!wrap) return;
-  // Solo reconstruir si cambiaron: corria en cada apertura del sheet, retrasando el primer frame
-  var sig=editingTxId?'edit':'p'+(S.presetsUpdatedAt||0)+'|'+(S.presets||[]).length;
-  if(sig===_presetsSig) return;
-  _presetsSig=sig;
-  if(editingTxId){ wrap.innerHTML=''; return; }
-  var sorted=(S.presets||[]).slice().sort(function(a,b){ return (b.uses||0)-(a.uses||0) || b.id-a.id; });
-  var html=sorted.map(function(p){
-    var amt=(p.amount!=null&&p.amount!=='')?' <b>'+(p.currency==='VES'?'Bs ':'$')+p.amount+'</b>':'';
-    return '<span class="preset-chip"><span class="preset-lbl" onclick="applyPreset('+p.id+')">'+escHtml(p.label)+amt+'</span><span class="preset-x" onclick="deletePreset('+p.id+')" title="Borrar">✕</span></span>';
-  }).join('');
-  html+='<button class="preset-chip preset-save" onclick="saveAsPreset()">💾 Guardar</button>';
-  wrap.innerHTML=html;
-}
-function applyPreset(id){
-  var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
-  p.uses=(p.uses||0)+1; S.presetsUpdatedAt=stamp(); save();
-  document.getElementById('tx-desc').value=p.note||'';
-  if(p.wallet) document.getElementById('tx-wallet').value=p.wallet;
-  document.getElementById('tx-type').value=p.type||'Debit';
-  document.getElementById('tx-cat').value=p.category||'';
-  document.getElementById('tx-cur').value=p.currency||'USD';
-  toggleVesHint();
-  if(p.amount!=null&&p.amount!==''){
-    document.getElementById('tx-amount').value=p.amount;
-    addTx();
-  }else{
-    document.getElementById('tx-amount').value='';
-    var a=document.getElementById('tx-amount'); if(a) a.focus();
-  }
-}
-async function saveAsPreset(){
-  var note=document.getElementById('tx-desc').value.trim();
-  var amtRaw=document.getElementById('tx-amount').value;
-  var r=await appPrompt('Guardar como preset','Nombre del preset',note||'',{inputType:'text'});
-  if(!r||!r.value||!r.value.trim()) return;
-  var p={id:Date.now(),label:r.value.trim(),note:note,
-    wallet:document.getElementById('tx-wallet').value,
-    type:document.getElementById('tx-type').value,
-    category:document.getElementById('tx-cat').value,
-    currency:document.getElementById('tx-cur').value,
-    amount:amtRaw!==''?parseFloat(amtRaw):null};
-  if(!S.presets) S.presets=[];
-  S.presets.push(p); S.presetsUpdatedAt=stamp();
-  save(); renderPresets(); renderPresetsManage();
-}
-function deletePreset(id){
-  S.presets=(S.presets||[]).filter(function(x){ return x.id!==id; }); S.presetsUpdatedAt=stamp();
-  save(); renderPresets(); renderPresetsManage();
-}
-async function renamePreset(id){
-  var p=(S.presets||[]).find(function(x){ return x.id===id; }); if(!p) return;
-  var r=await appPrompt('Renombrar preset',escHtml(p.label),p.label,{inputType:'text'});
-  if(!r||!r.value||!r.value.trim()) return;
-  p.label=r.value.trim(); S.presetsUpdatedAt=stamp();
-  save(); renderPresets(); renderPresetsManage();
-}
-function renderPresetsManage(){
-  var wrap=document.getElementById('presets-manage'); if(!wrap) return;
-  if(!(S.presets||[]).length){ wrap.innerHTML='<p style="font-size:13px;color:var(--txt3);padding:6px 2px">No hay presets. Crealos con "Guardar como preset" en el form de transaccion.</p>'; return; }
-  wrap.innerHTML=S.presets.slice().sort(function(a,b){ return (b.uses||0)-(a.uses||0) || b.id-a.id; }).map(function(p){
-    var kind=(p.amount!=null&&p.amount!=='')?'instant · '+(p.currency==='VES'?'Bs ':'$')+p.amount:'template';
-    return '<div class="preset-mrow"><div class="preset-mrid"><span class="preset-mname">'+escHtml(p.label)+'</span><span class="preset-mmeta">'+kind+' · '+escHtml(p.category||'-')+' · '+escHtml(p.wallet||'-')+'</span></div>'
-      +'<div class="preset-macts"><button class="wico" onclick="renamePreset('+p.id+')">'+ '✎' +'</button><button class="wico del" onclick="deletePreset('+p.id+')">✕</button></div></div>';
-  }).join('');
-}
-
 var editingTxId = null;
 function editTx(id){
   var t=S.transactions.find(function(x){ return x.id===id; }); if(!t) return;
@@ -1088,7 +1019,35 @@ function populateNoteSuggestions(){
     if(!freq[k]){ freq[k]={c:0,d:d}; order.push(k); }
     freq[k].c++;
   }
-  _noteSuggestions=order.map(function(k){ return freq[k]; }).sort(function(a,b){ return b.c-a.c; }).slice(0,30).map(function(t){ return t.d; });
+  var freqList=order.map(function(k){ return freq[k]; }).sort(function(a,b){ return b.c-a.c; }).slice(0,30).map(function(t){ return t.d; });
+  // Fijadas primero (en su orden estable de fijado), luego las frecuentes.
+  var pins=S.notePins||[];
+  var pinsLow=pins.map(function(d){ return d.toLowerCase(); });
+  _noteSuggestions=pins.concat(freqList.filter(function(d){ return pinsLow.indexOf(d.toLowerCase())<0; }));
+}
+function _noteRow(d){
+  var pinned=(S.notePins||[]).some(function(x){ return x.toLowerCase()===d.toLowerCase(); });
+  return '<div class="note-sug-row'+(pinned?' pinned':'')+'">'
+    +'<button type="button" class="note-sug-txt" onclick="pickNoteSuggest(this.textContent)">'+escHtml(d)+'</button>'
+    +'<button type="button" class="note-sug-star'+(pinned?' on':'')+'" onclick="toggleNotePin(this)" data-d="'+escHtml(d)+'" aria-label="Fijar">'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="'+(pinned?'currentColor':'none')+'" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+    +'</button></div>';
+}
+window.toggleNotePin=function(btn){
+  var d=btn.getAttribute('data-d'); if(!d) return;
+  if(!S.notePins) S.notePins=[];
+  var i=S.notePins.findIndex(function(x){ return x.toLowerCase()===d.toLowerCase(); });
+  if(i>=0) S.notePins.splice(i,1); else S.notePins.push(d);
+  S.notePinsUpdatedAt=stamp(); save();
+  populateNoteSuggestions();
+  // re-render manteniendo el popup abierto (respetando el filtro actual si hay texto)
+  var inp=document.getElementById('tx-desc');
+  if(inp&&inp.value.trim()) updateNoteSuggest(); else _renderNoteSuggest(_noteSuggestions.slice(0,12));
+};
+function _renderNoteSuggest(list){
+  var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
+  pop.innerHTML=list.map(_noteRow).join('')||'<span style="padding:8px 12px;font-size:12px;color:var(--txt3)">Sin historial aun</span>';
+  pop.classList.add('open');
 }
 // Autocompletado mientras escribes, en el popup propio (el datalist nativo no
 // se puede estilar y desentonaba con la pagina).
@@ -1099,17 +1058,13 @@ window.updateNoteSuggest=function(){
   if(!q){ pop.classList.remove('open'); return; }
   var m=_noteSuggestions.filter(function(d){ var l=d.toLowerCase(); return l.indexOf(q)>=0&&l!==q; }).slice(0,8);
   if(!m.length){ pop.classList.remove('open'); return; }
-  pop.innerHTML=m.map(function(d){ return '<button type="button" onclick="pickNoteSuggest(this.textContent)">'+escHtml(d)+'</button>'; }).join('');
-  pop.classList.add('open');
+  _renderNoteSuggest(m);
 };
 window.toggleNoteSuggest=function(e){
   e.stopPropagation(); e.preventDefault();
   var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
   if(pop.classList.contains('open')){ pop.classList.remove('open'); return; }
-  pop.innerHTML=_noteSuggestions.slice(0,12).map(function(d){
-    return '<button type="button" onclick="pickNoteSuggest(this.textContent)">'+escHtml(d)+'</button>';
-  }).join('')||'<span style="padding:8px 12px;font-size:12px;color:var(--txt3)">Sin historial aun</span>';
-  pop.classList.add('open');
+  _renderNoteSuggest(_noteSuggestions.slice(0,12));
 };
 window.pickNoteSuggest=function(d){
   var inp=document.getElementById('tx-desc'); if(inp){ inp.value=d; autofillFromNote(); }
@@ -1127,7 +1082,6 @@ function openTxForm(){
   if(_txResetTimer){ clearTimeout(_txResetTimer); _txResetTimer=null; if(!editingTxId) _resetTxFields(); }
   if(!editingTxId){ document.getElementById('tx-date').value=localToday(); setDefaultWallet(); }
   updateDateDisplay();
-  renderPresets();
   document.getElementById('fab-add').style.display='none';
   var panel=document.getElementById('tx-form-panel'), ov=document.getElementById('tx-overlay');
   // Flush layout now (commits the value/innerHTML writes above with the closed transform),
@@ -1164,7 +1118,6 @@ function _resetTxFields(){
   var df=document.getElementById('tx-date-field'); if(df) df.style.display='';
   var tg=document.getElementById('tx-rec-toggle'); if(tg) tg.style.display='none';
   var rl=document.getElementById('tx-rec-list'); if(rl) rl.style.display='none';
-  var pr=document.getElementById('tx-presets'); if(pr) pr.style.display='';
   var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display='';
   var nsp=document.getElementById('note-suggest-pop'); if(nsp) nsp.classList.remove('open');
 }
@@ -1934,8 +1887,7 @@ function toggleTxRecurring(){
   // el "Dia del mes" ocupa el mismo slot que Date en el grid (swap 1:1)
   var df=document.getElementById('tx-date-field'); if(df) df.style.display=on?'none':'';
   var dayF=document.getElementById('tx-rec-day-field'); if(dayF) dayF.style.display=on?'':'none';
-  // en modo recurrente sobran: presets (agregarian una tx normal) y la factura
-  var pr=document.getElementById('tx-presets'); if(pr) pr.style.display=on?'none':'';
+  // en modo recurrente sobra la factura
   var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display=on?'none':'';
   var list=document.getElementById('tx-rec-list'); if(list) list.style.display=on&&_txRecListOpen?'':'none';
   var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?(_editingRecId?'Guardar regla':'Add regla'):'Add';
@@ -1952,7 +1904,11 @@ function renderTxRecList(){
   var n=(S.recurring||[]).length;
   var on=!!(document.getElementById('tx-recurring')&&document.getElementById('tx-recurring').checked);
   var tg=document.getElementById('tx-rec-toggle');
-  if(tg){ tg.textContent=n+' '+(_txRecListOpen?'▴':'▾'); tg.title='Reglas guardadas'; tg.style.display=on&&n?'':'none'; }
+  if(tg){
+    tg.innerHTML=n+' <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    tg.classList.toggle('open',_txRecListOpen);
+    tg.title='Reglas guardadas'; tg.style.display=on&&n?'':'none';
+  }
   var wrap=document.getElementById('tx-rec-list'); if(!wrap) return;
   if(!n){ _txRecListOpen=false; wrap.style.display='none'; wrap.innerHTML=''; return; }
   wrap.innerHTML=S.recurring.slice().sort(function(a,b){ return (a.dayOfMonth||0)-(b.dayOfMonth||0); }).map(function(r){
@@ -3113,7 +3069,7 @@ function showPage(id,btn,arg){
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
   else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); fitAllCalcVals(); }
   else if(id==='history') renderHistory(arg||'snapshots');
-  else if(id==='settings'){ renderPresetsManage(); var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; }
+  else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
   var ov=document.getElementById('overlay'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('nav-open');
@@ -3370,10 +3326,6 @@ window.removeReceipt = removeReceipt;
 window.toggleReceiptMenu = toggleReceiptMenu;
 window.pickReceipt = pickReceipt;
 window.updateDateDisplay = updateDateDisplay;
-window.applyPreset = applyPreset;
-window.saveAsPreset = saveAsPreset;
-window.deletePreset = deletePreset;
-window.renamePreset = renamePreset;
 window.openReceipt = function(url){
   var ov=document.getElementById('receipt-lightbox');
   if(!ov){

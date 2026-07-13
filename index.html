@@ -523,7 +523,6 @@
     <h3>New transaction</h3>
     <button class="btn btns tx-close" onclick="closeTxForm()" title="Close" aria-label="Close">&#x2715;</button>
   </div>
-  <div class="tx-presets" id="tx-presets"></div>
   <div class="field-row">
     <div class="field" id="tx-date-field"><span class="field-lbl">Date</span>
       <div class="date-field" onclick="openTxDatePicker()">
@@ -539,7 +538,7 @@
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
     <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select></div>
-    <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USD</option><option value="VES">VES</option></select></div>
+    <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USDT</option><option value="VES">VES</option></select></div>
     <div class="field"><span class="field-lbl">Amount</span><input type="text" inputmode="decimal" id="tx-amount" placeholder="0.00" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
   </div>
   <div class="tx-rec-row" id="tx-rec-row">
@@ -565,7 +564,7 @@
       <img id="tx-receipt-img" src="" alt="" onclick="openReceipt(this.src)"/>
       <button class="btn btns" onclick="removeReceipt()" style="color:#E24B4A;border-color:transparent;padding:2px 8px">Quitar</button>
     </div>
-    <span id="ves-hint" style="display:none;font-size:12px;color:var(--color-text-secondary)">approx <span id="usd-preview">-</span> USD</span>
+    <span id="ves-hint" style="display:none;font-size:12px;color:var(--color-text-secondary)">approx <span id="usd-preview">-</span> USDT</span>
   </div>
 </div>
 <button class="fab-add" id="fab-add" onclick="document.getElementById('page-wallets').classList.contains('active')?openWalletForm():openTxForm()">+</button>

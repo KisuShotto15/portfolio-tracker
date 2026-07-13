@@ -1301,3 +1301,16 @@ select option::checkmark{
 #note-suggest-pop.open{display:block}
 #note-suggest-pop button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--txt2);font-size:14px;padding:9px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #note-suggest-pop button:hover,#note-suggest-pop button:active{background:rgba(255,255,255,.06)}
+
+/* Sugerencias de nota: fila texto + estrella para fijar */
+.note-sug-row{display:flex;align-items:center;gap:2px}
+.note-sug-txt{flex:1;min-width:0;text-align:left;background:transparent;border:none;color:var(--txt2);font-size:14px;padding:9px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note-sug-row:hover .note-sug-txt,.note-sug-txt:active{background:rgba(255,255,255,.06)}
+.note-sug-star{flex-shrink:0;background:transparent;border:none;color:var(--txt3);opacity:.55;cursor:pointer;padding:8px;border-radius:8px;display:flex;align-items:center}
+.note-sug-star.on{color:#EF9F27;opacity:1}
+.note-sug-star:hover{opacity:1}
+.note-sug-row.pinned .note-sug-txt{color:var(--txt)}
+/* Chevron rotatorio del toggle de Reglas */
+.tx-rec-toggle{display:inline-flex;align-items:center;gap:5px}
+.tx-rec-toggle svg{transition:transform .2s}
+.tx-rec-toggle.open svg{transform:rotate(180deg)}
