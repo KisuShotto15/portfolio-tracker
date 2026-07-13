@@ -2513,10 +2513,6 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    // Delta vs mes pasado: compacto (flecha + monto redondeado), nada si no hubo cambio.
-    var dPrev=catNetSpend(insMonth, [cat]); var dD=s-dPrev;
-    var dCol=dD>0?'#E24B4A':'#5DCAA5';
-    var dTxt=(Math.abs(dD)<0.5||(s===0&&dPrev===0))?'':(dD>0?'▲ ':'▼ ')+fmtShortUSD(Math.abs(dD));
     // Nota (solo si hay algo que decir): pasado del limite, o proyeccion que lo excede.
     var note='';
     if(catLim>0&&s>catLim){
@@ -2525,17 +2521,16 @@ function renderBudget(){
       var proj=s/dayNum*dimP;
       if(proj>catLim) note='<div class="bdg-pace" style="color:#EF9F27">~'+fmtShortUSD(proj)+' a fin de mes</div>';
     }
-    // Limite como texto discreto; tap para editar (muestra el input y enfoca).
-    var limView=(ci.pct>0?ci.pct+'% · '+fmtUSD(catLim):'sin limite')+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'');
+    // Layout: input de % (asignacion) arriba a la derecha del label; monto grande
+    // centrado; barra; debajo % usado (izq) y limite derivado (der). Sin delta
+    // mes-a-mes (ya vive en la card Mes vs mes).
     html+='<div class="bdg-cat">'
-      +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span><span class="bdg-cat-pct">'+cp+'%</span></div>'
+      +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span>'
+        +'<span class="bdg-lim-wrap"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%'+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'')+'</span>'
+      +'</div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-lim">'
-        +'<span class="bdg-lim-view" title="Tocar para editar el limite" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+limView+'</span>'
-        +'<span class="bdg-lim-wrap" style="display:none"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%</span>'
-        +(dTxt?'<span class="bdg-cat-delta" style="color:'+dCol+'">'+dTxt+'</span>':'')
-      +'</div>'
+      +'<div class="bdg-cat-sub"><span>'+cp+'%</span><span>'+(catLim>0?'de '+fmtUSD(catLim):'sin limite')+'</span></div>'
       +note
       +'</div>';
   });
