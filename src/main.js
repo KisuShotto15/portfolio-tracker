@@ -1442,8 +1442,12 @@ function renderTx(){
   var shown=data.length>_txLimit?data.slice(0,_txLimit):data;
   var rows=buildTxRows(shown,'');
   var moreBtn=txMoreHtml();
-  wrap.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>'
-    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
+  // La linea de resumen solo con un filtro activo: ahi responde "cuanto es esto
+  // que filtre"; sin filtros era un total historico sin uso.
+  var anyFilter=!!(tF||cF||wF||mF||sF);
+  var sumLine=anyFilter?'<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:.875rem">'+data.length+' records &middot; Total debits: <strong style="color:#E24B4A">'+fmtUSD(totalDebits)+'</strong></div>':'';
+  wrap.innerHTML=sumLine
+    +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USDT</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
     +(moreBtn?'<div id="tx-more" style="text-align:center;margin-top:18px">'+moreBtn+'</div>':'');
   watchTxMore();
 }
