@@ -21,6 +21,9 @@ function feeOf(key){
 function renderCalcCards(cardsId, resultId, cards, small){
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
     var cls = c.green ? ' g' : c.red ? ' r' : '';
+    // Valores largos (Bs de 7 digitos) bajan de fuente para no salirse de la card
+    // (en telefonos angostos o con la escala de fuente del sistema subida).
+    if(String(c.value).length > 8) cls += ' xs';
     return '<div class="tcalc-card'+(small?' tcalc-sm':'')+'">'
       +'<div class="tcalc-lbl">'+c.label+'</div>'
       +'<div class="tcalc-val'+cls+'">'+c.value+'</div>'
