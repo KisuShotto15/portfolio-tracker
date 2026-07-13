@@ -2039,7 +2039,7 @@ function renderGoal(){
       +'</div>'
       +inputRow
       +'<div class="goal-bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'
-      +'<div class="goal-meta"><span>'+fmtUSD(current)+'</span><span>'+(months?'~'+months+' mo · '+fmtUSD(contrib)+'/mo':'')+'</span></div>';
+      +'<div class="goal-meta"><span>'+fmtUSD(current)+'</span><span>'+(months?'~'+months+' mo · '+fmtUSD(contrib)+'/mo · '+fmtUSD(contrib/30)+'/dia':'')+'</span></div>';
   } else {
     gHtml='<div class="cleg">Financial Goal</div>'+inputRow;
   }
