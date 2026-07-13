@@ -1328,3 +1328,6 @@ select option::checkmark{
 
 /* Con un bottom-sheet abierto, la pagina de atras no scrollea (el scroller es html) */
 html.sheet-open,html.sheet-open body{overflow:hidden}
+
+/* Toggle de la linea + Holdings en el hero del net worth */
+#eq-holdings-btn.on{color:#9B70F0}

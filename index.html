@@ -76,6 +76,9 @@
             <span class="nw-lbl">Net Worth</span>
             <div style="display:flex;align-items:center;gap:6px">
               <button class="btn btns btn-accent" onclick="recordSnapshot()">+ Snapshot</button>
+              <button class="hist-btn" id="eq-holdings-btn" onclick="toggleEqHoldings()" title="Mostrar/ocultar linea + Holdings" aria-label="Linea Holdings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3"><polyline points="3 17 9 11 13 14 21 6"/></svg>
+              </button>
               <div id="equity-hist"></div>
             </div>
           </div>
