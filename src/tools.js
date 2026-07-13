@@ -95,7 +95,7 @@ export function calcProfit(fromUser){
   var isPos = profit >= 0;
   var bsNeeded = spent * buyRate; // total en Bs a pagar (Bank × Buy)
   renderCalcCards('pc-cards','pc-result',[
-    { label:'Bs Needed', value: bsNeeded > 0 ? Math.round(bsNeeded).toLocaleString('es-VE') : '—', sub:'&nbsp;' },
+    { label:'Invest', value: bsNeeded > 0 ? Math.round(bsNeeded).toLocaleString('es-VE') : '—', sub:'Bs needed' },
     { label:'Recharge', value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2) },
     { label:'Profit',   value:(isPos?'+':'')+'$'+profit.toFixed(2), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
   ], true);
