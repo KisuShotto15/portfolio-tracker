@@ -1304,8 +1304,14 @@ select option::checkmark{
 .note-dd-btn:active,.note-dd-btn:hover{color:var(--txt2);background:rgba(255,255,255,.05)}
 .note-dd-btn svg{transition:transform .2s ease}
 .note-dd-btn.open svg{transform:rotate(180deg)}
-#note-suggest-pop{display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:#1c1c26;border:1px solid var(--line);border-radius:12px;z-index:60;max-height:220px;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,.55);padding:4px}
-#note-suggest-pop.open{display:block}
+/* Mismo look del ::picker de los selects, y en top-layer (popover) para que no
+   lo recorte el sheet ni herede el scrollbar del panel */
+#note-suggest-pop{display:none;position:fixed;inset:auto;margin:0;background:var(--surface2);border:1px solid var(--line);border-radius:14px;z-index:400;max-height:min(300px,45vh);overflow-y:auto;box-shadow:0 16px 40px rgba(0,0,0,.55);padding:6px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+#note-suggest-pop.open,#note-suggest-pop:popover-open{display:block}
+#note-suggest-pop::-webkit-scrollbar{width:8px}
+#note-suggest-pop::-webkit-scrollbar-track{background:transparent;margin:6px 0}
+#note-suggest-pop::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px;border:2px solid transparent;background-clip:padding-box}
+#note-suggest-pop::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3);background-clip:padding-box}
 
 /* Sugerencias de nota: fila texto + estrella para fijar */
 .note-sug-row{display:flex;align-items:center;gap:2px}

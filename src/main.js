@@ -1047,8 +1047,23 @@ window.toggleNotePin=function(btn){
 function _setNotePop(open){
   var pop=document.getElementById('note-suggest-pop');
   var btn=document.querySelector('.note-dd-btn');
-  if(pop) pop.classList.toggle('open',open);
-  if(btn) btn.classList.toggle('open',open); // chevron rota 180 como el ::picker-icon de los selects
+  if(btn) btn.classList.toggle('open',!!open); // chevron rota 180 como el ::picker-icon de los selects
+  if(!pop) return;
+  pop.classList.toggle('open',!!open);
+  var inp=document.getElementById('tx-desc');
+  if(open&&inp){
+    // Anclado al campo, abriendo hacia arriba (posicion fija: el popover vive en
+    // el top-layer, fuera del clipping/scroll del sheet).
+    var r=inp.getBoundingClientRect();
+    pop.style.left=r.left+'px'; pop.style.width=r.width+'px';
+    pop.style.top='auto'; pop.style.bottom=(window.innerHeight-r.top+4)+'px';
+  }
+  try{
+    if(pop.showPopover){
+      if(open&&!pop.matches(':popover-open')) pop.showPopover();
+      else if(!open&&pop.matches(':popover-open')) pop.hidePopover();
+    }
+  }catch(e){}
 }
 function _renderNoteSuggest(list){
   var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
