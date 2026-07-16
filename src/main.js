@@ -2309,6 +2309,16 @@ async function recordSnapshot(){
       'Replace'
     );
     if(!ok) return;
+    // La income tx que dejo el snapshot viejo (Profit ... del calculo anterior)
+    // queda obsoleta al reemplazar: se borra con tombstone para no duplicar
+    // Income cuando se cree la nueva. Sin esto quedaba huerfana y se sumaba doble.
+    var oldTxId=S.snapshots[existing].txId;
+    if(oldTxId!=null){
+      if(!S.deletedTxIds) S.deletedTxIds=[];
+      S.deletedTxIds.push({id:oldTxId,ts:stamp()});
+      S.transactions=S.transactions.filter(function(t){ return t.id!==oldTxId; });
+      S.transactionsUpdatedAt=stamp();
+    }
     S.snapshots.splice(existing,1);
   }
   S.snapshots.push({id:Date.now(),date:today,total:val,holdingsValue:holdingsTotalUsd()});
