@@ -559,6 +559,9 @@ input,select,textarea,button{font-family:inherit}
   .bdg-stat-v{font-size:19px}
   .bdg-cat{padding:14px 12px}
   .bdg-cat-top{gap:6px}
+  /* Nombre mas chico y recortable: un nombre largo (Discretionary) con un % de
+     4 cifras (14.7%) chocaba en 2 columnas. overflow hidden evita el solape. */
+  .bdg-cat-name{font-size:13px;overflow:hidden;text-overflow:ellipsis}
   .bdg-cat-amt{font-size:21px}
   /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
      anterior, actual y delta) y baja la fuente */
