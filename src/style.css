@@ -495,14 +495,13 @@ input,select,textarea,button{font-family:inherit}
 .bdg-cat{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:17px 19px;transition:border-color .15s;min-width:0;text-align:center}
 .bdg-cat:hover{border-color:var(--line)}
 .bdg-cat-top{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:13px}
-.bdg-cat-name{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:500;color:var(--txt2)}
+.bdg-cat-name{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:500;color:var(--txt2);white-space:nowrap;min-width:0}
 .bdg-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .bdg-cat-amt{font-family:var(--font-num);font-size:25px;font-weight:600;letter-spacing:-.5px;margin-bottom:13px}
-/* El % vive DENTRO del "input" visual: el borde lo dibuja el wrap (input+%),
-   asi el sufijo no se puede borrar ni se separa del numero en pantallas angostas. */
-.bdg-lim-wrap{display:inline-flex;align-items:baseline;gap:1px;color:var(--txt3);font-size:12px;border-bottom:1px dashed var(--line);padding:1px 3px;flex-shrink:0}
-.bdg-lim-wrap:focus-within{border-bottom-color:var(--accent)}
-.bdg-lim-inp{font-family:var(--font-num);font-size:12px;font-weight:500;color:var(--txt2);background:transparent;border:none;width:34px;text-align:right;padding:0;-moz-appearance:textfield}
+/* El % es sufijo pegado al numero (input+%), sin recuadro ni piso: solo texto
+   editable. El sufijo no se puede borrar porque vive fuera del input. */
+.bdg-lim-wrap{display:inline-flex;align-items:baseline;gap:1px;color:var(--txt3);font-size:12px;flex-shrink:0}
+.bdg-lim-inp{font-family:var(--font-num);font-size:12px;font-weight:500;color:var(--txt2);background:transparent;border:none;width:30px;text-align:right;padding:0;-moz-appearance:textfield}
 .bdg-lim-inp::-webkit-outer-spin-button,.bdg-lim-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .bdg-lim-inp:focus{outline:none;color:#fff}
 .bdg-lim-inp::placeholder{color:var(--txt3)}
@@ -559,6 +558,7 @@ input,select,textarea,button{font-family:inherit}
   .bdg-stat{border-right:0}
   .bdg-stat-v{font-size:19px}
   .bdg-cat{padding:14px 12px}
+  .bdg-cat-top{gap:6px}
   .bdg-cat-amt{font-size:21px}
   /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
      anterior, actual y delta) y baja la fuente */
