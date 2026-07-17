@@ -127,6 +127,9 @@ var GROUP_BUSINESS=['Business'];
 var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={}, _rateTimer=null, _timersOn=false;
 var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0, _pullChanged=false;
+// Cambios locales sin subir a la nube (se muestran en el banner offline). Cuenta
+// cada save() y se resetea cuando un push confirma. Persiste para sobrevivir reload.
+var _pendingCount=0;
 
 // Monotonic logical clock for last-writer-wins. Using a plain Date.now() lets a
 // device with a skewed clock silently lose its newer edit; stamp() only ever moves
@@ -223,7 +226,8 @@ async function pushToCloud(){
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
-    if(_saveSeq===_pushSeq){ _dirty=false; try{ localStorage.removeItem('ft13_dirty'); }catch(e){} } // no edit landed during the push
+    if(_saveSeq===_pushSeq){ _dirty=false; _pendingCount=0; try{ localStorage.removeItem('ft13_dirty'); localStorage.removeItem('ft13_pending'); }catch(e){} updateOfflineBanner(); } // no edit landed during the push
+    else { _pendingCount=Math.max(0,_saveSeq-_pushSeq); try{ localStorage.setItem('ft13_pending',_pendingCount); }catch(e){} } // quedan ediciones posteriores al push
     if(typeof _retryTimer!=='undefined') clearTimeout(_retryTimer);
     setSyncStatus('synced','Synced');
     var cs=document.getElementById('cloud-status');
@@ -335,10 +339,12 @@ async function autoPull(){
 window.addEventListener('online', function(){
   setSyncStatus('syncing','Reconnecting...');
   syncFailed=false;
+  updateOfflineBanner(); // oculta el banner offline; el push que sigue baja el contador
   pullFromCloud().then(function(){ pushToCloud(); });
 });
 window.addEventListener('offline', function(){
   setSyncStatus('offline','Offline');
+  updateOfflineBanner();
 });
 
 var _retryTimer=null, _pushFailCount=0;
@@ -362,10 +368,23 @@ function scheduleRetry(){
 
 function save(){
   _saveSeq++; _dirty=true;
-  try{ localStorage.setItem('ft13_dirty','1'); }catch(e){} // marca que hay cambios sin pushear (sobrevive reload)
+  _pendingCount++;
+  try{ localStorage.setItem('ft13_dirty','1'); localStorage.setItem('ft13_pending',_pendingCount); }catch(e){} // marca cambios sin pushear (sobrevive reload)
+  updateOfflineBanner();
   saveLocal();
   clearTimeout(syncTimer);
   syncTimer=setTimeout(pushToCloud, 1500);
+}
+// Banner visible cuando estas offline a proposito (distinto del de fallo de sync,
+// que solo sale con red disponible). Muestra cuantos cambios faltan por subir.
+function updateOfflineBanner(){
+  var b=document.getElementById('offline-banner');
+  if(!navigator.onLine){
+    if(!b){ b=document.createElement('div'); b.id='offline-banner'; b.className='offline-banner'; document.body.appendChild(b); }
+    var n=_pendingCount;
+    b.innerHTML='<span>&#128244; Trabajando offline'+(n>0?' &middot; <b>'+n+'</b> cambio'+(n===1?'':'s')+' sin subir':'')+'</span>';
+    b.classList.add('show');
+  } else if(b){ b.classList.remove('show'); }
 }
 
 async function forcePull(){
@@ -3521,7 +3540,8 @@ async function init(){
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   restoreProfitCalc();
   populateWalletSelects(); updateRateUI(); toggleWmBalField();
-  if(!navigator.onLine){ setSyncStatus('offline','Offline'); }
+  try{ _pendingCount=parseInt(localStorage.getItem('ft13_pending'),10)||0; }catch(e){}
+  if(!navigator.onLine){ setSyncStatus('offline','Offline'); updateOfflineBanner(); }
   // Si viene de un enlace de correo, la sesion llega en el fragmento → login directo.
   var justLinked=sbConsumeHashSession();
   // Requiere sesion valida antes de sincronizar. Sin token o refresh rechazado
