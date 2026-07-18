@@ -1324,7 +1324,7 @@ var NOTE_ICONS=[
   { keywords:['pan'],      src:'/icon-pan.png?v=1',      zoom:1.1 },
   { keywords:['gatarina','mimosa','kittens','gatos','gato'], src:'/icon-mimosa.png?v=2', zoom:1 },
   { keywords:['mercantil','merpa'], src:'/icon-merpa.png?v=2', zoom:1 },
-  { keywords:['verduras','verdura','vegetales','vegetal','hortalizas','platano','platanos','tomate','tomates','cebolla','cebollas','papa','papas','zanahoria','zanahorias','lechuga','aguacate','pimenton','yuca','ajo','frutas','fruta','verduleria','fruteria'], src:'/icon-veggies.png?v=3', zoom:1 },
+  { keywords:['verduras','verdura','vegetales','vegetal','hortalizas','platano','platanos','tomate','tomates','cebolla','cebollas','papa','papas','zanahoria','zanahorias','lechuga','aguacate','pimenton','yuca','ajo','frutas','fruta','verduleria','fruteria'], src:'/icon-veggies.png?v=4', zoom:1 },
 ];
 // Matchea por palabra (keywords) o por frase/substring (phrase, para marcas de
 // varias palabras como "Mi Super").
