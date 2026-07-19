@@ -2562,13 +2562,11 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    // Nota (solo si hay algo que decir): pasado del limite, o proyeccion que lo excede.
+    // Nota (solo si hay algo que decir): pasado del limite. La proyeccion "a fin
+    // de mes" se quito por pedido — ensuciaba la tarjeta.
     var note='';
     if(catLim>0&&s>catLim){
       note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtShortUSD(freeOthers)+' libres':'')+'</div>';
-    } else if(canPace&&catLim>0&&s>0){
-      var proj=s/dayNum*dimP;
-      if(proj>catLim) note='<div class="bdg-pace" style="color:#EF9F27">~'+fmtShortUSD(proj)+' a fin de mes</div>';
     }
     // Layout: input de % (asignacion) arriba a la derecha del label; monto grande
     // centrado; barra; debajo % usado (izq) y limite derivado (der). Sin delta
@@ -2579,7 +2577,7 @@ function renderBudget(){
       +'</div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-sub"><span>'+cp+'%</span><span>'+(catLim>0?'de '+fmtUSD(catLim):'sin limite')+'</span></div>'
+      +'<div class="bdg-cat-sub"><span>'+cp+'%</span><span>'+(catLim>0?'de '+fmtUSD(catLim):'$0 planeado')+'</span></div>'
       +note
       +'</div>';
   });
