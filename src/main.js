@@ -3197,6 +3197,7 @@ function renderHistory(view){
   }
 
   function fmtMd(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function fmtTime(id){ return new Date(id).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); }
   html+='<div class="snap-list">';
   html+='<div class="snap-row snap-head-row">'
     +'<div class="snap-col-date">Date</div>'
@@ -3217,7 +3218,7 @@ function renderHistory(view){
     }
     var cumCell='<span class="snap-cum '+cls(r.cumDelta)+'">'+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' <span class="snap-cum-pct">('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></span>';
     html+='<div class="snap-row">'
-      +'<div class="snap-col-date"><span class="snap-d">'+fmtMd(r.s.date)+'</span>'+adjLine(r)+'</div>'
+      +'<div class="snap-col-date"><span class="snap-d">'+fmtMd(r.s.date)+' <span class="snap-time">'+fmtTime(r.s.id)+'</span></span>'+adjLine(r)+'</div>'
       +'<div class="snap-col-nw"><span class="snap-total">'+fmtUSD(r.s.total)+'</span></div>'
       +'<div class="snap-col-pnl">'+pnlCell+'</div>'
       +'<div class="snap-col-pct">'+pctCell+'</div>'
