@@ -2035,7 +2035,11 @@ window.addRecurringRule=function(){
   renderTxRecList();
   applyRecurring(); // si ya paso el dia este mes, se agrega de una
 };
-window.deleteRecurringRule=function(id){
+window.deleteRecurringRule=async function(id){
+  var r=(S.recurring||[]).find(function(x){ return x.id===id; }); if(!r) return;
+  var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
+  var ok=await appConfirm('Delete recurring rule?',escHtml(r.label)+' <span style="color:'+(r.type==='Credit'?'#5DCAA5':'#E24B4A')+'">'+amt+'</span>','Delete');
+  if(!ok) return;
   S.recurring=(S.recurring||[]).filter(function(x){ return x.id!==id; }); S.recurringUpdatedAt=stamp();
   // limpia las entradas del log que pertenecen a esta regla (por rid)
   if(Array.isArray(S.recurringLog)){
