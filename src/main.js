@@ -2403,6 +2403,20 @@ window._budResetMonth=function(){
   }
   renderBudget();
 };
+// Scroll del mouse sube/baja el % (solo si el input esta enfocado, para no
+// alterar valores por accidente al pasar el cursor mientras se hace scroll de
+// la pagina). Se debounce el guardado: renderBudget() recrea el input y
+// perderia el foco si guardaramos en cada tick de la rueda.
+window.bdgPctWheel=function(e,el,cat){
+  if(document.activeElement!==el) return;
+  e.preventDefault();
+  var step=parseFloat(el.step)||0.5;
+  var cur=parseFloat(el.value)||0;
+  var next=Math.max(0,Math.round((cur+(e.deltaY<0?step:-step))*10)/10);
+  el.value=next;
+  clearTimeout(el._pctT);
+  el._pctT=setTimeout(function(){ saveCategoryPct(cat,el.value); },500);
+};
 window.saveCategoryPct=function(cat,val){
   var v=parseFloat(val);
   if(_budEditScope==='month'&&_budMonth){
@@ -2573,7 +2587,7 @@ function renderBudget(){
     // mes-a-mes (ya vive en la card Mes vs mes).
     html+='<div class="bdg-cat">'
       +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span>'
-        +'<span class="bdg-lim-wrap"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%'+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'')+'</span>'
+        +'<span class="bdg-lim-wrap"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)" onwheel="bdgPctWheel(event,this,\''+cat+'\')">%'+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'')+'</span>'
       +'</div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
