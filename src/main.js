@@ -1080,20 +1080,43 @@ window.toggleNotePin=function(btn){
   var inp=document.getElementById('tx-desc');
   if(inp&&inp.value.trim()) updateNoteSuggest(); else _renderNoteSuggest(_noteSuggestions.slice(0,12));
 };
+// Coloca el popup anclado al campo Note. Abre hacia ABAJO (lo normal en un
+// dropdown) y solo voltea hacia arriba si abajo no cabe y arriba hay mas espacio.
+// El area util se mide con visualViewport, no con innerHeight: con el teclado
+// abierto el layout viewport no cambia, asi que innerHeight mentia y el panel
+// terminaba cortado fuera de pantalla. maxHeight se ajusta al lado elegido.
+function _posNotePop(){
+  var pop=document.getElementById('note-suggest-pop'), inp=document.getElementById('tx-desc');
+  if(!pop||!inp) return;
+  var r=inp.getBoundingClientRect();
+  var vv=window.visualViewport;
+  var vTop=vv?vv.offsetTop:0, vBot=vTop+(vv?vv.height:window.innerHeight);
+  var GAP=4, EDGE=8, MIN=140;
+  var below=vBot-r.bottom-GAP-EDGE, above=r.top-vTop-GAP-EDGE;
+  pop.style.left=r.left+'px'; pop.style.width=r.width+'px';
+  if(below>=MIN||below>=above){
+    pop.style.bottom='auto'; pop.style.top=(r.bottom+GAP)+'px';
+    pop.style.maxHeight=Math.min(300,Math.max(MIN,below))+'px';
+  } else {
+    pop.style.top='auto'; pop.style.bottom=(window.innerHeight-r.top+GAP)+'px';
+    pop.style.maxHeight=Math.min(300,Math.max(MIN,above))+'px';
+  }
+}
+// El teclado abre/cierra despues de mostrar el popup: reposicionar cuando el
+// visualViewport cambia, o el panel queda anclado a medidas viejas.
+if(window.visualViewport){
+  var _rp=function(){ var p=document.getElementById('note-suggest-pop'); if(p&&p.classList.contains('open')) _posNotePop(); };
+  window.visualViewport.addEventListener('resize',_rp);
+  window.visualViewport.addEventListener('scroll',_rp);
+}
 function _setNotePop(open){
   var pop=document.getElementById('note-suggest-pop');
   var btn=document.querySelector('.note-dd-btn');
   if(btn) btn.classList.toggle('open',!!open); // chevron rota 180 como el ::picker-icon de los selects
   if(!pop) return;
   pop.classList.toggle('open',!!open);
-  var inp=document.getElementById('tx-desc');
-  if(open&&inp){
-    // Anclado al campo, abriendo hacia arriba (posicion fija: el popover vive en
-    // el top-layer, fuera del clipping/scroll del sheet).
-    var r=inp.getBoundingClientRect();
-    pop.style.left=r.left+'px'; pop.style.width=r.width+'px';
-    pop.style.top='auto'; pop.style.bottom=(window.innerHeight-r.top+4)+'px';
-  }
+  // Posicion fija: el popover vive en el top-layer, fuera del clipping/scroll del sheet.
+  if(open) _posNotePop();
   try{
     if(pop.showPopover){
       if(open&&!pop.matches(':popover-open')) pop.showPopover();
