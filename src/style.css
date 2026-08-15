@@ -319,6 +319,8 @@ input,select,textarea,button{font-family:inherit}
   display:flex;align-items:center;gap:11px;margin-bottom:20px;font-size:15px;color:var(--txt3);
 }
 .rval{color:var(--txt);font-weight:600;font-size:16px}
+.rbar .rval,.tx-rates-popup .rval,.tx-rates-btn .rval{cursor:pointer}
+.rbar .rval:hover,.tx-rates-popup .rval:hover,.tx-rates-btn .rval:hover{opacity:.75}
 .rsub{color:var(--txt3);font-size:14px}
 .frow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:22px}
 .frow-break{flex-basis:100%;height:0}

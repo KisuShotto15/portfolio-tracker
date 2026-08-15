@@ -140,13 +140,13 @@
       <div class="tx-rates-wrap" id="tx-rates-wrap">
         <button class="tx-rates-btn" onclick="toggleRatesPopup(event)" aria-label="Ver tasas">
           <span style="font-size:12px;color:var(--txt3)">USDT</span>
-          <span class="rval" id="rate-usdt-m">-</span>
+          <span class="rval" id="rate-usdt-m" onclick="event.stopPropagation();copyRateVal(this)" title="Tap para copiar">-</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--txt3)"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="tx-rates-popup" id="tx-rates-popup">
-          <div class="tx-rate-row"><span>BCV</span><span class="rval" id="rate-display-m">-</span></div>
-          <div class="tx-rate-row"><span>EUR</span><span class="rval" id="rate-eur-m">-</span></div>
-          <div class="tx-rate-row"><span>INTERVENCION</span><span class="rval" id="rate-interv-m">-</span></div>
+          <div class="tx-rate-row"><span>BCV</span><span class="rval" id="rate-display-m" onclick="copyRateVal(this)" title="Tap para copiar">-</span></div>
+          <div class="tx-rate-row"><span>EUR</span><span class="rval" id="rate-eur-m" onclick="copyRateVal(this)" title="Tap para copiar">-</span></div>
+          <div class="tx-rate-row"><span>INTERVENCION</span><span class="rval" id="rate-interv-m" onclick="copyRateVal(this)" title="Tap para copiar">-</span></div>
         </div>
       </div>
     </div>
@@ -164,16 +164,16 @@
       <span class="dash-eyebrow" style="margin-right:26px">Transactions</span>
       <span style="width:1px;height:16px;background:rgba(255,255,255,0.12);margin-right:26px"></span>
       <span style="color:var(--color-text-secondary)">BCV</span>
-      <span class="rval" id="rate-display">-</span>
+      <span class="rval" id="rate-display" onclick="copyRateVal(this)" title="Click para copiar">-</span>
       <span style="width:1px;height:15px;background:rgba(255,255,255,0.12);margin:0 3px"></span>
       <span style="color:var(--color-text-secondary)">EUR</span>
-      <span class="rval" id="rate-eur">-</span>
+      <span class="rval" id="rate-eur" onclick="copyRateVal(this)" title="Click para copiar">-</span>
       <span style="width:1px;height:15px;background:rgba(255,255,255,0.12);margin:0 3px"></span>
       <span style="color:var(--color-text-secondary)">INTERVENCION</span>
-      <span class="rval" id="rate-interv">-</span>
+      <span class="rval" id="rate-interv" onclick="copyRateVal(this)" title="Click para copiar">-</span>
       <span style="width:1px;height:15px;background:rgba(255,255,255,0.12);margin:0 3px"></span>
       <span style="color:var(--color-text-secondary)">USDT</span>
-      <span class="rval" id="rate-usdt">-</span>
+      <span class="rval" id="rate-usdt" onclick="copyRateVal(this)" title="Click para copiar">-</span>
       <button class="btn btns" style="margin-left:6px;padding:6px 10px" onclick="fetchRate(true);fetchUsdtRate()" title="Refrescar todas las tasas" aria-label="Refresh rates">&#8635;</button>
     </div>
     <div class="frow">

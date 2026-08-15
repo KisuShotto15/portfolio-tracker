@@ -780,6 +780,18 @@ function copyAddr(a){
     setTimeout(function(){ el.textContent=prev; el.style.opacity='0.55'; },1500);
   });
 }
+// Tap/click en una tasa (BCV/EUR/Intervencion/USDT) la copia. Se copia solo el
+// numero (sin 'Bs' ni flechas de tendencia) para que sirva pegado en cualquier lado.
+function copyRateVal(el){
+  var m=el.textContent.match(/^[\d.,]+/);
+  if(!m) return;
+  navigator.clipboard.writeText(m[0]).then(function(){
+    var prev=el.textContent;
+    el.textContent='✓';
+    setTimeout(function(){ el.textContent=prev; },900);
+  });
+}
+window.copyRateVal=copyRateVal;
 async function refreshWalletHoldings(){
   var btn=document.querySelector('[onclick="refreshWalletHoldings()"]');
   var wrap=document.getElementById('wh-wrap');
