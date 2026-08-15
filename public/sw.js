@@ -1,7 +1,7 @@
 // Sello de build (lo inyecta vite.config.js): sin bytes nuevos en sw.js los
 // navegadores nunca detectan version nueva (ni updatefound, ni toast).
 const BUILD = '__BUILD__';
-const CACHE = 'portfolio-v9-' + BUILD;
+const CACHE = 'portfolio-v10-' + BUILD;
 
 // Precache the app shell + hashed JS/CSS on install, reading the asset URLs out
 // of index.html. This guarantees offline works even on the first load after a
@@ -53,11 +53,19 @@ self.addEventListener('fetch', e => {
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request, { cache: 'no-cache' }).then(res => {
-        caches.open(CACHE).then(c => c.put('/', res.clone()));
+        // Solo cacheamos un 200 directo. Servirle despues a una navegacion una
+        // respuesta redirigida es un network error ("a redirected response was
+        // used for a request whose redirect mode is not 'follow'") = pantalla en
+        // blanco hasta hard refresh; y un 404/500 cacheado congela ese estado.
+        // vercel.json tiene redirects activos, asi que esto pasa de verdad.
+        if (res.ok && !res.redirected) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put('/', clone));
+        }
         return res;
       }).catch(() =>
-        caches.match(e.request, { ignoreSearch: true })
-          .then(r => r || caches.match('/'))
+        // Offline: el shell cacheado, pero nunca uno redirigido (mismo motivo).
+        caches.match('/').then(r => (r && !r.redirected) ? r : Response.error())
       )
     );
     return;

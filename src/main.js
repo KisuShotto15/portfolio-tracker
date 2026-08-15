@@ -3680,6 +3680,10 @@ async function bootAfterAuth(firstLogin){
     });
   }
 }
+// Marca que el bundle parseo y ejecuto: lo lee el watchdog inline de index.html.
+// Va ANTES de init() a proposito — un error dentro de init() es un bug de la app,
+// no un problema de cache, y no debe disparar el borrado de caches + reload.
+window.__appBooted = 1;
 init();
 
 if('serviceWorker' in navigator){

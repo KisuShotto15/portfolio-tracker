@@ -2,6 +2,38 @@
 <html lang="en" style="color-scheme:dark">
 <head>
 <script>var _h=location.hostname;if(!_h.endsWith('kisushotto.com')&&_h!=='localhost'&&_h!=='127.0.0.1')location.replace('https://kisushotto.com'+location.hash);</script>
+<script>
+/* Auto-recuperacion de cache. Va inline en el HTML a proposito: cuando el bundle
+   no carga (HTML viejo apuntando a un /assets/*.js que ya no existe, o un SW con
+   la cache envenenada) main.js nunca corre, asi que ningun codigo de la app puede
+   arreglarlo — la pantalla queda en blanco hasta un hard refresh manual.
+   Aca borramos caches + SW y recargamos UNA vez, con guard de 60s anti-loop. */
+(function(){
+  var KEY='ft13_heal', busy=0;
+  function heal(){
+    if(busy) return; busy=1;
+    var last=0; try{ last=+localStorage.getItem(KEY)||0; }catch(e){}
+    if(Date.now()-last<60000) return; // ya curamos hace nada: no entrar en loop de reloads
+    try{ localStorage.setItem(KEY,Date.now()); }catch(e){}
+    var jobs=[];
+    if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }));
+    if(navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }));
+    var go=function(){ location.reload(); };
+    Promise.all(jobs).then(go, go);
+  }
+  // 1) Senal precisa e inmediata: el JS/CSS hasheado devolvio 404 o no parseo.
+  //    Los errores de recursos no burbujean -> capture.
+  addEventListener('error', function(e){
+    var t=e.target;
+    if(t&&(t.tagName==='SCRIPT'||t.tagName==='LINK')&&/\/assets\//.test(t.src||t.href||'')) heal();
+  }, true);
+  // 2) Red de seguridad: para 'load' ya corrieron los modulos; si nadie marco el
+  //    boot, el bundle no llego a ejecutar.
+  addEventListener('load', function(){
+    setTimeout(function(){ if(!window.__appBooted) heal(); }, 8000);
+  });
+})();
+</script>
 <meta charset="UTF-8">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-192-v2.png">
