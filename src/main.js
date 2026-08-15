@@ -1339,7 +1339,11 @@ function emptyState(title, sub){
 // Pill hue mirrors the category icon background (CAT_META[cat].bg) so both stay consistent.
 function tagCat(cat){ var m={Income:'tG',Home:'tB',Groceries:'tG',Transport:'tB',Health:'tP',Business:'tT',Discretionary:'tP','Eating Out':'tA',Support:'tR',Investments:'tA',Savings:'tB',
   Services:'tP','Help others':'tA',Emergency:'tR',Other:'tX'}; return m[cat]||'tX'; }
-function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return b.id - a.id; }); }
+// Desempate por updatedAt (momento real de alta/edicion), no por id: las recurrentes
+// usan un id deterministico (fecha + ruleId) para poder revocar tombstones entre
+// dispositivos, no la hora real en que se generaron — por eso con b.id-a.id quedaban
+// siempre "flotando" arriba del dia sin importar cuando se agregaron las demas txs.
+function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return (b.updatedAt||b.id)-(a.updatedAt||a.id); }); }
 
 var CAT_META={
   'Income':       {bg:'#0f4d35', svg:'<polyline points="2 11 6 7 9 9.5 14 4"/><polyline points="10 4 14 4 14 8"/>'},
