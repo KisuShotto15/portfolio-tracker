@@ -1226,12 +1226,23 @@ select:open::picker-icon{
 }
 select::picker(select){
   appearance:base-select;
+  /* Abre SIEMPRE hacia abajo (como el panel de Notas). El UA por defecto usa
+     position-try-order:most-block-size, que elige el lado con mas espacio y por eso
+     los selects de abajo del formulario abrian hacia arriba. Con order:normal solo
+     voltea (flip-block) si realmente no entra abajo. */
+  position-area:block-end span-all;
+  position-try-order:normal;
+  position-try-fallbacks:flip-block;
   background:var(--surface2);
   border:1px solid var(--line);
   border-radius:14px;
   padding:6px;
-  margin-top:8px;
-  max-height:min(300px,52vh);
+  /* margin-block (no margin-top) para que el hueco quede bien tambien al voltear */
+  margin-block:8px;
+  /* --picker-max lo calcula main.js al abrir el select (el hueco real que queda abajo,
+     medido con visualViewport). Sin el, una lista larga no entraria abajo y flip-block
+     la mandaria hacia arriba. El fallback cubre el caso sin JS. */
+  max-height:var(--picker-max,min(300px,52vh));
   overflow-y:auto;
   box-shadow:0 16px 40px rgba(0,0,0,.55);
   /* minimal scrollbar (Firefox) */

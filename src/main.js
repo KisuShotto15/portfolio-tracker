@@ -1102,6 +1102,25 @@ function _posNotePop(){
     pop.style.maxHeight=Math.min(300,Math.max(MIN,above))+'px';
   }
 }
+// Mismo criterio para los <select> (appearance:base-select): el ::picker(select) se
+// ubica solo y, si la lista no entra abajo, el navegador la voltea hacia arriba. Se le
+// pasa el hueco real que queda debajo por una custom property (el pseudo la hereda del
+// select) para que recorte y haga scroll en vez de voltear. Se calcula al empezar la
+// interaccion, justo antes de que el picker se abra.
+function _sizeSelectPicker(el){
+  if(!el||el.tagName!=='SELECT') return;
+  var r=el.getBoundingClientRect();
+  var vv=window.visualViewport;
+  var vBot=vv?vv.offsetTop+vv.height:window.innerHeight;
+  var below=vBot-r.bottom-24; // margin-block del picker + aire hasta el borde
+  el.style.setProperty('--picker-max',Math.max(120,Math.min(300,below))+'px');
+}
+document.addEventListener('pointerdown',function(e){
+  var s=e.target&&e.target.closest&&e.target.closest('select'); if(s) _sizeSelectPicker(s);
+},true);
+document.addEventListener('keydown',function(e){
+  if(e.target&&e.target.tagName==='SELECT') _sizeSelectPicker(e.target);
+},true);
 // El teclado abre/cierra despues de mostrar el popup: reposicionar cuando el
 // visualViewport cambia, o el panel queda anclado a medidas viejas.
 if(window.visualViewport){
