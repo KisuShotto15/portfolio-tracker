@@ -1906,12 +1906,18 @@ function getActiveAlerts(){
   return alerts;
 }
 
+// El bloque de alertas se reconstruye entero (innerHTML) en cada renderAlerts,
+// asi que el estado abierto/cerrado NO puede vivir en el DOM: descartar una
+// alerta re-renderiza y se llevaba puesta la clase .open del popup. Vive aca y
+// se re-aplica despues de cada render.
+var _alertsOpen=false;
 function renderAlerts(){
   var el=document.getElementById('alerts-wrap'); if(!el) return;
   var alerts=getActiveAlerts();
   var hdr='<div class="cleg" style="margin-bottom:.5rem">Alertas</div>';
   if(alerts.length===0){
     el.innerHTML=hdr+'<div class="alerts-empty">✓ Todo en orden</div>';
+    setAlertsPopup(false); // sin alertas no hay popup: soltar el listener global
     return;
   }
   var items=alerts.map(function(a){
@@ -1928,18 +1934,32 @@ function renderAlerts(){
     +'</button>'
     +'<div class="alerts-popup" id="alerts-popup"><div class="alert-list">'+items+'</div></div>'
   +'</div>';
+  // Quedaba abierto antes del re-render y todavia hay alertas: dejarlo abierto.
+  if(_alertsOpen){
+    var np=document.getElementById('alerts-popup'); if(np) np.classList.add('open');
+  }
+}
+// Un solo listener global, con referencia nombrada: addEventListener ignora el
+// duplicado y el close busca el popup VIVO en vez de capturar el nodo de turno
+// (el viejo queda detached en cada render y removerle la clase no hacia nada).
+function _alertsOutsideClick(ev){
+  // Ojo: descartar una alerta re-renderiza el bloque, asi que para cuando el
+  // click burbujea hasta document el target ya esta detached — pero conserva su
+  // cadena de ancestros, asi que closest() sigue reconociendolo como "adentro"
+  // y el popup no se cierra.
+  if(ev.target.closest&&ev.target.closest('.alerts-pop-wrap')) return;
+  setAlertsPopup(false);
+}
+function setAlertsPopup(open){
+  _alertsOpen=open;
+  var p=document.getElementById('alerts-popup'); if(p) p.classList.toggle('open',open);
+  if(open) document.addEventListener('click',_alertsOutsideClick);
+  else document.removeEventListener('click',_alertsOutsideClick);
 }
 function toggleAlertsPopup(e){
-  if(e) e.stopPropagation();
+  if(e) e.stopPropagation(); // no llega a document: no se auto-cierra al abrirse
   var p=document.getElementById('alerts-popup'); if(!p) return;
-  var open=p.classList.toggle('open');
-  if(open){
-    setTimeout(function(){
-      document.addEventListener('click',function close(ev){
-        if(!ev.target.closest('.alerts-pop-wrap')){ p.classList.remove('open'); document.removeEventListener('click',close); }
-      });
-    },0);
-  }
+  setAlertsPopup(!p.classList.contains('open'));
 }
 window.toggleAlertsPopup=toggleAlertsPopup;
 
@@ -3204,6 +3224,7 @@ function showPage(id,btn,arg){
     if(document.getElementById('wv-form-panel').classList.contains('open')) closeWalletForm();
     var _xwp=document.getElementById('xw-form-panel');
     if(_xwp&&_xwp.classList.contains('open')) closeExchangeForm();
+    setAlertsPopup(false); // el popup de alertas tampoco sobrevive al cambio de tab
   }catch(e){}
   document.querySelectorAll('.page.active').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nb.active,#mob-settings-btn.active').forEach(function(b){ b.classList.remove('active'); });
