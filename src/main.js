@@ -1368,6 +1368,7 @@ var CAT_META={
 var NOTE_ICONS=[
   { keywords:['patodo'],  src:'/icon-patodo.png?v=1',  zoom:1.7 },
   { keywords:['farmatodo'], src:'/icon-farmatodo.png?v=1', zoom:1 },
+  { keywords:['disney+'], src:'/icon-disneyp.png?v=1', zoom:1 },
   { keywords:['inter'],   src:'/icon-inter.png?v=1',   zoom:1 },
   { keywords:['netflix'], src:'/icon-netflix.png?v=1', zoom:1 },
   { keywords:['cashea'],   src:'/icon-cashea.png?v=1',   zoom:1 },
