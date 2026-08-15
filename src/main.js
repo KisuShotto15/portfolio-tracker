@@ -3,6 +3,7 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, m
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
+import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
 
 // BCV oficial via dolarvzla (rates.dolarvzla.com). Devuelve la ultima tasa BCV
@@ -1697,60 +1698,42 @@ function renderKPIStrip(month){
 }
 
 // ── Health Score ───────────────────────────────────────────────────────────
-function getWalletShares(){
-  var shares={};
-  (S.exchangeWallets||[]).forEach(function(w){ shares[w.name]=w.balance||0; });
-  S.manualWallets.forEach(function(w){
-    var bal=w.trackerOnly?(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)):w.balance;
-    shares[w.name]=bal;
-  });
-  return shares;
-}
-
 function renderHealthScore(){
   var el=document.getElementById('health-wrap'); if(!el) return;
-  var pnls=getSnapshotPnL();
-  var lastPnl=pnls.length>0?pnls[pnls.length-1]:null;
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  var netWorth=snaps.length>0?snaps[0].total:getTotalBalance();
+  // Ventana movil de 90 dias (health-core.js). El score viejo leia el mes en curso,
+  // asi que el dia 1 se desplomaba a ~0 y se recuperaba solo al ir cargando el mes.
+  var h=healthScoreCore({
+    asOf:localToday(),
+    transactions:S.transactions,
+    snapshots:S.snapshots,
+    expenseCats:EXPENSE_CATS_DASH,
+    budgetTotal:S.budgetTotal,
+    liveNetWorth:getTotalBalance()
+  });
+  var total=h.total, label=h.label;
+  var color=total===null?'#888':total>=80?'#1D9E75':total>=60?'#A3CB48':total>=40?'#EF9F27':'#E24B4A';
+  var totalTxt=total===null?'—':total;
 
-  // Growth (0-25): monthly return % from last snapshot period
-  var growthPct=lastPnl&&lastPnl.snap1>0?(lastPnl.profit/lastPnl.snap1)*100:0;
-  var growthPts=Math.max(0,Math.min(25,Math.round(growthPct*10)));
-
-  // Diversification (0-25): 1 - top wallet share (only positive shares)
-  var shares=getWalletShares();
-  var positiveShares=Object.keys(shares).map(function(k){ return shares[k]; }).filter(function(v){ return v>0; });
-  var totalPos=positiveShares.reduce(function(s,v){ return s+v; },0);
-  var topShare=positiveShares.length>0&&totalPos>0?Math.max.apply(null,positiveShares)/totalPos:1;
-  var divPts=positiveShares.length<=1?0:Math.round((1-topShare)*25/0.7);
-  divPts=Math.max(0,Math.min(25,divPts));
-
-  // Savings rate (0-25): use current month
-  var nowMonth=monthKey(new Date());
-  var kpis=getMonthlyKPIs(nowMonth);
-  var savPts=kpis.savRate!==null?Math.max(0,Math.min(25,Math.round(kpis.savRate/2))):0;
-
-  // Emergency Fund (0-25): months / 6 * 25, capped
-  var emgPts=kpis.emgMo!==null?Math.max(0,Math.min(25,Math.round(kpis.emgMo/6*25))):0;
-
-  var total=growthPts+divPts+savPts+emgPts;
-  var color=total>=80?'#1D9E75':total>=60?'#A3CB48':total>=40?'#EF9F27':'#E24B4A';
-  var label=total>=80?'Excelente':total>=60?'Bien':total>=40?'Mejorable':'Atención';
-
-  function item(name,pts){
-    var pct=pts/25;
-    return '<div class="hb-item"><div class="hb-name">'+name+'</div><div class="hb-bar"><div class="hb-fill" style="width:'+(pct*100)+'%"></div></div></div>';
+  // Metrica sin datos: fila atenuada y '—'. Nunca una barra en 0, que se leeria
+  // como "sacaste cero" en vez de "no hay con que calcularlo".
+  function item(m){
+    var w=m.available?Math.max(0,Math.min(100,m.score)):0;
+    return '<div class="hb-item'+(m.available?'':' hb-off')+'"'
+      +(m.available?'':' title="Sin datos suficientes — no cuenta para el score"')+'>'
+      +'<div class="hb-name">'+m.label+'</div>'
+      +'<div class="hb-bar"><div class="hb-fill" style="width:'+w.toFixed(0)+'%"></div></div>'
+      +'<div class="hb-pts">'+m.display+'</div>'
+    +'</div>';
   }
-  var RR=42, CIRC=2*Math.PI*RR, dash=(total/100)*CIRC;
+  var RR=42, CIRC=2*Math.PI*RR, dash=((total||0)/100)*CIRC;
   var hHtml='<div class="cleg">Salud Financiera</div>'
     +'<div class="health-ring-wrap">'
       +'<div class="health-ring"><svg width="100%" height="100%" viewBox="0 0 100 100">'
         +'<circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"></circle>'
         +'<circle cx="50" cy="50" r="42" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+dash+' '+CIRC+'" transform="rotate(-90 50 50)"></circle>'
-        +'</svg><div class="health-ring-val"><b style="color:'+color+'">'+total+'</b><span>'+label+'</span></div></div>'
+        +'</svg><div class="health-ring-val"><b style="color:'+color+'">'+totalTxt+'</b><span>'+label+'</span></div></div>'
       +'<div class="health-breakdown">'
-        +item('Growth',growthPts)+item('Diversif.',divPts)+item('Retention',savPts)+item('Emergency',emgPts)
+        +h.metrics.map(item).join('')
       +'</div>'
     +'</div>';
   // Only touch the DOM when output actually changed → no node recreation, no re-animation on tab return.
@@ -1765,9 +1748,9 @@ function renderHealthScore(){
     var chevSvg='<svg class="hbm-chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 4 6 8 10 4"/></svg>';
     var healthDrop='<div id="health-drop-m" class="hbm-drop">'
       +'<div class="hbm-drop-inner">'
-        +'<div class="hbm-drop-score" style="color:'+color+'">'+total+'<span class="hbm-drop-lbl">'+label+'</span></div>'
+        +'<div class="hbm-drop-score" style="color:'+color+'">'+totalTxt+'<span class="hbm-drop-lbl">'+label+'</span></div>'
         +'<div class="hbm-items">'
-          +item('Growth',growthPts)+item('Diversif.',divPts)+item('Retention',savPts)+item('Emergency',emgPts)
+          +h.metrics.map(item).join('')
         +'</div>'
       +'</div>'
     +'</div>';
@@ -1790,7 +1773,7 @@ function renderHealthScore(){
     var mHtml='<div class="hbm-row">'
       +'<button class="hbm-pill" onclick="toggleHealthDrop()">'
         +'<span class="hbm-dot" style="background:'+color+'"></span>'
-        +'<span class="hbm-txt">Salud: <b style="color:'+color+'">'+total+'</b></span>'
+        +'<span class="hbm-txt">Salud: <b style="color:'+color+'">'+totalTxt+'</b></span>'
         +chevSvg
       +'</button>'
       +alertPill
