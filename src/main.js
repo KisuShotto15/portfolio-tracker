@@ -2155,7 +2155,7 @@ function renderGoal(){
       +'</div>'
       +inputRow
       +'<div class="goal-bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'
-      +'<div class="goal-meta"><span>'+fmtUSD(current)+'</span><span>'+(months?'~'+months+' mo · '+fmtUSD(contrib)+'/mo · '+fmtUSD(contrib/30)+'/dia':'')+'</span></div>';
+      +(months?'<div class="goal-meta"><span class="goal-meta-item"><b>~'+months+'</b> mo</span><span class="goal-meta-dot">·</span><span class="goal-meta-item"><b>'+fmtUSD(contrib)+'</b>/mo</span><span class="goal-meta-dot">·</span><span class="goal-meta-item"><b>'+fmtUSD(contrib/30)+'</b>/dia</span></div>':'');
   } else {
     gHtml='<div class="cleg">Financial Goal</div>'+inputRow;
   }

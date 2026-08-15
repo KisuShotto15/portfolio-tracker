@@ -273,7 +273,9 @@ input,select,textarea,button{font-family:inherit}
 .goal-edit-btn:hover{color:var(--txt2);background:rgba(255,255,255,.05)}
 .goal-bar{height:11px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:16px}
 .goal-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 70%,#fff))}
-.goal-meta{display:flex;justify-content:space-between;font-size:14px;color:var(--txt3);margin-top:11px;font-family:var(--font-num)}
+.goal-meta{display:flex;justify-content:center;align-items:baseline;gap:8px;font-size:13px;color:var(--txt3);margin-top:14px;font-family:var(--font-num)}
+.goal-meta-item b{color:var(--txt2);font-weight:600}
+.goal-meta-dot{opacity:.4}
 .goal-eta{font-size:14px;color:var(--txt3)}
 
 /* Snapshot P&L */
