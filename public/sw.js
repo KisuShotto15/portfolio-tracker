@@ -52,7 +52,7 @@ self.addEventListener('fetch', e => {
   // fall back to the cached shell when offline.
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(e.request, { cache: 'no-cache' }).then(res => {
         caches.open(CACHE).then(c => c.put('/', res.clone()));
         return res;
       }).catch(() =>
