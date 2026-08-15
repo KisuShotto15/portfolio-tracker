@@ -249,12 +249,12 @@ input,select,textarea,button{font-family:inherit}
 .health-ring-val b{font-family:var(--font-num);font-size:25px;font-weight:600;line-height:1}
 .health-ring-val span{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);margin-top:4px}
 .health-breakdown{display:flex;flex-direction:column;gap:14px;flex:1;min-width:0}
-.health-ring-wrap .hb-item{display:grid;grid-template-columns:72px 1fr 62px;align-items:center;gap:11px}
+.health-ring-wrap .hb-item{display:grid;grid-template-columns:66px 1fr 78px;align-items:center;gap:10px}
 .hb-item{display:grid;grid-template-columns:115px 1fr 47px;align-items:center;gap:12px}
 .hb-name{font-size:15px;color:var(--txt2)}
 .hb-bar{height:5px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
 .hb-fill{height:100%;border-radius:99px;background:var(--green)}
-.hb-pts{font-size:14px;color:var(--txt3);text-align:right}
+.hb-pts{font-size:14px;color:var(--txt3);text-align:right;white-space:nowrap}
 .hb-item.hb-off{opacity:.4}
 .health-score{font-size:58px;font-weight:600;letter-spacing:-.02em;line-height:1;margin-top:2px}
 .health-label{font-size:15px;color:var(--txt3);margin-top:4px;text-transform:uppercase;letter-spacing:.06em}
@@ -998,7 +998,7 @@ input::placeholder{color:var(--txt3)}
   .hbm-drop-score{font-family:var(--font-num);font-size:44px;font-weight:600;line-height:1;display:flex;align-items:baseline;gap:10px}
   .hbm-drop-lbl{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);font-family:inherit;font-weight:400}
   .hbm-items{display:flex;flex-direction:column;gap:10px}
-  .hbm-items .hb-item{grid-template-columns:72px 1fr 62px;gap:10px}
+  .hbm-items .hb-item{grid-template-columns:66px 1fr 78px;gap:9px}
   .hbm-alerts-list{display:flex;flex-direction:column;gap:10px}
   .hbm-alert-item{display:flex;align-items:flex-start;gap:8px;font-size:13px}
   .hbm-alert-msg{color:var(--txt);margin-bottom:2px}

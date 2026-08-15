@@ -29,6 +29,11 @@ export function addDaysISO(iso, n){
 
 function clamp100(v){ if(!isFinite(v)) return 0; return Math.max(0, Math.min(100, v)); }
 
+// Un decimal solo mientras el numero sea chico: la columna de valores es angosta
+// y "127.4 mo" se corta, "127 mo" no. La precision fina importa en 4.2 meses,
+// no en 127.
+function fmtNum(v){ return Math.abs(v) < 100 ? v.toFixed(1) : Math.round(v).toString(); }
+
 // Ultimo snapshot con date <= iso (desempate por id). null si no hay ninguno.
 // Mirar hacia atras es lo que hace que el score sea calculable para CUALQUIER
 // fecha pasada sin guardar estado nuevo.
@@ -83,18 +88,18 @@ export function healthScoreCore(input){
   var runwayOk = avgMonthlyOut > 0 && nwEnd !== null;
   var runwayMo = runwayOk ? nwEnd / avgMonthlyOut : null;
   metrics.push({
-    key:'runway', label:'Colchón', weight:WEIGHTS.runway, available:runwayOk,
+    key:'runway', label:'Runway', weight:WEIGHTS.runway, available:runwayOk,
     // netWorth<=0 puntua 0 pero queda disponible: es senal real, no falta de datos.
     score: runwayOk ? clamp100(runwayMo / TARGET_RUNWAY_MO * 100) : 0,
     value: runwayMo,
-    display: runwayOk ? runwayMo.toFixed(1) + ' meses' : '—'
+    display: runwayOk ? fmtNum(runwayMo) + ' mo' : '—'
   });
 
   // ── Ahorro: cuanto del ingreso retenes ──────────────────────────────────────
   var savOk = inc > 0;
   var savRate = savOk ? (inc - exp) / inc * 100 : null;
   metrics.push({
-    key:'savings', label:'Ahorro', weight:WEIGHTS.savings, available:savOk,
+    key:'savings', label:'Savings', weight:WEIGHTS.savings, available:savOk,
     score: savOk ? clamp100(savRate / TARGET_SAV_PCT * 100) : 0,
     value: savRate,
     display: savOk ? Math.round(savRate) + '%' : '—'
@@ -105,7 +110,7 @@ export function healthScoreCore(input){
   var budOk = allowed > 0 && exp > 0;
   var ratio = budOk ? exp / allowed : null;
   metrics.push({
-    key:'budget', label:'Presup.', weight:WEIGHTS.budget, available:budOk,
+    key:'budget', label:'Budget', weight:WEIGHTS.budget, available:budOk,
     // En o bajo presupuesto ⇒ 100. Sin premio por gastar de menos: eso ya lo
     // premian Ahorro y Colchon, y premiarlo dos veces distorsiona el score.
     score: budOk ? (ratio <= 1 ? 100 : clamp100((1 - (ratio - 1) / BUDGET_FAIL_OVER) * 100)) : 0,
@@ -125,10 +130,10 @@ export function healthScoreCore(input){
     gMonthly = ratioG > 0 ? (Math.pow(ratioG, DAYS_PER_MONTH / windowDays) - 1) * 100 : -100;
   }
   metrics.push({
-    key:'growth', label:'Crecim.', weight:WEIGHTS.growth, available:growOk,
+    key:'growth', label:'Growth', weight:WEIGHTS.growth, available:growOk,
     score: growOk ? clamp100(gMonthly / TARGET_GROWTH_MONTHLY * 100) : 0,
     value: gMonthly,
-    display: growOk ? (gMonthly >= 0 ? '+' : '') + gMonthly.toFixed(1) + '%/mes' : '—'
+    display: growOk ? (gMonthly >= 0 ? '+' : '') + fmtNum(gMonthly) + '%/mo' : '—'
   });
 
   // ── Renormalizacion sobre las disponibles ───────────────────────────────────

@@ -92,7 +92,7 @@ describe('colchon (runway)', () => {
     }));
     expect(byKey(r,'runway').value).toBeCloseTo(6, 5);
     expect(byKey(r,'runway').score).toBeCloseTo(100, 5);
-    expect(byKey(r,'runway').display).toBe('6.0 meses');
+    expect(byKey(r,'runway').display).toBe('6.0 mo');
   });
 
   it('3 meses = 50 pts', () => {
@@ -194,7 +194,7 @@ describe('crecimiento', () => {
     ]}));
     expect(byKey(r,'growth').value).toBeCloseTo(10, 5);
     expect(byKey(r,'growth').score).toBeCloseTo(100, 5);
-    expect(byKey(r,'growth').display).toBe('+10.0%/mes');
+    expect(byKey(r,'growth').display).toBe('+10.0%/mo');
   });
 
   it('5% mensual = 50 pts', () => {
