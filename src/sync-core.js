@@ -106,3 +106,23 @@ export function dueMonths(rule, now){
   }
   return out;
 }
+
+// Una tx recurrente snapshotea r.wallet en el momento de generarse. Si la regla
+// todavia no tenia wallet (o la genero un dispositivo con una copia vieja de la
+// regla), la tx queda con wallet:'' y NUNCA se debita del tracker — aunque
+// despues arregles la regla, la tx ya creada sigue rota para siempre.
+// Backfill: rellena SOLO txs recurrentes sin wallet cuya regla hoy si tiene uno.
+// Un wallet vacio no es elegible en el select, asi que nunca es una eleccion
+// deliberada del usuario: esto no pisa ediciones manuales. Devuelve las txs
+// tocadas para que el caller les ponga updatedAt (y el merge las propague).
+export function backfillRecurringTxWallets(recurring, transactions){
+  var byRule = {};
+  (recurring || []).forEach(function(r){ if(r && r.wallet) byRule[r.id] = r.wallet; });
+  var fixed = [];
+  (transactions || []).forEach(function(t){
+    if(!t || t.wallet || t.recurringId == null) return;
+    var w = byRule[t.recurringId];
+    if(w){ t.wallet = w; fixed.push(t); }
+  });
+  return fixed;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -168,5 +168,49 @@ describe('dueMonths (recurring schedule)', () => {
   it('does not backfill months before the rule existed (first run)', () => {
     // created mid-June, day 1 already passed → only the current month, never May
     expect(ym(dueMonths({ dayOfMonth: 1 }, new Date(2026, 5, 23)))).toEqual(['2026-06']);
+  });
+});
+
+describe('backfillRecurringTxWallets', () => {
+  const rules = [{ id: 1, wallet: 'Provincial' }, { id: 2, wallet: 'Provincial' }];
+
+  it('repairs a recurring tx left without a wallet (el bug de Disney+)', () => {
+    // La regla se arreglo despues de que la tx ya se genero: la tx quedaba con
+    // wallet:'' para siempre y nunca se debitaba del tracker.
+    const txs = [{ id: 10, recurringId: 1, wallet: '', amountUSD: 12 }];
+    expect(backfillRecurringTxWallets(rules, txs)).toHaveLength(1);
+    expect(txs[0].wallet).toBe('Provincial');
+  });
+
+  it('no toca una tx que ya tiene wallet (ni la de otra regla)', () => {
+    const txs = [
+      { id: 10, recurringId: 1, wallet: 'Provincial' },
+      { id: 11, recurringId: 2, wallet: 'Cash' },   // el usuario la movio a mano
+    ];
+    expect(backfillRecurringTxWallets(rules, txs)).toEqual([]);
+    expect(txs[1].wallet).toBe('Cash');
+  });
+
+  it('ignora txs no recurrentes aunque no tengan wallet', () => {
+    const txs = [{ id: 12, wallet: '' }, { id: 13, recurringId: null, wallet: '' }];
+    expect(backfillRecurringTxWallets(rules, txs)).toEqual([]);
+    expect(txs[0].wallet).toBe('');
+  });
+
+  it('no inventa wallet si la regla tampoco tiene', () => {
+    const txs = [{ id: 14, recurringId: 9, wallet: '' }];
+    expect(backfillRecurringTxWallets([{ id: 9, wallet: '' }], txs)).toEqual([]);
+    expect(txs[0].wallet).toBe('');
+  });
+
+  it('es idempotente: la segunda pasada no reporta nada', () => {
+    const txs = [{ id: 10, recurringId: 1, wallet: '' }];
+    backfillRecurringTxWallets(rules, txs);
+    expect(backfillRecurringTxWallets(rules, txs)).toEqual([]);
+  });
+
+  it('aguanta entradas nulas y listas vacias', () => {
+    expect(backfillRecurringTxWallets(null, null)).toEqual([]);
+    expect(backfillRecurringTxWallets(rules, [null, undefined])).toEqual([]);
   });
 });

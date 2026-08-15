@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
@@ -1960,6 +1960,9 @@ function pruneRecurringLog(){
 function applyRecurring(){
   pruneRecurringLog();
   if(!Array.isArray(S.recurring)||!S.recurring.length) return;
+  // Repara txs recurrentes ya generadas que quedaron sin wallet: sin esto nunca
+  // se debitan del tracker aunque despues arregles la regla.
+  var fixedW=backfillRecurringTxWallets(S.recurring,S.transactions);
   var now=new Date(), added=[], deleted=new Set((S.deletedTxIds||[]).map(tombId));
   S.recurring.forEach(function(r){
     if(!r.amount||r.amount<=0||!r.dayOfMonth) return;
@@ -1981,15 +1984,21 @@ function applyRecurring(){
       added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
     });
   });
-  if(added.length){
+  if(added.length||fixedW.length){
     var ut=stamp();
-    S.transactionsUpdatedAt=ut; S.recurringUpdatedAt=ut;
-    if(!Array.isArray(S.recurringLog)) S.recurringLog=[];
-    added.forEach(function(a){ S.recurringLog.unshift(a); });
-    S.recurringLog=S.recurringLog.slice(0,30);
-    S.recurringLogUpdatedAt=ut;
-    // renderWallets: la tx nueva mueve el balance de los trackers — sin esto,
-    // parado en la tab Wallets el monto queda viejo hasta cambiar de tab.
+    S.transactionsUpdatedAt=ut;
+    // updatedAt nuevo en las reparadas: asi el merge propaga el arreglo al resto
+    // de los dispositivos en vez de que una copia vieja sin wallet lo revierta.
+    fixedW.forEach(function(t){ t.updatedAt=ut; });
+    if(added.length){
+      S.recurringUpdatedAt=ut;
+      if(!Array.isArray(S.recurringLog)) S.recurringLog=[];
+      added.forEach(function(a){ S.recurringLog.unshift(a); });
+      S.recurringLog=S.recurringLog.slice(0,30);
+      S.recurringLogUpdatedAt=ut;
+    }
+    // renderWallets: la tx nueva (o reparada) mueve el balance de los trackers —
+    // sin esto, parado en la tab Wallets el monto queda viejo hasta cambiar de tab.
     save(); renderTx(); renderSummary(); renderAlerts(); renderWallets();
   }
 }
@@ -2047,7 +2056,12 @@ window.editRecurringRule=function(id){
   var r=(S.recurring||[]).find(function(x){ return x.id===id; }); if(!r) return;
   _editingRecId=id;
   document.getElementById('tx-desc').value=r.label||'';
-  if(r.wallet) document.getElementById('tx-wallet').value=r.wallet;
+  // Sin el else, editar una regla sin wallet dejaba el select con el valor de la
+  // regla anterior: guardabas y se le pegaba un wallet ajeno. Y una regla creada
+  // asi generaba txs con wallet:'' que nunca se debitan del tracker.
+  // Si el wallet de la regla ya no existe, el select queda en blanco a proposito:
+  // mejor que el usuario lo vea y elija, a que se guarde uno inventado.
+  document.getElementById('tx-wallet').value=r.wallet||'';
   document.getElementById('tx-type').value=r.type||'Debit';
   document.getElementById('tx-cat').value=r.category||'';
   document.getElementById('tx-cur').value=r.currency||'USD';
@@ -2072,9 +2086,13 @@ window.addRecurringRule=function(){
   var day=parseInt(document.getElementById('tx-rec-day').value,10);
   var amount=parseFloat(document.getElementById('tx-amount').value);
   if(!label||isNaN(day)||day<1||day>31||isNaN(amount)||amount<=0){ txMsg('Nota, dia (1-31) y monto son obligatorios'); return; }
+  // Una regla sin wallet genera txs que no se debitan de ningun tracker: se ven
+  // en Transactions pero el balance nunca baja. Mejor frenar aca que dejarla rota.
+  var wsel=document.getElementById('tx-wallet').value;
+  if(!wsel){ txMsg('Elegi un wallet para la regla'); return; }
   if(!S.recurring) S.recurring=[];
   var fields={label:label,dayOfMonth:day,
-    wallet:document.getElementById('tx-wallet').value,
+    wallet:wsel,
     type:document.getElementById('tx-type').value,
     category:document.getElementById('tx-cat').value,
     currency:document.getElementById('tx-cur').value,
