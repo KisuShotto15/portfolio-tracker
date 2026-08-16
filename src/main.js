@@ -1589,15 +1589,13 @@ function catNetSpend(month, cats){ return catNetSpendCore(monthCatTotals(), mont
 // Income del mes = creditos de la categoria Income.
 function monthIncome(month){ return monthIncomeCore(monthCatTotals(), month); }
 
-// Income del mes que NO registraste: el que la app dedujo del snapshot (la tx que
-// crea recordSnapshot). Mide cuanto de lo que entro se esta infiriendo en vez de
-// anotarse. Se identifica por el txId que guarda cada snapshot, no por la
-// descripcion, que el usuario puede editar.
-function monthDerivedIncome(month){
-  var ids={}; (S.snapshots||[]).forEach(function(s){ if(s.txId!=null) ids[s.txId]=1; });
-  return (S.transactions||[]).reduce(function(a,t){
-    return (ids[t.id]&&t.date.slice(0,7)===month)?a+(t.amountUSD||0):a;
-  },0);
+function getAvgMonthlyOutflows(){
+  // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
+  var now=new Date(); var months=[];
+  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
+  var totals=months.map(function(m){ return catNetSpend(m, EXPENSE_CATS_DASH); });
+  var nz=totals.filter(function(v){ return v>0; });
+  return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
 
 function getAvgMonthlyContribution(){
@@ -1673,15 +1671,15 @@ function getMonthlyKPIs(month){
   var monthlyReturn=monthPnls.length>0?monthPnls.reduce(function(s,p){ return s+p.profit; },0):null;
   var lastPnl=monthPnls.length>0?monthPnls[monthPnls.length-1]:null;
   var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?(monthlyReturn/lastPnl.snap1)*100:null;
-  // Acumulado del año: periodos que cierran en el mismo año, hasta el mes elegido.
-  var year=month.slice(0,4);
-  var ytdPnls=pnls.filter(function(p){ return p.to.slice(0,4)===year&&p.to.slice(0,7)<=month; });
-  var ytd=ytdPnls.length>0?ytdPnls.reduce(function(s,p){ return s+p.profit; },0):null;
-  // Income del mes que la app dedujo del snapshot en vez de leerlo de una tx tuya.
-  var unlogged=monthDerivedIncome(month);
+  // Savings Rate: growth / (growth + expenses)
+  var savBase=monthlyReturn!==null&&monthlyReturn>0?monthlyReturn:0;
+  var savRate=savBase+expenses>0?Math.round((savBase/(savBase+expenses))*100):null;
+  // Emergency Fund: netWorth / avg monthly outflows
+  var avgExp=getAvgMonthlyOutflows();
+  var emgMo=netWorth!==null&&avgExp>0?netWorth/avgExp:null;
   // Goal Progress
   var goalPct=(S.dashGoal>0&&netWorth!==null)?Math.min(100,(netWorth/S.dashGoal)*100):null;
-  return {netWorth:netWorth,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,ytd:ytd,unlogged:unlogged,goalPct:goalPct};
+  return {netWorth:netWorth,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,savRate:savRate,emgMo:emgMo,goalPct:goalPct,avgExp:avgExp};
 }
 
 function fmtDelta(cur,prev,opts){
@@ -1711,20 +1709,20 @@ function renderKPIStrip(month){
   function kpi(label,val,sub,color,delta){
     return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+(delta?' '+delta:'')+'</div></div>';
   }
+  var emgColor=cur.emgMo===null?'#888':cur.emgMo>=6?'#1D9E75':cur.emgMo>=3?'#EF9F27':'#E24B4A';
+  var emgVal=cur.emgMo!==null?cur.emgMo.toFixed(1)+' mo':'—';
+  var emgSub=cur.avgExp>0?'÷ '+fmtUSD(cur.avgExp)+'/mo':'no expense data';
   var retColor=cur.monthlyReturn===null?'#888':cur.monthlyReturn>0?'#1D9E75':'#E24B4A';
   var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
   var retSub=cur.lastPnl!==null?(cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%':''):'no snapshots for '+month;
-  // Los 3 KPIs visibles salen todos de los snapshots (patrimonio medido). Los flujos
-  // registrados —income, gasto, savings rate, proyeccion— son trabajo de Budget:
-  // repetirlos aca era mostrar el mismo numero dos veces con distinta ventana.
-  var ytdColor=cur.ytd===null?'#888':cur.ytd>0?'#1D9E75':'#E24B4A';
-  var ytdVal=cur.ytd!==null?(cur.ytd>=0?'+':'')+fmtUSD(cur.ytd):'—';
-  var unlColor=cur.unlogged>0?'#EF9F27':'#888';
+  var savColor=cur.savRate===null?'#888':cur.savRate>=30?'#1D9E75':cur.savRate>=15?'#EF9F27':'#E24B4A';
   var kHtml='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
-    +kpi('Net Profit',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
-    +kpi(month.slice(0,4)+' Total',ytdVal,'acumulado del año',ytdColor,'')
-    +kpi('Unlogged',cur.unlogged>0?fmtUSD(cur.unlogged):'—',cur.unlogged>0?'income deducido, no registrado':'todo registrado',unlColor,'')
+    +kpi('Monthly Return',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
+    // "Profit Retention" (return retenido vs gastos), NO el savings rate clasico
+    // sobre income que muestra Budget — eran dos metricas distintas con el mismo nombre.
+    +kpi('Profit Retention',cur.savRate!==null?cur.savRate+'%':'—','return vs spending',savColor,fmtDelta(cur.savRate,prev.savRate))
+    +kpi('Emergency Fund',emgVal,emgSub,emgColor,fmtDelta(cur.emgMo,prev.emgMo))
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
   // Solo tocar el DOM cuando cambio → la animacion de entrada no se repite en cada sync/tab return.
