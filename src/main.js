@@ -2,7 +2,7 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
 
@@ -1614,6 +1614,14 @@ function getAvgMonthlyContribution(){
 // investment added *after* the snapshot — even same day — isn't wrongly counted,
 // since curSnap's total doesn't reflect it yet (it belongs to the next period).
 function investmentFlow(prevSnap, curSnap){ return investmentFlowCore(S.transactions, prevSnap, curSnap); }
+// Gasto del periodo entre dos snapshots (mismo set que la barra Outflows del grafico).
+function periodNetSpend(prevSnap, curSnap){ return periodNetSpendCore(S.transactions, prevSnap, curSnap, EXPENSE_CATS_DASH); }
+// Income del periodo ya registrado a mano, excluyendo las txs que generaron los
+// propios snapshots (esas no son plata que entro, son el asiento del periodo anterior).
+function periodLoggedIncome(prevSnap, curSnap){
+  var skip={}; (S.snapshots||[]).forEach(function(s){ if(s.txId!=null) skip[s.txId]=1; });
+  return periodLoggedIncomeCore(S.transactions, prevSnap, curSnap, skip);
+}
 // Memo: se llama ~5 veces por render del dashboard (KPIs actual+previo, health,
 // panel P&L) y cada computo es O(snapshots x txs). Invalida por timestamps+longitudes.
 var _pnlKey=null,_pnlVal=null;
@@ -1632,11 +1640,16 @@ function _computeSnapshotPnL(){
     var s1=snaps[i-1],s2=snaps[i];
     var f=investmentFlow(s1,s2);
     var computed=(s2.total-s1.total)+f.invOut-f.invIn;
-    // Si el periodo se "cerro" con su tx de profit, esa tx es la ganancia realizada
-    // (congelada al tomar el snapshot). Usarla evita que mover flujos de Investments
-    // ese mismo dia DESPUES del snapshot desincronice Monthly Return del Income registrado.
+    // Si el periodo se "cerro", su ganancia quedo congelada al tomar el snapshot;
+    // usarla evita que mover flujos de Investments ese mismo dia DESPUES del snapshot
+    // desincronice Monthly Return. La fuente de ese valor congelado es netProfit: el
+    // crecimiento NETO ("cuanto crecio mi capital despues de gastos"), que es lo que
+    // muestra Monthly Return. La tx enlazada ya no sirve para esto porque guarda el
+    // income BRUTO; queda solo como fallback para snapshots viejos, donde si era el neto.
+    // Sin ninguno de los dos, se calcula en vivo (asi editar el snapshot lo actualiza).
     var linked=s2.txId!=null?txById[s2.txId]:null;
-    var profit=linked&&typeof linked.amountUSD==='number'?linked.amountUSD:computed;
+    var profit=typeof s2.netProfit==='number'?s2.netProfit
+      :(linked&&typeof linked.amountUSD==='number'?linked.amountUSD:computed);
     results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:f.invOut,invIn:f.invIn,profit:profit });
   }
   return results;
@@ -2451,10 +2464,23 @@ async function recordSnapshot(){
     var cur=S.snapshots[S.snapshots.length-1];
     var f=investmentFlow(prev,cur);
     var profit=Math.round(((val-prev.total)+f.invOut-f.invIn)*100)/100;
+    // La variacion del patrimonio es NETA (ya trae los gastos descontados), asi que
+    // usarla como Income dejaba el grafico descuadrado: los gastos se restaban dos
+    // veces (una dentro del income, otra en la barra Outflows). Sumandole el gasto
+    // del periodo se reconstruye el income BRUTO, comparable contra Outflows.
+    //   patrimonio: Δ = income - gastos  →  income = Δ + gastos
+    // Se resta el income que ya esta registrado a mano en el periodo: esa plata ya
+    // hizo subir el patrimonio, derivarla otra vez la contaria dos veces.
+    //   income derivado = Δ + gastos - income ya registrado
+    var grossIncome=Math.round((profit+periodNetSpend(prev,cur)-periodLoggedIncome(prev,cur))*100)/100;
     var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
     if(res.checked){
+      // El neto se congela junto con la tx (netProfit) porque es lo que sigue mostrando
+      // Monthly Return; la tx guarda el bruto solo para el grafico. Sin tx no se congela
+      // nada: el P&L se recalcula en vivo, asi editar el snapshot sigue actualizandolo.
+      cur.netProfit=profit;
       var txId=Date.now()+1;
-      S.transactions.push({id:txId,date:today,desc:'Profit '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:profit,originalCurrency:'USD',updatedAt:stamp()});
+      S.transactions.push({id:txId,date:today,desc:'Income '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:grossIncome,originalCurrency:'USD',updatedAt:stamp()});
       S.transactionsUpdatedAt=stamp();
       S.snapshots[S.snapshots.length-1].txId=txId;
     }

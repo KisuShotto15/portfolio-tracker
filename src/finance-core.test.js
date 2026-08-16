@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
-  investmentFlowCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore,
+  investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore,
+  catBudgetPctCore, trackerTxBalancesCore,
 } from './finance-core.js';
 
 const tx = (o) => Object.assign({ date: '2026-07-05', type: 'Debit', category: 'Groceries', amountUSD: 10, wallet: '' }, o);
@@ -59,6 +60,84 @@ describe('investmentFlowCore', () => {
     ];
     const f = investmentFlowCore(txs, { date: '2026-07-01' }, { date: '2026-07-08' });
     expect(f.invOut).toBe(40);
+  });
+});
+
+describe('periodNetSpendCore', () => {
+  const prev = { id: 1000, date: '2026-07-01', total: 20000 };
+  const cur = { id: 2000, date: '2026-07-08', total: 20050 };
+  const CATS = ['Groceries', 'Home', 'Eating Out'];
+
+  it('suma solo las categorias pedidas dentro de (prev, cur]', () => {
+    const txs = [
+      tx({ id: 1500, category: 'Groceries', amountUSD: 300 }),   // dentro
+      tx({ id: 1600, category: 'Home', amountUSD: 200 }),        // dentro
+      tx({ id: 500, category: 'Groceries', amountUSD: 999 }),    // antes de prev: fuera
+      tx({ id: 2500, category: 'Groceries', amountUSD: 999 }),   // despues de cur: fuera
+      tx({ id: 1700, category: 'Investments', amountUSD: 400 }), // flujo externo: no es gasto
+      tx({ id: 1800, category: 'Income', type: 'Credit', amountUSD: 550 }), // income: no es gasto
+    ];
+    expect(periodNetSpendCore(txs, prev, cur, CATS)).toBe(500);
+  });
+
+  it('reconstruye el income bruto: neto + gasto = bruto', () => {
+    // Gane 550, gasto 500 → el patrimonio solo subio 50. El income real es 550.
+    const txs = [tx({ id: 1500, category: 'Groceries', amountUSD: 500 })];
+    const netProfit = cur.total - prev.total;                    // 50 (lo que ve Monthly Return)
+    const spent = periodNetSpendCore(txs, prev, cur, CATS);
+    expect(netProfit).toBe(50);
+    expect(netProfit + spent).toBe(550);
+  });
+
+  it('refunds reducen el gasto y nunca lo vuelven negativo', () => {
+    const txs = [
+      tx({ id: 1500, category: 'Groceries', amountUSD: 100 }),
+      tx({ id: 1600, category: 'Groceries', type: 'Credit', amountUSD: 30 }),
+    ];
+    expect(periodNetSpendCore(txs, prev, cur, CATS)).toBe(70);
+    const soloRefund = [tx({ id: 1500, category: 'Groceries', type: 'Credit', amountUSD: 30 })];
+    expect(periodNetSpendCore(soloRefund, prev, cur, CATS)).toBe(0);
+  });
+
+  it('fallback por fecha cuando faltan ids', () => {
+    const txs = [
+      tx({ category: 'Groceries', amountUSD: 40, date: '2026-07-03' }),
+      tx({ category: 'Groceries', amountUSD: 60, date: '2026-06-30' }), // <= prev.date: fuera
+      tx({ category: 'Groceries', amountUSD: 70, date: '2026-07-20' }), // > cur.date: fuera
+    ];
+    expect(periodNetSpendCore(txs, { date: '2026-07-01' }, { date: '2026-07-08' }, CATS)).toBe(40);
+  });
+});
+
+describe('periodLoggedIncomeCore', () => {
+  const prev = { id: 1000, date: '2026-07-01', total: 20000 };
+  const cur = { id: 2000, date: '2026-07-08', total: 20100 };
+  const inc = (o) => tx(Object.assign({ type: 'Credit', category: 'Income', amountUSD: 100 }, o));
+
+  it('suma el income registrado a mano dentro del periodo', () => {
+    const txs = [
+      inc({ id: 1500, amountUSD: 100 }),
+      inc({ id: 1600, amountUSD: 50 }),
+      inc({ id: 500, amountUSD: 999 }),                       // antes de prev: fuera
+      inc({ id: 2500, amountUSD: 999 }),                      // despues de cur: fuera
+      tx({ id: 1700, category: 'Groceries', amountUSD: 30 }), // gasto: no es income
+    ];
+    expect(periodLoggedIncomeCore(txs, prev, cur, {})).toBe(150);
+  });
+
+  it('excluye las txs generadas por snapshots (asientos, no plata que entro)', () => {
+    const txs = [inc({ id: 1500, amountUSD: 100 }), inc({ id: 1600, amountUSD: 400 })];
+    expect(periodLoggedIncomeCore(txs, prev, cur, { 1600: 1 })).toBe(100);
+  });
+
+  it('sin doble conteo: registrado + derivado = income real', () => {
+    // Entraron 100 (registrados a mano), no hubo gastos → el patrimonio subio 100.
+    const txs = [inc({ id: 1500, amountUSD: 100 })];
+    const netProfit = cur.total - prev.total;                  // 100
+    const logged = periodLoggedIncomeCore(txs, prev, cur, {});
+    const derived = netProfit + 0 - logged;                    // Δ + gastos - registrado
+    expect(derived).toBe(0);
+    expect(logged + derived).toBe(100);                        // no 200
   });
 });
 

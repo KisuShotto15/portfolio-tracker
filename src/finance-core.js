@@ -28,25 +28,63 @@ export function monthIncomeCore(map, month) {
 // Flujos externos: mueven el total pero NO son ganancia (se netean del P&L).
 export function isExtFlow(cat) { return cat === 'Investments' || cat === 'Transfer'; }
 
-// Flujos externos atribuidos al periodo (prevSnap, curSnap]. Atribucion por
-// momento de registro (id/timestamp) en ambos extremos; fallback por fecha para
-// snapshots/txs legacy sin id.
-export function investmentFlowCore(transactions, prevSnap, curSnap) {
+// ¿La tx cae en el periodo (prevSnap, curSnap]? Atribucion por momento de registro
+// (id/timestamp) en ambos extremos; fallback por fecha para snapshots/txs legacy
+// sin id. Compartida por investmentFlowCore y periodNetSpendCore para que ambos
+// atribuyan exactamente igual.
+export function txInPeriodCore(t, prevSnap, curSnap) {
   var lo = prevSnap ? prevSnap.date : '';
+  if (curSnap.id != null && t.id != null && t.id > curSnap.id) return false;
+  if (prevSnap && prevSnap.id != null && t.id != null) {
+    if (t.id <= prevSnap.id) return false;
+  } else {
+    if (!(t.date > lo)) return false;
+  }
+  if ((curSnap.id == null || t.id == null) && !(t.date <= curSnap.date)) return false;
+  return true;
+}
+
+// Flujos externos atribuidos al periodo (prevSnap, curSnap].
+export function investmentFlowCore(transactions, prevSnap, curSnap) {
   var txs = (transactions || []).filter(function (t) {
-    if (!isExtFlow(t.category)) return false;
-    if (curSnap.id != null && t.id != null && t.id > curSnap.id) return false;
-    if (prevSnap && prevSnap.id != null && t.id != null) {
-      if (t.id <= prevSnap.id) return false;
-    } else {
-      if (!(t.date > lo)) return false;
-    }
-    if ((curSnap.id == null || t.id == null) && !(t.date <= curSnap.date)) return false;
-    return true;
+    return isExtFlow(t.category) && txInPeriodCore(t, prevSnap, curSnap);
   });
   var invOut = txs.filter(function (t) { return t.type === 'Debit'; }).reduce(function (a, t) { return a + t.amountUSD; }, 0);
   var invIn = txs.filter(function (t) { return t.type === 'Credit'; }).reduce(function (a, t) { return a + t.amountUSD; }, 0);
   return { invOut: invOut, invIn: invIn };
+}
+
+// Gasto neto (debits - credits, piso 0) de un set de categorias atribuido al
+// periodo (prevSnap, curSnap]. Es catNetSpendCore pero por rango de snapshots en
+// vez de por mes: sirve para reconstruir el income BRUTO de un periodo, dado que
+// la variacion del patrimonio ya viene con los gastos descontados.
+// Income ya registrado a mano como transaccion dentro del periodo (prevSnap, curSnap].
+// Hay que restarlo del income derivado del snapshot: esa plata ya hizo subir el
+// patrimonio, asi que derivarla de nuevo la contaria dos veces.
+// excludeIds: ids de las txs generadas por snapshots anteriores. Son asientos
+// contables (no mueven el balance de las wallets), no plata que entro en el periodo.
+export function periodLoggedIncomeCore(transactions, prevSnap, curSnap, excludeIds) {
+  var skip = excludeIds || {};
+  var total = 0;
+  (transactions || []).forEach(function (t) {
+    if (t.category !== 'Income' || t.type !== 'Credit') return;
+    if (t.id != null && skip[t.id]) return;
+    if (!txInPeriodCore(t, prevSnap, curSnap)) return;
+    total += t.amountUSD;
+  });
+  return total;
+}
+
+export function periodNetSpendCore(transactions, prevSnap, curSnap, cats) {
+  var set = {};
+  (cats || []).forEach(function (c) { set[c] = 1; });
+  var d = 0, c = 0;
+  (transactions || []).forEach(function (t) {
+    if (!set[t.category]) return;
+    if (!txInPeriodCore(t, prevSnap, curSnap)) return;
+    if (t.type === 'Debit') d += t.amountUSD; else if (t.type === 'Credit') c += t.amountUSD;
+  });
+  return Math.max(0, d - c);
 }
 
 // Valor total de Holdings: on-chain (balanceUsd ya calculado) + manuales (qty x precio).
