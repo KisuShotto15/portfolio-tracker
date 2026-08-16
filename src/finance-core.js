@@ -43,6 +43,29 @@ export function snapDerivedIncomeCore(snapshots, month) {
 // Flujos externos: mueven el total pero NO son ganancia (se netean del P&L).
 export function isExtFlow(cat) { return cat === 'Investments' || cat === 'Transfer'; }
 
+// ── Rol de cada categoria en la matematica ──────────────────────────────────
+// Viven aca y no en main.js para que los tests puedan fijar las invariantes: son
+// datos puros, y de ellos depende todo el calculo de income y de gasto.
+export var GROUP_ESSENTIAL = ['Home', 'Groceries', 'Transport', 'Health'];
+export var GROUP_BUSINESS = ['Business'];
+export var GROUP_LIFESTYLE = ['Discretionary', 'Eating Out', 'Support'];
+
+// GASTO: sale del patrimonio. recordSnapshot lo suma de vuelta para reconstruir
+// el income bruto (income = Δ patrimonio + gastos).
+export var EXPENSE_CATS_DASH = GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
+export var BUDGET_CATS = ['Home', 'Groceries', 'Transport', 'Health', 'Business', 'Discretionary', 'Eating Out', 'Support'];
+
+// NEUTRAS: movimientos entre activos que YA rastreas — cobrar una deuda anotada en
+// una wallet tracker, pasar plata de un bolsillo a otro. El patrimonio no cambia,
+// solo cambia de lugar; el efecto ocurre por el campo `wallet` de la tx, nunca por
+// su categoria. Por eso no son income, ni gasto, ni flujo externo.
+//
+// NO AGREGAR a EXPENSE_CATS_DASH ni a BUDGET_CATS. Suena razonable ("ahorrar es una
+// salida de plata"), pero rompe dos cosas de golpe y en silencio: cada movimiento
+// pasa a contar como gasto, Y el income derivado se infla por ese mismo monto,
+// porque recordSnapshot suma los gastos de vuelta. El test de mas abajo lo fija.
+export var NEUTRAL_CATS = ['Savings'];
+
 // ¿La tx cae en el periodo (prevSnap, curSnap]? Atribucion por momento de registro
 // (id/timestamp) en ambos extremos; fallback por fecha para snapshots/txs legacy
 // sin id. Compartida por investmentFlowCore y periodNetSpendCore para que ambos

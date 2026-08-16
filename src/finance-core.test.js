@@ -3,6 +3,7 @@ import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore,
+  EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
 const tx = (o) => Object.assign({ date: '2026-07-05', type: 'Debit', category: 'Groceries', amountUSD: 10, wallet: '' }, o);
@@ -106,6 +107,43 @@ describe('periodNetSpendCore', () => {
       tx({ category: 'Groceries', amountUSD: 70, date: '2026-07-20' }), // > cur.date: fuera
     ];
     expect(periodNetSpendCore(txs, { date: '2026-07-01' }, { date: '2026-07-08' }, CATS)).toBe(40);
+  });
+});
+
+describe('categorias neutras', () => {
+  // Caso real: una wallet tracker donde se anota lo que alguien debe. Cuando paga
+  // $100 se registra Debit/Savings sobre esa wallet: el saldo de la deuda baja, la
+  // plata aparece en otra wallet, y el patrimonio total no se mueve. No es income
+  // (ya era tuyo) ni gasto (no lo consumiste).
+  const cobro = tx({ id: 1500, category: 'Savings', type: 'Debit', amountUSD: 100 });
+  const prev = { id: 1000, date: '2026-07-01', total: 20000 };
+  const cur = { id: 2000, date: '2026-07-08', total: 20000 };   // sin cambio de patrimonio
+
+  it('ninguna categoria neutra esta en las listas de gasto', () => {
+    NEUTRAL_CATS.forEach((c) => {
+      expect(EXPENSE_CATS_DASH).not.toContain(c);
+      expect(BUDGET_CATS).not.toContain(c);
+    });
+  });
+
+  it('ninguna categoria neutra es flujo externo', () => {
+    NEUTRAL_CATS.forEach((c) => expect(isExtFlow(c)).toBe(false));
+  });
+
+  it('un cobro neutro no cuenta como gasto ni como income', () => {
+    expect(periodNetSpendCore([cobro], prev, cur, EXPENSE_CATS_DASH)).toBe(0);
+    expect(periodLoggedIncomeCore([cobro], prev, cur, {})).toBe(0);
+    expect(monthIncomeCore(monthCatTotalsCore([cobro]), '2026-07')).toBe(0);
+    expect(catNetSpendCore(monthCatTotalsCore([cobro]), '2026-07', EXPENSE_CATS_DASH)).toBe(0);
+  });
+
+  it('no distorsiona el income derivado: Δ=0 y gasto=0 ⇒ income=0', () => {
+    // Si Savings entrara en las listas de gasto, este cobro valdria $100 de gasto Y
+    // inflaria el income derivado en $100, porque recordSnapshot los suma de vuelta.
+    const netProfit = cur.total - prev.total;                                   // 0
+    const spent = periodNetSpendCore([cobro], prev, cur, EXPENSE_CATS_DASH);    // 0
+    const logged = periodLoggedIncomeCore([cobro], prev, cur, {});              // 0
+    expect(netProfit + spent - logged).toBe(0);
   });
 });
 

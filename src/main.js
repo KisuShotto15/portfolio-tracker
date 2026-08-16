@@ -2,7 +2,8 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore,
+  GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
 
@@ -123,9 +124,6 @@ var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=
 var _txLimit=60, _txBase=60, _txFilterSig=''; // tx list pagination state
 var _txData=null, _txDayTotals=null; // cache del ultimo filtrado para append incremental
 var _budMonth=null, _budSig=null;
-var GROUP_ESSENTIAL=['Home','Groceries','Transport','Health'];
-var GROUP_BUSINESS=['Business'];
-var GROUP_LIFESTYLE=['Discretionary','Eating Out','Support'];
 var syncTimer=null, _srchTimer=null, syncFailed=false, _whCollapsed={}, _rateTimer=null, _timersOn=false;
 var _dirty=false, _saveSeq=0, _pullTimer=null, _pullInFlight=false, _ts=0, _pullChanged=false;
 // Cambios locales sin subir a la nube (se muestran en el banner offline). Cuenta
@@ -1571,7 +1569,6 @@ function populateTxMonth(){
 }
 
 // ── Dashboard helpers ──────────────────────────────────────────────────────
-var EXPENSE_CATS_DASH=GROUP_ESSENTIAL.concat(GROUP_BUSINESS).concat(GROUP_LIFESTYLE);
 
 // Totales debit/credit por 'YYYY-MM|categoria' en UNA pasada, cacheados.
 // KPIs, alertas, insights y mes-vs-mes hacian decenas de recorridos completos
@@ -2291,7 +2288,8 @@ function renderCatChart(month){
   var cv=document.getElementById('chart-cat'); if(!cv||cv.offsetParent===null) return;
   if(!window.Chart){ ensureChart().then(function(){ renderCatChart(month); }).catch(function(){}); return; }
   var map={};
-  var DONUT_CATS=CATS.filter(function(c){ return c!=='Savings'&&c!=='Investments'; });
+  // Fuera las neutras (no son gasto) y los flujos externos (no son consumo).
+  var DONUT_CATS=CATS.filter(function(c){ return NEUTRAL_CATS.indexOf(c)<0&&!isExtFlow(c); });
   S.transactions.filter(function(t){ return t.date.startsWith(month)&&t.type==='Debit'&&DONUT_CATS.indexOf(t.category)>=0; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amountUSD; });
   var cats=Object.keys(map).sort(function(a,b){ return map[b]-map[a]; }); var vals=cats.map(function(c){ return parseFloat(map[c].toFixed(2)); }); var total=vals.reduce(function(s,v){ return s+v; },0);
   var colors=cats.map(function(c){ return CCOLORS[c]||'#888'; });
@@ -2521,7 +2519,6 @@ function saveBudget(){
   if(v>0&&v!==S.budgetTotal){ S.budgetTotal=parseFloat(v.toFixed(2)); S.budgetTotalUpdatedAt=stamp(); save(); }
   _budSig=null; renderBudget(); // cerrar el modo edicion aunque no cambie
 }
-var BUDGET_CATS=['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
