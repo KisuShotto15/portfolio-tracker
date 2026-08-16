@@ -84,7 +84,7 @@ describe('periodNetSpendCore', () => {
   it('reconstruye el income bruto: neto + gasto = bruto', () => {
     // Gane 550, gasto 500 → el patrimonio solo subio 50. El income real es 550.
     const txs = [tx({ id: 1500, category: 'Groceries', amountUSD: 500 })];
-    const netProfit = cur.total - prev.total;                    // 50 (lo que ve Monthly Return)
+    const netProfit = cur.total - prev.total;                    // 50 (lo que ve el KPI Net Profit)
     const spent = periodNetSpendCore(txs, prev, cur, CATS);
     expect(netProfit).toBe(50);
     expect(netProfit + spent).toBe(550);

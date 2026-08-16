@@ -181,13 +181,15 @@ input,select,textarea,button{font-family:inherit}
 .nw-hero .nw-meta{position:relative;z-index:2;display:flex;align-items:center;gap:10px;margin-top:14px;font-size:15px;color:var(--txt3)}
 .nw-hero-chart{position:relative;z-index:1;margin-top:-36px}
 
-/* KPI strip: Net Worth (1st) → hero, Goal Progress (5th) → Goal card. Show only 3. */
+/* KPI strip: Net Worth (1st) → hero, Goal Progress (4th) → Goal card. Quedan 2:
+   Net Profit (del mes) y Liquid (ahora). Los otros que habia — Profit Retention y
+   Emergency Fund — ya viven en Budget y en Salud Financiera; duplicarlos aca solo
+   repetia el mismo numero con otro nombre. */
 .dash-hidden{display:none}
 #kpi-strip .kpi-card:first-child{display:none}
-#kpi-strip .kpi-card:nth-child(5){display:none}
-#kpi-strip .kpi-strip{grid-template-columns:repeat(3,1fr)}
+#kpi-strip .kpi-card:nth-child(4){display:none}
 .dash-grid > .span12{grid-column:1/-1}
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0;align-items:stretch;position:relative;z-index:50}
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:0;align-items:stretch;position:relative;z-index:50}
 .kpi-row #kpi-strip{display:contents}
 .kpi-row #alerts-wrap{padding:4px 22px;margin:0;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:50}
 
@@ -965,9 +967,11 @@ input::placeholder{color:var(--txt3)}
 
 /* ───────────────── Responsive ───────────────── */
 @media(max-width:1024px){
+  /* 2 KPIs arriba, alertas debajo. La divisoria va en el 2do (Net Profit): el 3ro
+     (Liquid) cierra la fila y el 4to esta oculto. */
   .kpi-row{grid-template-columns:1fr 1fr;row-gap:28px}
   .kpi-row .kpi-card{border-right:none}
-  .kpi-row .kpi-card:nth-child(2),.kpi-row .kpi-card:nth-child(4){border-right:1px solid var(--line-soft)}
+  .kpi-row .kpi-card:nth-child(2){border-right:1px solid var(--line-soft)}
 }
 @media(max-width:900px){
   .dash-grid{grid-template-columns:1fr;gap:36px}
@@ -981,13 +985,18 @@ input::placeholder{color:var(--txt3)}
   .kpi-row{grid-template-columns:1fr 1fr}
   .kpi-row #alerts-wrap{display:none}
   .kpi-card{padding:12px 10px}
-  .kpi-row .kpi-card:nth-child(n){border-right:none}
-  .kpi-row .kpi-card:nth-child(2){grid-column:1/-1;padding-bottom:20px;border-bottom:1px solid var(--line-soft)}
-  .kpi-row .kpi-card:nth-child(3){border-right:1px solid var(--line-soft)}
+  /* Los 2 KPIs comparten fila. Antes el 2do ocupaba el ancho completo y dejaba a
+     los otros dos abajo; con solo dos tarjetas entran de lado a lado. */
+  .kpi-val{font-size:26px}
   #sum-cards{grid-template-columns:1fr 1fr;gap:18px 0}
   .mc:nth-child(2n){border-right:none}
   .nw-hero .nw-val{font-size:40px}
   .dash-head{margin-bottom:16px}
+  /* El chart sangra 18px a cada lado para ir de borde a borde, pero .nw-hero
+     recorta con overflow:hidden y se comia justo el primer y el ultimo punto de
+     la curva (el final se veia plano). El scroll horizontal ya lo bloquean
+     html/body/.main, asi que aca el hidden no hacia falta. */
+  .nw-hero{overflow:visible}
   .nw-hero-chart{margin:0 -18px}
   #health-wrap{display:none}
   #health-bar-m{display:block;margin:0 -18px;padding:10px 18px;border-top:1px solid rgba(255,255,255,.06)}

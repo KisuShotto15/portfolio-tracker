@@ -1553,15 +1553,6 @@ function catNetSpend(month, cats){ return catNetSpendCore(monthCatTotals(), mont
 // todos por aca, asi que alcanza con sumarlo en este punto.
 function monthIncome(month){ return monthIncomeCore(monthCatTotals(), month)+snapDerivedIncomeCore(S.snapshots, month); }
 
-function getAvgMonthlyOutflows(){
-  // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
-  var now=new Date(); var months=[];
-  for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
-  var totals=months.map(function(m){ return catNetSpend(m, EXPENSE_CATS_DASH); });
-  var nz=totals.filter(function(v){ return v>0; });
-  return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
-}
-
 function getAvgMonthlyContribution(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
   var now=new Date(); var months=[];
@@ -1606,9 +1597,9 @@ function _computeSnapshotPnL(){
     var computed=(s2.total-s1.total)+f.invOut-f.invIn;
     // Si el periodo se "cerro", su ganancia quedo congelada al tomar el snapshot;
     // usarla evita que mover flujos de Investments ese mismo dia DESPUES del snapshot
-    // desincronice Monthly Return. La fuente de ese valor congelado es netProfit: el
+    // desincronice el KPI Net Profit. La fuente de ese valor congelado es netProfit: el
     // crecimiento NETO ("cuanto crecio mi capital despues de gastos"), que es lo que
-    // muestra Monthly Return. La tx enlazada ya no sirve para esto porque guarda el
+    // muestra Net Profit. La tx enlazada ya no sirve para esto porque guarda el
     // income BRUTO; queda solo como fallback para snapshots viejos, donde si era el neto.
     // Sin ninguno de los dos, se calcula en vivo (asi editar el snapshot lo actualiza).
     var linked=s2.txId!=null?txById[s2.txId]:null;
@@ -1629,21 +1620,15 @@ function getMonthlyKPIs(month){
   var snapsBefore=snaps.filter(function(s){ return s.date<=monthEnd; });
   var netWorth=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].total:null;
   var expenses=catNetSpend(month, EXPENSE_CATS_DASH);
-  // Monthly Return: snapshot periods ending in month
+  // Net Profit: snapshot periods ending in month
   var pnls=getSnapshotPnL();
   var monthPnls=pnls.filter(function(p){ return p.to.startsWith(month); });
   var monthlyReturn=monthPnls.length>0?monthPnls.reduce(function(s,p){ return s+p.profit; },0):null;
   var lastPnl=monthPnls.length>0?monthPnls[monthPnls.length-1]:null;
   var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?(monthlyReturn/lastPnl.snap1)*100:null;
-  // Savings Rate: growth / (growth + expenses)
-  var savBase=monthlyReturn!==null&&monthlyReturn>0?monthlyReturn:0;
-  var savRate=savBase+expenses>0?Math.round((savBase/(savBase+expenses))*100):null;
-  // Emergency Fund: netWorth / avg monthly outflows
-  var avgExp=getAvgMonthlyOutflows();
-  var emgMo=netWorth!==null&&avgExp>0?netWorth/avgExp:null;
   // Goal Progress
   var goalPct=(S.dashGoal>0&&netWorth!==null)?Math.min(100,(netWorth/S.dashGoal)*100):null;
-  return {netWorth:netWorth,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,savRate:savRate,emgMo:emgMo,goalPct:goalPct,avgExp:avgExp};
+  return {netWorth:netWorth,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,goalPct:goalPct};
 }
 
 function fmtDelta(cur,prev,opts){
@@ -1673,20 +1658,18 @@ function renderKPIStrip(month){
   function kpi(label,val,sub,color,delta){
     return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+(delta?' '+delta:'')+'</div></div>';
   }
-  var emgColor=cur.emgMo===null?'#888':cur.emgMo>=6?'#1D9E75':cur.emgMo>=3?'#EF9F27':'#E24B4A';
-  var emgVal=cur.emgMo!==null?cur.emgMo.toFixed(1)+' mo':'—';
-  var emgSub=cur.avgExp>0?'÷ '+fmtUSD(cur.avgExp)+'/mo':'no expense data';
   var retColor=cur.monthlyReturn===null?'#888':cur.monthlyReturn>0?'#1D9E75':'#E24B4A';
   var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
   var retSub=cur.lastPnl!==null?(cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%':''):'no snapshots for '+month;
-  var savColor=cur.savRate===null?'#888':cur.savRate>=30?'#1D9E75':cur.savRate>=15?'#EF9F27':'#E24B4A';
+  // Liquid: en vivo, no por mes. No lleva delta porque los snapshots solo guardan
+  // el total (no el reparto liquido/por cobrar), asi que no hay mes anterior contra
+  // que compararlo sin inventarlo.
+  var bal=getBalanceSplit();
+  var liqSub=bal.receivable>0?fmtUSD(bal.receivable)+' receivable':'no receivables';
   var kHtml='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
-    +kpi('Monthly Return',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
-    // "Profit Retention" (return retenido vs gastos), NO el savings rate clasico
-    // sobre income que muestra Budget — eran dos metricas distintas con el mismo nombre.
-    +kpi('Profit Retention',cur.savRate!==null?cur.savRate+'%':'—','return vs spending',savColor,fmtDelta(cur.savRate,prev.savRate))
-    +kpi('Emergency Fund',emgVal,emgSub,emgColor,fmtDelta(cur.emgMo,prev.emgMo))
+    +kpi('Net Profit',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
+    +kpi('Liquid',fmtUSD(bal.liquid),liqSub,'#fff',null)
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
   // Solo tocar el DOM cuando cambio → la animacion de entrada no se repite en cada sync/tab return.
@@ -2329,11 +2312,18 @@ function renderEquityChart(){
   if(_eqShowHoldings) _eqDs.push({label:'+ Holdings',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]});
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:_eqDs},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false,min:_eqYMin}}}});}
 
-function getTotalBalance(){
+// El patrimonio partido en lo que puedes gastar HOY vs. lo que solo tienes anotado.
+// Las wallets trackerOnly son deudas a favor (ej: Roi): suman al net worth pero esa
+// plata todavia no esta en ningun lado. El KPI Liquid vive de esta separacion.
+function getBalanceSplit(){
   var api=(S.exchangeWallets||[]).reduce(function(s,w){ return s+(w.balance||0); },0);
-  var trackerBal=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
-  var manualBal=manualNormalTotal();
-  return parseFloat((api+trackerBal+manualBal).toFixed(2));
+  var receivable=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
+  var liquid=api+manualNormalTotal();
+  return {liquid:parseFloat(liquid.toFixed(2)),receivable:parseFloat(receivable.toFixed(2))};
+}
+function getTotalBalance(){
+  var b=getBalanceSplit();
+  return parseFloat((b.liquid+b.receivable).toFixed(2));
 }
 
 function appPrompt(title,infoHtml,defaultVal,opts){
@@ -2445,7 +2435,7 @@ async function recordSnapshot(){
       // se inyectaba como tx en S.transactions y eso obligaba a distinguirla de las
       // reales en cada lectura (doble conteo, tx huerfana al borrar el snapshot, txs
       // de $0, y un valor que el usuario podia editar a mano y desincronizar).
-      //   netProfit    = crecimiento NETO  → Monthly Return
+      //   netProfit    = crecimiento NETO  → KPI Net Profit
       //   derivedIncome = income BRUTO      → grafico / Budget, via monthIncome()
       cur.netProfit=profit;
       cur.derivedIncome=grossIncome;
