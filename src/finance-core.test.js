@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
-  investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore,
-  catBudgetPctCore, trackerTxBalancesCore,
+  investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
+  holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore,
 } from './finance-core.js';
 
 const tx = (o) => Object.assign({ date: '2026-07-05', type: 'Debit', category: 'Groceries', amountUSD: 10, wallet: '' }, o);
@@ -106,6 +106,32 @@ describe('periodNetSpendCore', () => {
       tx({ category: 'Groceries', amountUSD: 70, date: '2026-07-20' }), // > cur.date: fuera
     ];
     expect(periodNetSpendCore(txs, { date: '2026-07-01' }, { date: '2026-07-08' }, CATS)).toBe(40);
+  });
+});
+
+describe('snapDerivedIncomeCore', () => {
+  it('suma el derivedIncome de los snapshots del mes', () => {
+    const snaps = [
+      { id: 1, date: '2026-07-05', total: 100, derivedIncome: 300 },
+      { id: 2, date: '2026-07-20', total: 200, derivedIncome: 250 },
+      { id: 3, date: '2026-06-30', total: 90, derivedIncome: 999 },   // otro mes: fuera
+    ];
+    expect(snapDerivedIncomeCore(snaps, '2026-07')).toBe(550);
+    expect(snapDerivedIncomeCore(snaps, '2026-06')).toBe(999);
+    expect(snapDerivedIncomeCore(snaps, '2026-05')).toBe(0);
+  });
+
+  it('ignora snapshots legacy (txId, sin derivedIncome) — su income ya suma por las txs', () => {
+    const snaps = [
+      { id: 1, date: '2026-07-05', total: 100, txId: 555 },
+      { id: 2, date: '2026-07-20', total: 200, derivedIncome: 250 },
+    ];
+    expect(snapDerivedIncomeCore(snaps, '2026-07')).toBe(250);
+  });
+
+  it('tolera snapshots sin fecha o sin campos', () => {
+    expect(snapDerivedIncomeCore([null, {}, { date: '2026-07-01' }], '2026-07')).toBe(0);
+    expect(snapDerivedIncomeCore(null, '2026-07')).toBe(0);
   });
 });
 

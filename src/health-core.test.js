@@ -149,6 +149,31 @@ describe('ahorro', () => {
     expect(byKey(r,'savings').available).toBe(false);
   });
 
+  it('cuenta el income deducido del snapshot (derivedIncome), no solo las txs', () => {
+    // 10000 de income, pero 6000 los dedujo el snapshot en vez de venir de una tx.
+    var r = healthScoreCore(base({
+      transactions:[ tx('2026-12-01','Credit','Income',4000), tx('2026-12-02','Debit','Groceries',8000) ],
+      snapshots:[ Object.assign(snap('2026-12-20', 5000), { derivedIncome:6000 }) ]
+    }));
+    expect(byKey(r,'savings').value).toBeCloseTo(20, 5);   // (10000-8000)/10000
+  });
+
+  it('un snapshot fuera de la ventana no aporta su derivedIncome', () => {
+    var r = healthScoreCore(base({
+      transactions:[ tx('2026-12-01','Credit','Income',10000), tx('2026-12-02','Debit','Groceries',8000) ],
+      snapshots:[ Object.assign(snap('2026-01-05', 5000), { derivedIncome:99999 }) ]
+    }));
+    expect(byKey(r,'savings').value).toBeCloseTo(20, 5);   // el de enero no entra
+  });
+
+  it('un snapshot legacy (sin derivedIncome) no altera el income', () => {
+    var r = healthScoreCore(base({
+      transactions:[ tx('2026-12-01','Credit','Income',10000), tx('2026-12-02','Debit','Groceries',8000) ],
+      snapshots:[ Object.assign(snap('2026-12-20', 5000), { txId:123 }) ]
+    }));
+    expect(byKey(r,'savings').value).toBeCloseTo(20, 5);
+  });
+
   it('un refund reduce el gasto pero no lo vuelve negativo', () => {
     var r = healthScoreCore(base({ transactions:[
       tx('2026-12-01','Credit','Income',1000),

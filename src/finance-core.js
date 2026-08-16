@@ -25,6 +25,21 @@ export function monthIncomeCore(map, month) {
   return e ? e.c : 0;
 }
 
+// Income que la app dedujo al tomar los snapshots de un mes. Es un dato CALCULADO
+// (Δ patrimonio + gastos - lo ya registrado), no un hecho que ocurrio, por eso vive
+// como campo del snapshot y no como transaccion.
+// Los snapshots viejos lo guardan como tx enlazada (txId) y ya suman por
+// monthIncomeCore. Invariante: un snapshot tiene txId O derivedIncome, nunca ambos,
+// que es lo que evita el doble conteo sin necesidad de migrar datos.
+export function snapDerivedIncomeCore(snapshots, month) {
+  var total = 0;
+  (snapshots || []).forEach(function (s) {
+    if (!s || !s.date || s.date.slice(0, 7) !== month) return;
+    if (typeof s.derivedIncome === 'number') total += s.derivedIncome;
+  });
+  return total;
+}
+
 // Flujos externos: mueven el total pero NO son ganancia (se netean del P&L).
 export function isExtFlow(cat) { return cat === 'Investments' || cat === 'Transfer'; }
 

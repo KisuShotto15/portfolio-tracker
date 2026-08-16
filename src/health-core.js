@@ -72,6 +72,16 @@ export function healthScoreCore(input){
   });
   exp = Math.max(0, exp);   // un refund reduce el gasto, nunca lo vuelve negativo
 
+  // Income que la app dedujo al tomar un snapshot. Vive como campo del snapshot
+  // (derivedIncome), NO como transaccion, asi que el recorrido de arriba no lo ve.
+  // Sin esto, Savings se cae en silencio para todo periodo cerrado con snapshot.
+  // Los snapshots viejos lo guardan como tx enlazada y ya suman arriba; ninguno
+  // tiene las dos cosas a la vez, por eso no hay doble conteo.
+  (input.snapshots || []).forEach(function(s){
+    if(!s || !s.date || s.date < from || s.date > to) return;
+    if(typeof s.derivedIncome === 'number') inc += s.derivedIncome;
+  });
+
   // Snapshot primero, live solo si NO hay ningun snapshot: misma precedencia que
   // renderKPIStrip/renderGoal/renderHealthScore. Al salir todos los puntos de la
   // misma escalera de snapshots, una serie historica es continua por construccion.

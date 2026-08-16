@@ -2,7 +2,7 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
 
@@ -1586,8 +1586,11 @@ function monthCatTotals(){
 }
 // Net spending for a category in a month: debits - credits (refunds reduce spend)
 function catNetSpend(month, cats){ return catNetSpendCore(monthCatTotals(), month, cats); }
-// Income del mes = creditos de la categoria Income.
-function monthIncome(month){ return monthIncomeCore(monthCatTotals(), month); }
+// Income del mes = creditos de la categoria Income + el income que la app dedujo al
+// tomar snapshots (campo del snapshot, no tx: ver recordSnapshot). Es la UNICA via por
+// la que el dashboard lee income — grafico mensual, Budget y ritmo de la meta pasan
+// todos por aca, asi que alcanza con sumarlo en este punto.
+function monthIncome(month){ return monthIncomeCore(monthCatTotals(), month)+snapDerivedIncomeCore(S.snapshots, month); }
 
 function getAvgMonthlyOutflows(){
   // 3 meses previos completos (excluye el mes actual, que suele estar a medias).
@@ -2473,16 +2476,15 @@ async function recordSnapshot(){
     // hizo subir el patrimonio, derivarla otra vez la contaria dos veces.
     //   income derivado = Δ + gastos - income ya registrado
     var grossIncome=Math.round((profit+periodNetSpend(prev,cur)-periodLoggedIncome(prev,cur))*100)/100;
-    var fmtD=function(s){var p=s.split('-');return +p[2]+'/'+p[1].replace(/^0/,'')+'/'+p[0];};
     if(res.checked){
-      // El neto se congela junto con la tx (netProfit) porque es lo que sigue mostrando
-      // Monthly Return; la tx guarda el bruto solo para el grafico. Sin tx no se congela
-      // nada: el P&L se recalcula en vivo, asi editar el snapshot sigue actualizandolo.
+      // Los dos son campos del snapshot, no una transaccion. Antes el income derivado
+      // se inyectaba como tx en S.transactions y eso obligaba a distinguirla de las
+      // reales en cada lectura (doble conteo, tx huerfana al borrar el snapshot, txs
+      // de $0, y un valor que el usuario podia editar a mano y desincronizar).
+      //   netProfit    = crecimiento NETO  → Monthly Return
+      //   derivedIncome = income BRUTO      → grafico / Budget, via monthIncome()
       cur.netProfit=profit;
-      var txId=Date.now()+1;
-      S.transactions.push({id:txId,date:today,desc:'Income '+fmtD(prev.date)+' → '+fmtD(today),type:'Credit',wallet:'Binance',category:'Income',amountUSD:grossIncome,originalCurrency:'USD',updatedAt:stamp()});
-      S.transactionsUpdatedAt=stamp();
-      S.snapshots[S.snapshots.length-1].txId=txId;
+      cur.derivedIncome=grossIncome;
     }
   }
   save(); renderEquityChart();
