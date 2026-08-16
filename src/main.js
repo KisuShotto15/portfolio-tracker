@@ -1131,11 +1131,19 @@ function _fixPickerSide(el,r,vTop,vBot,GAP,tries){
   var space=flipped?(r.top-vTop-GAP):(vBot-r.bottom-GAP);
   el.style.setProperty('--picker-max',Math.max(120,Math.min(300,space))+'px');
 }
+// Solo dimensionar ANTES de abrir. Con el picker ya abierto, las <option> son hijas
+// del <select>, asi que el pointerdown sobre una de ellas tambien entra por aca:
+// recalcular en ese momento encogia el panel al hueco de ABAJO (a veces el piso de
+// 120px) justo mientras se hacia click, moviendo la opcion de debajo del cursor y
+// perdiendo la seleccion. Se veia en los filtros de Transactions —category, wallet,
+// month— sobre todo al elegir una opcion del final despues de hacer scroll.
 document.addEventListener('pointerdown',function(e){
-  var s=e.target&&e.target.closest&&e.target.closest('select'); if(s) _sizeSelectPicker(s);
+  var s=e.target&&e.target.closest&&e.target.closest('select');
+  if(s&&!s.matches(':open')) _sizeSelectPicker(s);
 },true);
 document.addEventListener('keydown',function(e){
-  if(e.target&&e.target.tagName==='SELECT') _sizeSelectPicker(e.target);
+  var s=e.target;
+  if(s&&s.tagName==='SELECT'&&!s.matches(':open')) _sizeSelectPicker(s);
 },true);
 // El teclado abre/cierra despues de mostrar el popup: reposicionar cuando el
 // visualViewport cambia, o el panel queda anclado a medidas viejas.
