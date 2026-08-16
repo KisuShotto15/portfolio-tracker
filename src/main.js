@@ -1101,50 +1101,6 @@ function _posNotePop(){
     pop.style.maxHeight=Math.min(300,Math.max(MIN,above))+'px';
   }
 }
-// Mismo criterio para los <select> (appearance:base-select): el ::picker(select) se
-// ubica solo y, si la lista no entra abajo, el navegador la voltea hacia arriba. Se le
-// pasa el hueco real que queda debajo por una custom property (el pseudo la hereda del
-// select) para que recorte y haga scroll en vez de voltear. Se calcula al empezar la
-// interaccion, justo antes de que el picker se abra.
-function _sizeSelectPicker(el){
-  if(!el||el.tagName!=='SELECT') return;
-  var r=el.getBoundingClientRect();
-  var vv=window.visualViewport;
-  var vTop=vv?vv.offsetTop:0, vBot=vTop+(vv?vv.height:window.innerHeight);
-  var GAP=24; // margin-block del picker + aire hasta el borde
-  var below=vBot-r.bottom-GAP;
-  // Estimacion inicial (el hueco de abajo) para el primer layout, antes de que el
-  // navegador decida si voltea. Se corrige apenas el picker esta realmente abierto:
-  // no podemos adivinar de antemano si va a voltear, asi que _fixPickerSide mide en
-  // que lado termino y le da TODO el espacio de ese lado. Sin esto, un select como
-  // Category quedaba volteado arriba pero limitado al hueco chico de abajo (el mismo
-  // que lo hizo voltear), asi que se veia diminuto pese a tener espacio de sobra arriba.
-  el.style.setProperty('--picker-max',Math.max(120,Math.min(300,below))+'px');
-  _fixPickerSide(el,r,vTop,vBot,GAP,0);
-}
-function _fixPickerSide(el,r,vTop,vBot,GAP,tries){
-  if(!el.isConnected||tries>15) return;
-  if(!el.matches(':open')){ requestAnimationFrame(function(){ _fixPickerSide(el,r,vTop,vBot,GAP,tries+1); }); return; }
-  var opt=el.options&&el.options[0], or=opt&&opt.getBoundingClientRect();
-  if(!or||!or.height){ requestAnimationFrame(function(){ _fixPickerSide(el,r,vTop,vBot,GAP,tries+1); }); return; }
-  var flipped=or.top<r.top-1;
-  var space=flipped?(r.top-vTop-GAP):(vBot-r.bottom-GAP);
-  el.style.setProperty('--picker-max',Math.max(120,Math.min(300,space))+'px');
-}
-// Solo dimensionar ANTES de abrir. Con el picker ya abierto, las <option> son hijas
-// del <select>, asi que el pointerdown sobre una de ellas tambien entra por aca:
-// recalcular en ese momento encogia el panel al hueco de ABAJO (a veces el piso de
-// 120px) justo mientras se hacia click, moviendo la opcion de debajo del cursor y
-// perdiendo la seleccion. Se veia en los filtros de Transactions —category, wallet,
-// month— sobre todo al elegir una opcion del final despues de hacer scroll.
-document.addEventListener('pointerdown',function(e){
-  var s=e.target&&e.target.closest&&e.target.closest('select');
-  if(s&&!s.matches(':open')) _sizeSelectPicker(s);
-},true);
-document.addEventListener('keydown',function(e){
-  var s=e.target;
-  if(s&&s.tagName==='SELECT'&&!s.matches(':open')) _sizeSelectPicker(s);
-},true);
 // El teclado abre/cierra despues de mostrar el popup: reposicionar cuando el
 // visualViewport cambia, o el panel queda anclado a medidas viejas.
 if(window.visualViewport){
