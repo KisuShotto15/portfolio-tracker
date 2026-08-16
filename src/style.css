@@ -164,7 +164,13 @@ input,select,textarea,button{font-family:inherit}
 /* Dashboard grid layout (wrappers added in index.html) */
 .dash-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
 .dash-eyebrow{font-size:17px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
-.dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:70px 50px;align-items:start}
+/* minmax(0,1fr) y no 1fr: con `1fr` el minimo automatico de la pista es el
+   min-content del item, y Chart.js le pone al canvas un style.width en px. Al
+   achicar la ventana cruzando los 900px la pista se agrandaba para "caber" ese
+   canvas, Chart.js volvia a medir el contenedor ya inflado y se quedaba trabado
+   ahi — scroll horizontal permanente hasta recargar. Con minimo 0 el contenedor
+   manda sobre el canvas y el lazo se corta. */
+.dash-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:70px 50px;align-items:start}
 .dash-grid > .span8{grid-column:span 8;min-width:0}
 .dash-grid > .span4{grid-column:span 4;min-width:0}
 .dash-side{display:flex;flex-direction:column;gap:42px}
@@ -191,7 +197,10 @@ input,select,textarea,button{font-family:inherit}
 .dash-grid > .span12{grid-column:1/-1}
 .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:0;align-items:stretch;position:relative;z-index:50}
 .kpi-row #kpi-strip{display:contents}
-.kpi-row #alerts-wrap{padding:4px 22px;margin:0;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:50}
+/* Mismo padding-top y mismo centrado que .kpi-card: antes centraba en vertical
+   (justify-content) y alineaba a la izquierda, asi que "Alertas" caia mas abajo
+   que los otros labels y el bloque se veia desalineado contra las KPIs. */
+.kpi-row #alerts-wrap{padding:5px 22px;margin:0;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;z-index:50}
 
 /* KPI strip → centered borderless stat row */
 #kpi-strip .kpi-strip{display:contents}
@@ -291,6 +300,9 @@ input,select,textarea,button{font-family:inherit}
 .pnl-adj{font-size:14px;color:var(--txt3)}
 
 /* Alerts */
+/* 11px = el margin-top de .kpi-val, para que el contenido de alertas arranque a la
+   misma altura que los montos de las KPIs. */
+.alerts-lbl{margin-bottom:11px}
 .alerts-empty{display:flex;align-items:center;gap:10px;font-size:16px;color:var(--green);font-weight:500}
 .alerts-empty::before{content:"";width:9px;height:9px;border-radius:99px;background:var(--green)}
 .alert-list{display:flex;flex-direction:column;gap:10px}
@@ -312,7 +324,10 @@ input,select,textarea,button{font-family:inherit}
 .alerts-trigger.warn{color:var(--amber)}
 .alerts-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
 .alerts-trigger svg{color:var(--txt3)}
-.alerts-popup{position:absolute;right:0;top:calc(100% + 8px);width:330px;max-width:84vw;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px;display:none;z-index:40;box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:320px;overflow-y:auto}
+/* Centrado sobre el boton, no anclado a su borde derecho: el trigger ahora esta
+   centrado en su columna y con right:0 el popup se salia por la izquierda en las
+   pantallas angostas. */
+.alerts-popup{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 8px);width:330px;max-width:84vw;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px;display:none;z-index:40;box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:320px;overflow-y:auto}
 .alerts-popup.open{display:block}
 
 /* Goal */
@@ -320,8 +335,10 @@ input,select,textarea,button{font-family:inherit}
 .pb > div,.pb span{background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 70%,#fff))!important}
 
 /* ───────────────── Transactions ───────────────── */
+/* wrap: la fila de cotizaciones mide ~729px de min-content y entre 721 y 900px
+   empujaba la pagina entera hacia el scroll horizontal. */
 .rbar{
-  display:flex;align-items:center;gap:11px;margin-bottom:20px;font-size:15px;color:var(--txt3);
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px 11px;margin-bottom:20px;font-size:15px;color:var(--txt3);
 }
 .rval{color:var(--txt);font-weight:600;font-size:16px}
 .rbar .rval,.tx-rates-popup .rval,.tx-rates-btn .rval{cursor:pointer}
@@ -653,8 +670,10 @@ input,select,textarea,button{font-family:inherit}
 .wm-hero-lbl{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
 .wm-hero-val{font-family:var(--font-num);font-size:50px;font-weight:500;letter-spacing:-.03em;color:var(--txt);margin:8px 0 6px;line-height:1}
 .wm-hero-meta{font-size:13px;color:var(--txt2);font-family:var(--font-num)}
-.wm-hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
-.wm-hero-tiles{display:flex;gap:12px;flex-shrink:0}
+/* Los 3 tiles miden 148px minimo cada uno y no encogen: sin wrap, el hero forzaba
+   ~752px de min-content y sacaba scroll horizontal entre 721 y 900px. */
+.wm-hero-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:24px}
+.wm-hero-tiles{display:flex;flex-wrap:wrap;gap:12px;flex-shrink:0}
 .whtile{display:flex;flex-direction:column;gap:5px;padding:12px 16px;min-width:148px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:12px}
 .whtile-lbl{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3)}
 .whtile-lbl i{width:8px;height:8px;border-radius:3px;flex-shrink:0}
@@ -669,6 +688,10 @@ input,select,textarea,button{font-family:inherit}
 .wm-key b{font-family:var(--font-num);color:var(--txt3);font-weight:400}
 .wm-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
 .wm-cols-3{grid-template-columns:1fr 1fr 1fr}
+/* Cada fila de wallet mide ~200px de min-content (chip + saldo + acciones), asi que
+   3 columnas piden ~640px y no entraban entre 721 y ~830px: la pagina se iba a
+   scroll horizontal. A 2 columnas entra de sobra; ≤720px ya baja a 1. */
+@media(max-width:900px){.wm-cols-3{grid-template-columns:1fr 1fr}}
 .wm-group{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:7px 8px 11px;min-width:0}
 .wm-group-head{display:flex;align-items:baseline;justify-content:space-between;padding:13px 16px 11px}
 .wm-group-title{font-size:13px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
@@ -974,7 +997,7 @@ input::placeholder{color:var(--txt3)}
   .kpi-row .kpi-card:nth-child(2){border-right:1px solid var(--line-soft)}
 }
 @media(max-width:900px){
-  .dash-grid{grid-template-columns:1fr;gap:36px}
+  .dash-grid{grid-template-columns:minmax(0,1fr);gap:36px}
   .dash-grid > .span8,.dash-grid > .span4{grid-column:1/-1}
   #page-tools.active{grid-template-columns:1fr}
 }

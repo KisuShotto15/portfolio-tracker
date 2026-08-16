@@ -1876,7 +1876,9 @@ var _alertsOpen=false;
 function renderAlerts(){
   var el=document.getElementById('alerts-wrap'); if(!el) return;
   var alerts=getActiveAlerts();
-  var hdr='<div class="cleg" style="margin-bottom:.5rem">Alertas</div>';
+  // El margen sale de .alerts-lbl (CSS), no inline: asi puede igualar el ritmo de
+  // .kpi-lbl → .kpi-val y la palabra queda a la misma altura que los otros labels.
+  var hdr='<div class="cleg alerts-lbl">Alertas</div>';
   if(alerts.length===0){
     el.innerHTML=hdr+'<div class="alerts-empty">✓ Todo en orden</div>';
     setAlertsPopup(false); // sin alertas no hay popup: soltar el listener global
