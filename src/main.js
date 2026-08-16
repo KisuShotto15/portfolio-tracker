@@ -2432,7 +2432,9 @@ async function recordSnapshot(){
     'Record portfolio snapshot',
     'Auto-sum from wallets: <b style="color:#fff">$'+auto.toFixed(2)+'</b>',
     auto.toFixed(2),
-    hasPrev?{checkboxLabel:'Add income transaction',checkboxChecked:true}:null
+    // Ya no crea ninguna transaccion: decide si se le atribuye income al periodo
+    // (se guarda en el snapshot como derivedIncome/netProfit).
+    hasPrev?{checkboxLabel:'Count income for this period',checkboxChecked:true}:null
   );
   if(res===null) return;
   var val=parseFloat(res.value);
