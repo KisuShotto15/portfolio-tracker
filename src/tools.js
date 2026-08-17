@@ -55,7 +55,7 @@ function fitCalcVals(wrap){
 var TOOLS = [
   { id:'profit',   label:'Profit Calc'    },
   { id:'p2p',      label:'P2P Spread'     },
-  { id:'bcvemily', label:'BCV→Emily USD' },
+  { id:'bcvemily', label:'Rate Converter' },
   { id:'bdvlimits',label:'BDV Limits'    },
 ];
 

@@ -397,10 +397,10 @@
 
     <div id="tc-bcvemily" class="tool-card">
       <div class="tool-title" style="margin-bottom:.75rem">
-        <h2 style="margin:0">BCV to Emily USD</h2>
+        <h2 style="margin:0">Rate Converter</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Converts USD to Bs at the BCV rate, then buys USDT 10% below market price.</span></span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(120px,100%),1fr));gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
+      <div class="rc-inputs" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD</span>
           <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true)"/>
