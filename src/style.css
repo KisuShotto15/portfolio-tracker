@@ -755,10 +755,15 @@ input::placeholder{color:var(--txt3)}
 /* Tools cards */
 .tool-card{
   background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);
-  padding:26px 30px;margin:0;text-align:center;
+  padding:26px 30px;margin:0;text-align:center;min-width:0;
 }
-#page-tools.active{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
-@media(max-width:1180px){#page-tools.active{grid-template-columns:repeat(2,1fr)}}
+/* minmax(0,...) en toda la cadena de grids de Tools: con `1fr` el minimo de la
+   pista es el min-content del contenido, asi que las cards de resultado (que no
+   encogen solas) estiraban la pagina entera y en mobile se salia de la pantalla.
+   No se notaba en el barrido porque a ≤720px .main lleva overflow-x:hidden y
+   recorta el desborde en vez de mostrarlo: scrollWidth mentia. */
+#page-tools.active{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:stretch}
+@media(max-width:1180px){#page-tools.active{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tool-head{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin:0}
 .tool-title{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px;min-height:26px}
 .tool-title > *:not(h2){position:absolute;right:0;top:50%;transform:translateY(-50%)}
@@ -770,7 +775,9 @@ input::placeholder{color:var(--txt3)}
 .tool-card [id$="-cards"]{margin-left:auto;margin-right:auto}
 /* BDV Monthly Limits (full-width tool) */
 .tool-wide{grid-column:1/-1}
-.bdvl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;text-align:left}
+/* min(260px,100%): sin el min(), el piso de 260px de la pista es mayor que la
+   card en pantallas de 320px y la grilla se sale en vez de encoger. */
+.bdvl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:14px;text-align:left}
 .bdvl-empty{color:var(--txt3);font-size:14px;padding:8px 2px;text-align:center}
 .bdvl-card{background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .bdvl-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -836,6 +843,14 @@ input::placeholder{color:var(--txt3)}
 .bdv-tip{width:22px;height:22px;border-radius:99px;background:rgba(255,255,255,.07);color:var(--txt3);font-size:14px;display:inline-flex;align-items:center;justify-content:center;cursor:help;position:relative}
 .bdv-tip-box{position:absolute;right:0;top:28px;width:min(275px,calc(100vw - 48px));background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px 15px;font-size:14px;color:var(--txt2);line-height:1.5;opacity:0;pointer-events:none;transition:opacity .15s;z-index:30;box-shadow:0 12px 32px rgba(0,0,0,.5);text-transform:none;letter-spacing:0;font-weight:400}
 .bdv-tip:hover .bdv-tip-box,.bdv-tip:focus .bdv-tip-box{opacity:1}
+/* En pantallas angostas el tooltip se ancla a la tool-card y no al "?": con
+   right:0 sobre el "?" y un ancho calculado contra 100vw se salia por la
+   izquierda (el "?" no esta pegado al borde de la pantalla, sino al de su card).
+   Estirandolo de borde a borde de la card entra siempre, sin numeros magicos. */
+@media(max-width:720px){
+  .tool-card{position:relative}
+  .bdv-tip-box{left:0;right:0;width:auto;top:auto;margin-top:6px}
+}
 .hist-wrap{position:relative}
 .hist-btn{background:rgba(255,255,255,.06);border:none;color:var(--txt2);width:35px;height:35px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .hist-popup{position:absolute;right:0;top:42px;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:17px;display:none;z-index:30;box-shadow:0 12px 32px rgba(0,0,0,.5)}
@@ -998,7 +1013,7 @@ input::placeholder{color:var(--txt3)}
 @media(max-width:1024px){
   /* 2 KPIs arriba, alertas debajo. La divisoria va en el 2do (Net Profit): el 3ro
      (Liquid) cierra la fila y el 4to esta oculto. */
-  .kpi-row{grid-template-columns:1fr 1fr;row-gap:28px}
+  .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:28px}
   .kpi-row .kpi-card{border-right:none}
   .kpi-row .kpi-card:nth-child(2){border-right:1px solid var(--line-soft)}
 }
@@ -1011,12 +1026,16 @@ input::placeholder{color:var(--txt3)}
   html,body{overflow-x:hidden;width:100%}
   .sb{display:none}
   .main{padding:18px 18px calc(90px + env(safe-area-inset-bottom));max-width:100%;overflow-x:hidden}
-  .kpi-row{grid-template-columns:1fr 1fr}
+  .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi-row #alerts-wrap{display:none}
   .kpi-card{padding:12px 10px}
   /* Los 2 KPIs comparten fila. Antes el 2do ocupaba el ancho completo y dejaba a
      los otros dos abajo; con solo dos tarjetas entran de lado a lado. */
   .kpi-val{font-size:26px}
+  /* Un monto como $19,387.91 no encoge ni parte solo: en pantallas de ~360px o
+     menos hay que bajarle la fuente o se sale de la tarjeta. */
+  .kpi-card{min-width:0}
+  .kpi-val,.kpi-sub,.kpi-lbl{max-width:100%}
   #sum-cards{grid-template-columns:1fr 1fr;gap:18px 0}
   .mc:nth-child(2n){border-right:none}
   .nw-hero .nw-val{font-size:40px}
@@ -1403,3 +1422,10 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 .bdg-total-edit{display:inline-flex;align-items:center;gap:2px;color:var(--txt2)}
 .bdg-total-edit input{width:76px;background:transparent;border:none;border-bottom:1px dashed var(--accent);color:#fff;font-family:var(--font-num);font-size:inherit;padding:0 2px;text-align:center}
 .bdg-total-edit input:focus{outline:none}
+
+/* Pantallas muy angostas (<=400px): los montos de las KPIs no entran a 26px. */
+@media(max-width:400px){
+  .kpi-val{font-size:21px}
+  .kpi-sub,.kpi-delta{font-size:12px}
+  .kpi-card{padding:12px 6px}
+}
