@@ -21,10 +21,11 @@ function feeOf(key){
 function renderCalcCards(cardsId, resultId, cards, small){
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
     var cls = c.green ? ' g' : c.red ? ' r' : '';
+    var subHtml = c.sub!=null ? '<div class="tcalc-sub'+(c.equalSize?' tcalc-sub-eq':'')+'">'+c.sub+'</div>' : '';
     return '<div class="tcalc-card'+(small?' tcalc-sm':'')+'">'
       +'<div class="tcalc-lbl">'+c.label+'</div>'
       +'<div class="tcalc-val'+cls+'">'+c.value+'</div>'
-      +'<div class="tcalc-sub">'+c.sub+'</div>'
+      +subHtml
       +'</div>';
   }).join('');
   document.getElementById(resultId).style.display = 'block';
@@ -40,15 +41,30 @@ export function fitAllCalcVals(){
   ['pc-cards','p2p-cards','be-cards'].forEach(function(id){ fitCalcVals(document.getElementById(id)); });
 }
 window.fitAllCalcVals=fitAllCalcVals;
+function shrinkToFit(v){
+  v.style.fontSize='';
+  if(!v.clientWidth) return null; // tab oculta: se re-ajusta al abrirla
+  var base=parseFloat(getComputedStyle(v).fontSize)||16;
+  if(v.scrollWidth<=v.clientWidth) return base;
+  var size=Math.max(10, base*v.clientWidth/v.scrollWidth-0.3);
+  v.style.fontSize=size+'px';
+  return size;
+}
 function fitCalcVals(wrap){
   if(!wrap) return;
-  wrap.querySelectorAll('.tcalc-val').forEach(function(v){
-    v.style.fontSize='';
-    if(!v.clientWidth) return; // tab oculta: se re-ajusta al abrirla
-    if(v.scrollWidth>v.clientWidth){
-      var base=parseFloat(getComputedStyle(v).fontSize)||16;
-      v.style.fontSize=Math.max(10, base*v.clientWidth/v.scrollWidth-0.3)+'px';
-    }
+  wrap.querySelectorAll('.tcalc-card').forEach(function(card){
+    var val=card.querySelector('.tcalc-val');
+    var subEq=card.querySelector('.tcalc-sub-eq');
+    if(!val) return;
+    if(!subEq){ shrinkToFit(val); return; }
+    // .tcalc-sub-eq (ej: "From Bs") pesa lo mismo que .tcalc-val: si cada uno se
+    // encoge por su cuenta, dos strings de distinto largo terminan en tamanos
+    // apenas distintos entre si. Se mide el encogido que le hace falta a cada
+    // uno y se aplica a AMBOS el mas chico de los dos, para que compartan tamano.
+    var sVal=shrinkToFit(val), sSub=shrinkToFit(subEq);
+    if(sVal==null||sSub==null) return;
+    var min=Math.min(sVal,sSub)+'px';
+    val.style.fontSize=min; subEq.style.fontSize=min;
   });
 }
 
@@ -178,11 +194,11 @@ export function calcBCVEmily(fromUser){
   var bsToUsdt = (bs > 0 && effectiveRate > 0) ? bs / effectiveRate : 0;
 
   renderCalcCards('be-cards','be-result',[
-    { label:'Total Bs', value: totalBs > 0 ? totalBs.toFixed(2)+' Bs' : '—', sub: bcvRate ? usd+'$ × '+bcvRate : 'BCV rate N/A' },
+    { label:'Total Bs', value: totalBs > 0 ? totalBs.toFixed(2) : '—' },
     { label:'Received', value: usdtOut > 0 ? usdtOut.toFixed(2)+' USDT' : '—', sub: effectiveRate > 0 ? 'rate '+effectiveRate.toFixed(2) : '—', green: usdtOut > 0 },
     { label:'From Bs',
-      value: bsToUsd > 0 ? bsToUsd.toFixed(2)+' $' : '—',
-      sub: bsToUsdt > 0 ? bsToUsdt.toFixed(2)+' USDT' : (bs > 0 ? 'rate N/A' : '—') },
+      value: bsToUsd > 0 ? bsToUsd.toFixed(2)+' BCV' : '—',
+      sub: bsToUsdt > 0 ? bsToUsdt.toFixed(2)+' USDT' : (bs > 0 ? 'rate N/A' : '—'), equalSize:true },
   ]);
 }
 window.calcBCVEmily = calcBCVEmily;
