@@ -2505,8 +2505,14 @@ function saveBudget(){
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
 // del mes visible. Solo afecta la edicion; la vista siempre muestra el efectivo.
+// Fila de scope + presets del Budget (Default / <mes> only / 3-mo avg / 50-30-20).
+// En la practica el flujo es "Default y ajusto a mano", asi que la fila se oculta
+// en vez de borrarse: poner esto en true la devuelve entera, sin tocar nada mas.
+// Con la fila oculta, _budEditScope se queda en 'default' — no hay forma de
+// cambiarlo — asi que editar un % siempre escribe el valor global.
+var BUDGET_SCOPE_UI=false;
 var _budEditScope='default';
-window._budScope=function(s){ _budEditScope=s; renderBudget(); };
+window._budScope=function(s){ if(!BUDGET_SCOPE_UI) return; _budEditScope=s; renderBudget(); };
 window._budResetMonth=function(){
   if(S.categoryBudgetPctsByMonth&&S.categoryBudgetPctsByMonth[_budMonth]){
     delete S.categoryBudgetPctsByMonth[_budMonth];
@@ -2711,18 +2717,24 @@ function renderBudget(){
   var allocDiff=Math.round((100-sumPctHead)*10)/10;
   var allocCol=Math.abs(allocDiff)<0.5?'#1D9E75':allocDiff>0?'#EF9F27':'#E24B4A';
   var allocTxt=Math.abs(allocDiff)<0.5?sumPctHead.toFixed(1)+'% ✓'
-    :allocDiff>0?sumPctHead.toFixed(1)+'% · faltan '+allocDiff+'%'
-    :sumPctHead.toFixed(1)+'% · sobran '+Math.abs(allocDiff)+'%';
+    :allocDiff>0?sumPctHead.toFixed(1)+'% · '+allocDiff+'% short'
+    :sumPctHead.toFixed(1)+'% · '+Math.abs(allocDiff)+'% over';
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
     +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Sum of allocated % (target: 100%)">'
     +'<i class="bdg-alloc-mini"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></i>'+allocTxt+'</span>'
-    +'<span class="bdg-scope">'
-    +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
-    +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
-    +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
-    +'<button class="bdg-scope-btn" title="Allocate % from your 3-month average spend" onclick="applyBudgetRec(\'hist\')">Historial 3m</button>'
-    +'<button class="bdg-scope-btn" title="50% essentials / 30% lifestyle / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
-    +'</span></div>';
+    +(BUDGET_SCOPE_UI
+      ?'<span class="bdg-scope">'
+        +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
+        +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
+        +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
+        +'<button class="bdg-scope-btn" title="Allocate % from your 3-month average spend" onclick="applyBudgetRec(\'hist\')">3-mo avg</button>'
+        +'<button class="bdg-scope-btn" title="50% essentials / 30% lifestyle / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
+        +'</span>'
+      // Con la fila oculta sobrevive UN boton, y solo si hay overrides de mes
+      // guardados de antes: sin el, ese override seguiria pisando en silencio el
+      // % que edites y no quedaria ninguna via para quitarlo.
+      :(hasOvr?'<span class="bdg-scope"><button class="bdg-scope-btn reset" title="Remove the % overrides saved for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button></span>':''))
+    +'</div>';
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
   // Pasada 1: datos por categoria (para el margen libre del rebalanceo).
