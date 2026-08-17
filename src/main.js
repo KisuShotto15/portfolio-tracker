@@ -87,7 +87,7 @@ var S = {
   // autollena con la tasa). Sync LWW normal via UpdatedAt.
   profitCalc:{}, profitCalcUpdatedAt:null,
   p2pCalc:{}, p2pCalcUpdatedAt:null,     // P2P Spread: sell/buy/fee
-  bcvCalc:{}, bcvCalcUpdatedAt:null,     // BCV->Emily: usd/usdt
+  bcvCalc:{}, bcvCalcUpdatedAt:null,     // BCV->Emily: usd/usdt/bs
   // Limites por categoria como % del Monthly Total (fuente de verdad). El USD se
   // deriva: pct/100 * budgetTotal, asi cambiar el total rescala todo.
   categoryBudgetPcts:{}, categoryBudgetPctsUpdatedAt:null,
@@ -289,7 +289,7 @@ function restoreProfitCalc(){
   var sets=[
     [S.profitCalc||{}, [['pc-sell','sell'],['pc-amount','amount'],['pc-card','fee']], true],
     [S.p2pCalc||{},    [['p2p-sell','sell'],['p2p-buy','buy'],['p2p-comm','fee']],    false],
-    [S.bcvCalc||{},    [['be-usd','usd'],['be-usdt','usdt']],                          false],
+    [S.bcvCalc||{},    [['be-usd','usd'],['be-usdt','usdt'],['be-bs','bs']],           false],
   ];
   sets.forEach(function(cfg){
     var st=cfg[0], clearMissing=cfg[2];

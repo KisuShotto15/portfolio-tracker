@@ -155,11 +155,12 @@ window.calcSpread = calcSpread;
 export function calcBCVEmily(fromUser){
   var usd      = parseFloat(document.getElementById('be-usd').value)||0;
   var usdtRate = parseFloat(document.getElementById('be-usdt').value)||0;
+  var bs       = parseFloat(document.getElementById('be-bs').value)||0;
   if(fromUser===true){
     var S=_getState();
-    var vals={usd:document.getElementById('be-usd').value, usdt:document.getElementById('be-usdt').value};
+    var vals={usd:document.getElementById('be-usd').value, usdt:document.getElementById('be-usdt').value, bs:document.getElementById('be-bs').value};
     var prev=S.bcvCalc||{};
-    if(vals.usd!==(prev.usd||'')||vals.usdt!==(prev.usdt||'')){
+    if(vals.usd!==(prev.usd||'')||vals.usdt!==(prev.usdt||'')||vals.bs!==(prev.bs||'')){
       S.bcvCalc=vals;
       if(_stamp) S.bcvCalcUpdatedAt=_stamp();
       _save();
@@ -171,9 +172,17 @@ export function calcBCVEmily(fromUser){
   var effectiveRate = usdtRate * (1 - feeOf('emily') / 100);
   var usdtOut       = (totalBs > 0 && effectiveRate > 0) ? totalBs / effectiveRate : 0;
 
+  // Camino inverso: un monto en Bs valuado con las dos tasas que ya usa la tool
+  // — la del BCV (da USD) y la efectiva de Emily del subtitulo de Received (da USDT).
+  var bsToUsd  = (bs > 0 && bcvRate > 0)       ? bs / bcvRate       : 0;
+  var bsToUsdt = (bs > 0 && effectiveRate > 0) ? bs / effectiveRate : 0;
+
   renderCalcCards('be-cards','be-result',[
     { label:'Total Bs', value: totalBs > 0 ? totalBs.toFixed(2)+' Bs' : '—', sub: bcvRate ? usd+'$ × '+bcvRate : 'BCV rate N/A' },
     { label:'Received', value: usdtOut > 0 ? usdtOut.toFixed(2)+' USDT' : '—', sub: effectiveRate > 0 ? 'rate '+effectiveRate.toFixed(2) : '—', green: usdtOut > 0 },
+    { label:'From Bs',
+      value: bsToUsd > 0 ? bsToUsd.toFixed(2)+' $' : '—',
+      sub: bsToUsdt > 0 ? bsToUsdt.toFixed(2)+' USDT' : (bs > 0 ? 'rate N/A' : '—') },
   ]);
 }
 window.calcBCVEmily = calcBCVEmily;
