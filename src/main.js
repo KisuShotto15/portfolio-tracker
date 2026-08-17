@@ -233,7 +233,7 @@ async function pushToCloud(){
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true; _pushFailCount++;
-    if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Sesion expirada'); showAuthOverlay(); } else setSyncStatus('error','Secret invalido'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret/token no sirve
+    if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Session expired'); showAuthOverlay(); } else setSyncStatus('error','Invalid secret'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret/token no sirve
     setSyncStatus('offline','⚠ Unsynced changes');
     if(_pushFailCount>=2&&navigator.onLine) showSyncBanner(true); // offline real ya tiene su propio aviso
     console.warn('push failed:',e.message);
@@ -276,7 +276,7 @@ async function pullFromCloud(quiet){
     if(!quiet) setSyncStatus('synced','Synced (no cloud data yet)');
     return false;
   }catch(e){
-    if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Sesion expirada'); showAuthOverlay(); } else setSyncStatus('error','Secret invalido'); }
+    if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Session expired'); showAuthOverlay(); } else setSyncStatus('error','Invalid secret'); }
     else setSyncStatus('offline','Offline (local only)');
     console.warn('pull failed:',e.message);
     return false;
@@ -381,7 +381,7 @@ function updateOfflineBanner(){
   if(!navigator.onLine){
     if(!b){ b=document.createElement('div'); b.id='offline-banner'; b.className='offline-banner'; document.body.appendChild(b); }
     var n=_pendingCount;
-    b.innerHTML='<span>&#128244; Trabajando offline'+(n>0?' &middot; <b>'+n+'</b> cambio'+(n===1?'':'s')+' sin subir':'')+'</span>';
+    b.innerHTML='<span>&#128244; Working offline'+(n>0?' &middot; <b>'+n+'</b> unsynced change'+(n===1?'':'s'):'')+'</span>';
     b.classList.add('show');
   } else if(b){ b.classList.remove('show'); }
 }
@@ -535,6 +535,25 @@ try{ var _uc=JSON.parse(localStorage.getItem('ft13_usdt')||'null'); if(_uc&&_uc.
 // (refleja el USDT real gastado) si esta fresca (<24h); si no, cae al BCV.
 // Aritmetica simple en campos de monto ("1000+2500*2"). Solo digitos y
 // + - * / ( ) . , — cualquier otra cosa da NaN. Coma = decimal (teclado VE).
+// Los campos que aceptan sumas (evalMath) usan inputmode="decimal", y ese teclado
+// de mobile no trae el "+": la funcion existia pero era inalcanzable con el dedo.
+// No hay inputmode que de digitos + operadores, asi que se agrega un chip que
+// inserta el "+" en el cursor sin cerrar el teclado (de ahi el preventDefault en
+// pointerdown: sin eso el input pierde el foco y el teclado se baja).
+window.sumChipTap=function(e,inputId){
+  e.preventDefault(); e.stopPropagation();
+  var el=document.getElementById(inputId); if(!el) return;
+  var v=el.value||'';
+  var a=el.selectionStart==null?v.length:el.selectionStart;
+  var b=el.selectionEnd==null?v.length:el.selectionEnd;
+  // Nada de "++" ni un "+" al principio: no serian expresiones validas.
+  if(a===b&&(a===0||/[+\-*/(]$/.test(v.slice(0,a)))) { el.focus(); return; }
+  el.value=v.slice(0,a)+'+'+v.slice(b);
+  var pos=a+1;
+  el.focus();
+  try{ el.setSelectionRange(pos,pos); }catch(_){}
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+};
 function evalMath(str){
   var x=String(str==null?'':str).replace(/,/g,'.').replace(/\s+/g,'');
   if(!x||!/^[0-9+\-*/().]+$/.test(x)) return NaN;
@@ -645,7 +664,7 @@ function renderWalletHoldings(){
   data=data.concat(manualH);
   var wallets=S.onchainWallets||[];
   if(!wallets.length&&!(S.manualHoldings||[]).length){ wrap.innerHTML=''; return; }
-  if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Agrega un holding manual o una wallet, luego Refresh'); return; }
+  if(!data.length){ wrap.innerHTML=emptyState('No holdings found','Add a manual holding or a wallet, then Refresh'); return; }
   var netLabel={'eth':'Ethereum','arbitrum':'Arbitrum','base':'Base','bsc':'BNB Chain','bitcoin':'Bitcoin','manual':'Manual'};
   var netColor={'eth':'#378ADD','arbitrum':'#7F77DD','base':'#5BA4F5','bsc':'#EF9F27','bitcoin':'#F7931A','manual':'#9B70F0'};
   var TOKEN_COLOR={BTC:'#F7931A',ETH:'#627EEA',WETH:'#627EEA',USDC:'#2775CA',USDT:'#26A17B',DAI:'#F5AC37',ARB:'#9CA3AF',BNB:'#F0B90B',MATIC:'#8247E5',OP:'#FF0420',SOL:'#14F195'};
@@ -819,7 +838,7 @@ function renderManualHoldings(){
       +'<span class="hld-wbadge" style="--nc:#9B70F0">'+escHtml(h.coin)+'</span>'
       +'<span class="hld-wlabel">'+escHtml(h.label)+'</span>'
       +'<span class="hld-waddr">'+fmtBal(h.qty||0)+' '+escHtml(h.coin)+'</span>'
-      +(p>0?'<span class="hld-wval">'+fmtUSD(val)+'</span>':'<span class="hld-waddr">sin precio</span>')
+      +(p>0?'<span class="hld-wval">'+fmtUSD(val)+'</span>':'<span class="hld-waddr">no price</span>')
       +'<button class="hld-wbtn del" onclick="removeManualHolding('+h.id+')" title="Remove">✕</button>'
       +'</div>';
   }).join('');
@@ -1125,7 +1144,7 @@ function _setNotePop(open){
 }
 function _renderNoteSuggest(list){
   var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
-  pop.innerHTML=list.map(_noteRow).join('')||'<span style="padding:8px 12px;font-size:12px;color:var(--txt3)">Sin historial aun</span>';
+  pop.innerHTML=list.map(_noteRow).join('')||'<span style="padding:8px 12px;font-size:12px;color:var(--txt3)">No history yet</span>';
   _setNotePop(true);
 }
 // Autocompletado mientras escribes, en el popup propio (el datalist nativo no
@@ -1244,7 +1263,7 @@ function toggleWmBalField(){
   var cf=document.getElementById('wm-cur-field');
   if(cf) cf.style.display=isNormal?'flex':'none';
   var lbl=document.getElementById('wm-bal-lbl'), cur=document.getElementById('wm-cur');
-  if(lbl&&cur) lbl.textContent=cur.value==='VES'?'Balance en Bs':'Balance USD';
+  if(lbl&&cur) lbl.textContent=cur.value==='VES'?'Balance in Bs':'Balance USD';
 }
 function openExchangeForm(){
   _lockScroll(true);
@@ -1304,11 +1323,11 @@ function updateTx(){
 async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.name=r.value.trim(); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance en Bs':'New balance',escHtml(w.name)+(isVes?' · se convierte solo a $ con la tasa USDT':'')+' · acepta sumas (1000+2500)',w.balance,{inputType:'text'}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
-async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · acepta sumas (1000+2500)',cur,{inputType:'text'}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · accepts sums (1000+2500)',cur,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
 
@@ -1401,7 +1420,7 @@ function txSepHtml(date){
   return '<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
 }
 function txRowHtml(t){
-  var rateTip=t.rateUsed?('Tasa '+(t.rateSrc==='p2p'?'USDT P2P':t.rateSrc==='bcv'?'BCV':'')+' '+t.rateUsed):'';
+  var rateTip=t.rateUsed?('Rate '+(t.rateSrc==='p2p'?'USDT P2P':t.rateSrc==='bcv'?'BCV':'')+' '+t.rateUsed):'';
   var orig=t.originalCurrency==='VES'&&t.amountVES?'<span title="'+rateTip+'">Bs '+t.amountVES.toLocaleString('es-VE')+'</span>':'';
   var isTrk=isTracker(t.wallet,t);
   var trk=isTrk?'<span class="badge-t">tracker</span>':'';
@@ -1424,7 +1443,7 @@ function txRowHtml(t){
     +  '<span class="td-amt-val td-amt-desk" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
     +  origM
     +'</td>'
-    +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" width="28" height="28" loading="lazy" decoding="async" title="Factura" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
+    +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" width="28" height="28" loading="lazy" decoding="async" title="Receipt" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
   +'</tr>';
 }
 // prevDate: fecha de la ultima fila ya en el DOM — evita duplicar el separador cuando un dia cruza el limite de pagina
@@ -1439,7 +1458,7 @@ function buildTxRows(list,prevDate){
 }
 function txMoreHtml(){
   var remaining=_txData.length-Math.min(_txLimit,_txData.length);
-  return remaining>0?'<button class="btn btns" onclick="loadMoreTx()">Mostrar '+Math.min(_txBase,remaining)+' mas · '+remaining+' restantes</button>':'';
+  return remaining>0?'<button class="btn btns" onclick="loadMoreTx()">Show '+Math.min(_txBase,remaining)+' more · '+remaining+' left</button>':'';
 }
 function txRSig(fSig){ return fSig+'|'+_txLimit+'|'+(S.transactionsUpdatedAt||0)+'|'+S.transactions.length+'|'+(S.manualWalletsUpdatedAt||0)+'|'+localToday(); }
 // Autocarga: cuando el boton "Mostrar mas" se acerca al viewport, carga la siguiente pagina solo.
@@ -1698,7 +1717,7 @@ function renderHealthScore(){
   function item(m){
     var w=m.available?Math.max(0,Math.min(100,m.score)):0;
     return '<div class="hb-item'+(m.available?'':' hb-off')+'"'
-      +(m.available?'':' title="Sin datos suficientes — no cuenta para el score"')+'>'
+      +(m.available?'':' title="Not enough data — excluded from the score"')+'>'
       +'<div class="hb-name">'+m.label+'</div>'
       +'<div class="hb-bar"><div class="hb-fill" style="width:'+w.toFixed(0)+'%"></div></div>'
       +'<div class="hb-pts">'+m.display+'</div>'
@@ -1723,7 +1742,7 @@ function renderHealthScore(){
   if(barEl){
     var aAlerts=getActiveAlerts();
     var aDot=aAlerts.length===0?'#1D9E75':'#EF9F27';
-    var aTxt=aAlerts.length===0?'Todo en orden':aAlerts.length+' alerta'+(aAlerts.length>1?'s':'');
+    var aTxt=aAlerts.length===0?'All clear':aAlerts.length+' alert'+(aAlerts.length>1?'s':'');
     var chevSvg='<svg class="hbm-chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 4 6 8 10 4"/></svg>';
     var healthDrop='<div id="health-drop-m" class="hbm-drop">'
       +'<div class="hbm-drop-inner">'
@@ -1810,8 +1829,8 @@ function getActiveAlerts(){
     if(pct>=40){
       alerts.push({
         sev:pct>=80?'crit':'warn',
-        msg:'Gasto en '+cat+': '+fmtUSD(curSpend)+' (↑'+pct.toFixed(0)+'% vs promedio)',
-        action:'Revisa transacciones de este mes en '+cat
+        msg:'Spending on '+cat+': '+fmtUSD(curSpend)+' (↑'+pct.toFixed(0)+'% vs average)',
+        action:'Review this month\'s transactions in '+cat
       });
     }
   });
@@ -1824,7 +1843,7 @@ function getActiveAlerts(){
     if(daysSince>30){
       alerts.push({
         sev:daysSince>45?'crit':'warn',
-        msg:'Último snapshot hace '+daysSince+' días',
+        msg:'Last snapshot '+daysSince+' days ago',
         action:'Registra snapshot ahora',
         onClick:'recordSnapshot()'
       });
@@ -1840,15 +1859,15 @@ function getActiveAlerts(){
       if(months>60){
         alerts.push({
           sev:'warn',
-          msg:'Al ritmo actual: '+months+' meses para la meta',
-          action:'Aumenta contribución mensual o ajusta la meta'
+          msg:'Al ritmo actual: '+months+' months to reach the goal',
+          action:'Increase monthly contribution or adjust the goal'
         });
       }
     } else if(nw<S.dashGoal&&contrib<=0){
       alerts.push({
         sev:'warn',
-        msg:'Sin contribución mensual neta positiva',
-        action:'Necesitas income > gastos para avanzar hacia la meta'
+        msg:'No positive net monthly contribution',
+        action:'You need income > spending to move toward the goal'
       });
     }
   }
@@ -1860,7 +1879,7 @@ function getActiveAlerts(){
     alerts.unshift({
       sev:'info',
       msg:'Auto-agregado: '+a.label+' · '+amtTxt,
-      action:'Tocar para descartar · '+a.date,
+      action:'Tap to dismiss · '+a.date,
       onClick:'dismissRecurringAlert('+a.id+')'
     });
   });
@@ -1878,9 +1897,9 @@ function renderAlerts(){
   var alerts=getActiveAlerts();
   // El margen sale de .alerts-lbl (CSS), no inline: asi puede igualar el ritmo de
   // .kpi-lbl → .kpi-val y la palabra queda a la misma altura que los otros labels.
-  var hdr='<div class="cleg alerts-lbl">Alertas</div>';
+  var hdr='<div class="cleg alerts-lbl">Alerts</div>';
   if(alerts.length===0){
-    el.innerHTML=hdr+'<div class="alerts-empty">✓ Todo en orden</div>';
+    el.innerHTML=hdr+'<div class="alerts-empty">✓ All clear</div>';
     setAlertsPopup(false); // sin alertas no hay popup: soltar el listener global
     return;
   }
@@ -2006,7 +2025,7 @@ function toggleTxRecurring(){
   // en modo recurrente sobra la factura
   var ra=document.querySelector('.receipt-attach'); if(ra) ra.style.display=on?'none':'';
   var list=document.getElementById('tx-rec-list'); if(list) list.style.display=on&&_txRecListOpen?'':'none';
-  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?(_editingRecId?'Guardar regla':'Add regla'):'Add';
+  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?(_editingRecId?'Save rule':'Add rule'):'Add';
   txMsg('');
   if(on) renderTxRecList(); else if(_editingRecId) cancelEditRecurring();
 }
@@ -2023,7 +2042,7 @@ function renderTxRecList(){
   if(tg){
     tg.innerHTML=n+' <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     tg.classList.toggle('open',_txRecListOpen);
-    tg.title='Reglas guardadas'; tg.style.display=n?'':'none';
+    tg.title='Saved rules'; tg.style.display=n?'':'none';
   }
   var wrap=document.getElementById('tx-rec-list'); if(!wrap) return;
   if(!n){ _txRecListOpen=false; wrap.style.display='none'; wrap.innerHTML=''; return; }
@@ -2031,8 +2050,8 @@ function renderTxRecList(){
     var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
     return '<div class="rec-lrow'+(_editingRecId===r.id?' editing':'')+'">'
       +'<span class="rec-lname">'+escHtml(r.label)+'</span>'
-      +'<span class="rec-lmeta">Dia '+r.dayOfMonth+' · '+amt+(r.category?' · '+escHtml(r.category):'')+'</span>'
-      +'<span class="rec-lacts"><button class="wico" onclick="editRecurringRule('+r.id+')" title="Editar">✎</button><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></span>'
+      +'<span class="rec-lmeta">Day '+r.dayOfMonth+' · '+amt+(r.category?' · '+escHtml(r.category):'')+'</span>'
+      +'<span class="rec-lacts"><button class="wico" onclick="editRecurringRule('+r.id+')" title="Edit">✎</button><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></span>'
       +'</div>';
   }).join('');
 }
@@ -2052,7 +2071,7 @@ window.editRecurringRule=function(id){
   document.getElementById('tx-amount').value=r.amount||'';
   document.getElementById('tx-rec-day').value=r.dayOfMonth||'';
   toggleVesHint();
-  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent='Guardar regla';
+  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent='Save rule';
   var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='';
   renderTxRecList();
 };
@@ -2060,7 +2079,7 @@ function cancelEditRecurring(){
   _editingRecId=null;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value=''; document.getElementById('tx-rec-day').value='';
   var on=document.getElementById('tx-recurring')&&document.getElementById('tx-recurring').checked;
-  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?'Add regla':'Add';
+  var btn=document.querySelector('.btn-add'); if(btn) btn.textContent=on?'Add rule':'Add';
   var cb=document.getElementById('btn-cancel-edit'); if(cb) cb.style.display='none';
   renderTxRecList();
 }
@@ -2069,11 +2088,11 @@ window.addRecurringRule=function(){
   var label=document.getElementById('tx-desc').value.trim();
   var day=parseInt(document.getElementById('tx-rec-day').value,10);
   var amount=parseFloat(document.getElementById('tx-amount').value);
-  if(!label||isNaN(day)||day<1||day>31||isNaN(amount)||amount<=0){ txMsg('Nota, dia (1-31) y monto son obligatorios'); return; }
+  if(!label||isNaN(day)||day<1||day>31||isNaN(amount)||amount<=0){ txMsg('Note, day (1-31) and amount are required'); return; }
   // Una regla sin wallet genera txs que no se debitan de ningun tracker: se ven
   // en Transactions pero el balance nunca baja. Mejor frenar aca que dejarla rota.
   var wsel=document.getElementById('tx-wallet').value;
-  if(!wsel){ txMsg('Elegi un wallet para la regla'); return; }
+  if(!wsel){ txMsg('Pick a wallet for the rule'); return; }
   if(!S.recurring) S.recurring=[];
   var fields={label:label,dayOfMonth:day,
     wallet:wsel,
@@ -2085,11 +2104,11 @@ window.addRecurringRule=function(){
     var r=S.recurring.find(function(x){ return x.id===_editingRecId; });
     if(r) Object.assign(r,fields); // conserva id, lastRun -> no re-agrega tx ya creadas
     cancelEditRecurring();
-    txMsg('Regla actualizada ✓',true);
+    txMsg('Rule updated ✓',true);
   }else{
     S.recurring.push(Object.assign({id:Date.now(),lastRun:null},fields));
     document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value=''; document.getElementById('tx-rec-day').value='';
-    txMsg('Regla creada ✓',true);
+    txMsg('Rule created ✓',true);
   }
   S.recurringUpdatedAt=stamp(); save();
   renderTxRecList();
@@ -2338,7 +2357,14 @@ function appPrompt(title,infoHtml,defaultVal,opts){
     ov.innerHTML='<div class="app-modal">'
       +'<h3>'+title+'</h3>'
       +'<div class="modal-info">'+infoHtml+'</div>'
-      +'<div class="field" style="margin-bottom:0"><input id="_ami" class="modal-inp" type="'+(opts&&opts.inputType||'number')+'" step="0.01" value="'+escHtml(String(defaultVal))+'"/></div>'
+      // opts.math: el campo pasa por evalMath, asi que necesita el chip "+" y un
+      // teclado decimal (type=number no deja escribir "1000+2500" ni con teclado
+      // fisico, porque el navegador descarta el valor no numerico).
+      +'<div class="field" style="margin-bottom:0">'
+      +  (opts&&opts.math
+          ?'<span class="sum-wrap"><input id="_ami" class="modal-inp" type="text" inputmode="decimal" value="'+escHtml(String(defaultVal))+'"/><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,\'_ami\')">+</span></span>'
+          :'<input id="_ami" class="modal-inp" type="'+(opts&&opts.inputType||'number')+'" step="0.01" value="'+escHtml(String(defaultVal))+'"/>')
+      +'</div>'
       +cbHtml
       +'<div class="modal-actions">'
       +'<button class="btn" id="_amc">Cancel</button>'
@@ -2492,8 +2518,14 @@ window._budResetMonth=function(){
 // alterar valores por accidente al pasar el cursor mientras se hace scroll de
 // la pagina). Se debounce el guardado: renderBudget() recrea el input y
 // perderia el foco si guardaramos en cada tick de la rueda.
+// Click en cualquier parte de la pastilla (el `%`, el padding) enfoca el input.
+// Sin esto solo contaban los 32px de los digitos, que es justo lo incomodo.
+window.bdgPctFocus=function(wrap){
+  var el=wrap.firstElementChild;
+  if(el&&document.activeElement!==el){ el.focus(); el.select(); }
+};
 window.bdgPctWheel=function(e,el,cat){
-  if(document.activeElement!==el) return;
+  if(!el||document.activeElement!==el) return;
   e.preventDefault();
   var step=parseFloat(el.step)||0.5;
   var cur=parseFloat(el.value)||0;
@@ -2600,8 +2632,11 @@ function renderBudget(){
       +'<div class="bdg-hero-val" style="color:'+remColor+'">'+fmtUSD(Math.abs(remaining))+(remaining<0?' over':'')+'</div>'
       +'<div class="bdg-pb"><div class="bdg-pf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
       +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '
-        +'<span class="bdg-total-view" title="Tocar para editar el budget del mes" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(S.budgetTotal)+'</span>'
-        +'<span class="bdg-total-edit" style="display:none">$<input type="text" inputmode="decimal" id="bud-total" value="'+S.budgetTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"></span>'
+        +'<span class="bdg-total-view" title="Tap to edit the budget for this month" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(S.budgetTotal)+'</span>'
+        // onblur guardaba y cerraba el modo edicion; tocar el chip "+" hacia
+        // justamente eso. sumChipTap cancela el blur con preventDefault, pero se
+        // deja el chip dentro del wrap para que el foco nunca salga del input.
+        +'<span class="bdg-total-edit" style="display:none">$<span class="sum-wrap"><input type="text" inputmode="decimal" id="bud-total" value="'+S.budgetTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,\'bud-total\')">+</span></span></span>'
         +'</span><span class="bdg-pct">'+pct+'%</span></div>'
       +'<div class="bdg-stats">'
         +bstat('Income',fmtUSD(income),'#5DCAA5')
@@ -2635,14 +2670,14 @@ function renderBudget(){
     :allocDiff>0?sumPctHead.toFixed(1)+'% · faltan '+allocDiff+'%'
     :sumPctHead.toFixed(1)+'% · sobran '+Math.abs(allocDiff)+'%';
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
-    +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Suma de los % asignados (meta: 100%)">'
+    +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Sum of allocated % (target: 100%)">'
     +'<i class="bdg-alloc-mini"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></i>'+allocTxt+'</span>'
     +'<span class="bdg-scope">'
     +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
-    +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">Solo '+mShort+'</button>'
+    +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
     +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
-    +'<button class="bdg-scope-btn" title="Asignar % segun tu gasto promedio (3 meses)" onclick="applyBudgetRec(\'hist\')">Historial 3m</button>'
-    +'<button class="bdg-scope-btn" title="50% esenciales / 30% estilo de vida / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
+    +'<button class="bdg-scope-btn" title="Allocate % from your 3-month average spend" onclick="applyBudgetRec(\'hist\')">Historial 3m</button>'
+    +'<button class="bdg-scope-btn" title="50% essentials / 30% lifestyle / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
     +'</span></div>';
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
@@ -2665,18 +2700,27 @@ function renderBudget(){
     // de mes" se quito por pedido — ensuciaba la tarjeta.
     var note='';
     if(catLim>0&&s>catLim){
-      note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtShortUSD(freeOthers)+' libres':'')+'</div>';
+      note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtShortUSD(freeOthers)+' free':'')+'</div>';
     }
     // Layout: input de % (asignacion) arriba a la derecha del label; monto grande
     // centrado; barra; debajo % usado (izq) y limite derivado (der). Sin delta
     // mes-a-mes (ya vive en la card Mes vs mes).
     html+='<div class="bdg-cat">'
-      +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i>'+cat+'</span>'
-        +'<span class="bdg-lim-wrap"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)" onwheel="bdgPctWheel(event,this,\''+cat+'\')">%'+(ci.ovr?' <i class="bdg-ovr-dot" title="Override solo de '+mShort+'"></i>':'')+'</span>'
+      // El nombre va en su propio span: text-overflow:ellipsis no aplica al texto
+      // suelto dentro de un contenedor flex, y en mobile "Discretionary" se cortaba
+      // en seco ("Discretiona") sin puntos suspensivos.
+      +'<div class="bdg-cat-top"><span class="bdg-cat-name"><i class="bdg-dot" style="background:'+cc+'"></i><span class="bdg-cat-txt" title="'+cat+'">'+cat+'</span></span>'
+        // onwheel/onclick van en la pastilla y no en el input: asi la rueda se
+        // acciona desde cualquier punto de la pastilla (incluido el `%` y el
+        // padding) sin que el cursor tape el numero que se esta ajustando.
+        // La pastilla entera se tiñe cuando el % es un override del mes, en vez de
+        // colgar un punto de 6px al lado: el scope cambia el ALCANCE del valor (un
+        // mes vs todos los meses) y eso merece leerse de un vistazo.
+        +'<span class="bdg-lim-wrap'+(ci.ovr?' is-ovr':'')+'"'+(ci.ovr?' title="'+mShort+' only — overrides the default %"':'')+' onclick="bdgPctFocus(this)" onwheel="bdgPctWheel(event,this.firstElementChild,\''+cat+'\')"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%</span>'
       +'</div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-sub"><span>'+cp+'%</span><span>'+(catLim>0?'de '+fmtUSD(catLim):'$0 planeado')+'</span></div>'
+      +'<div class="bdg-cat-sub"><span>'+cp+'%</span><span>'+(catLim>0?'of '+fmtUSD(catLim):'$0 planned')+'</span></div>'
       +note
       +'</div>';
   });
@@ -2711,9 +2755,9 @@ function renderBudget(){
     });
     var dT=t0-t1, colT=dT===0?'var(--txt3)':(dT>0?'#E24B4A':'#5DCAA5'), arrT=dT===0?'·':(dT>0?'▲':'▼');
     html+='<div class="mvm-card">'
-      +'<span class="cleg" style="margin-bottom:20px">Mes vs mes'+(isCurMonth?' <span style="text-transform:none;letter-spacing:0;color:var(--txt3)">· al dia '+dayNum+'</span>':'')+'</span>'
+      +'<span class="cleg" style="margin-bottom:20px">Month vs month'+(isCurMonth?' <span style="text-transform:none;letter-spacing:0;color:var(--txt3)">· through day '+dayNum+'</span>':'')+'</span>'
       +'<div class="mvm-row mvm-head"><span class="mvm-cat">Categoria</span><span class="mvm-num">'+lbl(m2)+'</span><span class="mvm-num">'+lbl(m1)+'</span><span class="mvm-num">'+lbl(month)+'</span><span class="mvm-num">Δ</span></div>'
-      +(rows||'<div style="font-size:14px;color:var(--txt3);padding:10px 2px">Sin gastos en estos meses.</div>')
+      +(rows||'<div style="font-size:14px;color:var(--txt3);padding:10px 2px">No spending in these months.</div>')
       +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num mvm-pre">'+fmtUSD(t2)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(t1)+'</span><span class="mvm-num">'+fmtUSD(t0)+'</span><span class="mvm-num mvm-delta" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
       +'</div>';
   })();
@@ -2834,7 +2878,7 @@ async function fetchExchangeWallet(w){
   } else {
     var xk=xkGet(w.id);
     if(!xk||!xk.key||!xk.secret) return; // keys no estan en este dispositivo
-    if(!canFetchExchanges()) throw new Error('Sin sesion');
+    if(!canFetchExchanges()) throw new Error('No session');
     if(w.type==='bybit'){
       var rb=await fetch(BYBIT_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({key:xk.key,secret:xk.secret})});
       if(!rb.ok) throw new Error('Bybit '+rb.status);
@@ -2911,7 +2955,7 @@ window.addExchangeWallet=async function(){
   var st=document.getElementById('xw-status');
   var name=(document.getElementById('xw-name').value||'').trim();
   var type=document.getElementById('xw-type').value;
-  if(!name){ if(st) st.textContent='Pon un nombre'; return; }
+  if(!name){ if(st) st.textContent='Enter a name'; return; }
   var w={id:Date.now(),name:name,type:type,balance:null,updated:null,fetchedAt:null};
   if(type==='bsc'){
     var addr=(document.getElementById('xw-address').value||'').trim();
@@ -2937,7 +2981,7 @@ window.addExchangeWallet=async function(){
   renderWallets(); renderSummary();
 };
 window.removeExchangeWallet=function(id){
-  if(!confirm('Eliminar este wallet de exchange?')) return;
+  if(!confirm('Delete this exchange wallet?')) return;
   S.exchangeWallets=(S.exchangeWallets||[]).filter(function(w){ return w.id!==id; });
   xkDel(id);
   S.exchangeWalletsUpdatedAt=stamp(); save();
@@ -3013,11 +3057,11 @@ function renderWallets(){
   function xwRow(w){
     var logo=exchangeLogoByName(w.name)||(w.type==='bsc'?null:'/logo-binance.png?v=3');
     var noKeys=w.type!=='bsc'&&!xkGet(w.id);
-    var metaExtra=w.type==='bsc'?'BSC USDT':(noKeys?'Keys no estan en este dispositivo':'');
+    var metaExtra=w.type==='bsc'?'BSC USDT':(noKeys?'Keys are not on this device':'');
     var meta=metaExtra+(metaExtra&&w.updated?' · ':'')+(w.updated?'Updated '+w.updated:'');
     var right=w.balance!=null?balHtml(w.balance):'<span class="wm-bal" style="color:var(--txt3)">—</span>';
     var icK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>';
-    var acts=(noKeys?'<button class="wico" title="Ingresar API keys en este dispositivo" onclick="setExchangeKeys('+w.id+')">'+icK+'</button>':'')
+    var acts=(noKeys?'<button class="wico" title="Enter API keys on this device" onclick="setExchangeKeys('+w.id+')">'+icK+'</button>':'')
       +'<button class="wico del" onclick="removeExchangeWallet('+w.id+')">'+icX+'</button>';
     return wmRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),w.balance!=null?'on':'off',escHtml(w.name),meta||'Connected',right,acts,logo);
   }
@@ -3044,7 +3088,7 @@ function renderWallets(){
   var mnRows=mnList.map(function(w){
     var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
     var isVes=w.currency==='VES';
-    var meta=isVes?('Bs '+(w.balance||0).toLocaleString('es-VE')+' · tasa '+(vesTxRateSrc()==='p2p'?'USDT':'BCV')):'Manual balance';
+    var meta=isVes?('Bs '+(w.balance||0).toLocaleString('es-VE')+' · rate '+(vesTxRateSrc()==='p2p'?'USDT':'BCV')):'Manual balance';
     return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),meta,balHtml(manualWalletUsd(w)),acts,walletLogo(w.name));
   }).join('');
 
@@ -3419,19 +3463,68 @@ if(!window._txEscListener){
     if(_xwp&&_xwp.classList.contains('open')) closeExchangeForm();
   });
 }
-// Atajos de teclado (web): N nueva tx, / buscar, 1-7 tabs. No actuan mientras
-// se escribe en un campo ni con el login abierto.
+// Atajos de teclado (web): N nueva tx, / buscar, 1-7 tabs, ? esta ayuda. No actuan
+// mientras se escribe en un campo ni con el login abierto.
+var KB_SHORTCUTS=[
+  ['N','New transaction'],
+  ['/','Search transactions'],
+  ['1'+'–'+'7','Switch tab'],
+  ['?','This panel'],
+  ['Esc','Close panel / form'],
+];
+// Se muestra salvo que el puntero sea GRUESO (tactil). Es el complemento exacto
+// del @media(pointer:coarse) que enseña el chip "+": o una ayuda o la otra, nunca
+// las dos ni ninguna. Preguntar por pointer:fine seria mas estrecho y dejaria sin
+// pista a los entornos que reportan pointer:none, donde el teclado si funciona.
+function kbHasKeyboard(){ return !(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches); }
+window.toggleKbHelp=function(force){
+  var ov=document.getElementById('kb-help');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='kb-help'; ov.className='kb-help';
+    ov.innerHTML='<div class="kb-help-box" role="dialog" aria-label="Keyboard shortcuts">'
+      +'<div class="kb-help-ttl">Keyboard shortcuts</div>'
+      +KB_SHORTCUTS.map(function(k){
+          return '<div class="kb-help-row"><kbd>'+k[0]+'</kbd><span>'+k[1]+'</span></div>';
+        }).join('')
+      +'</div>';
+    ov.addEventListener('click',function(){ window.toggleKbHelp(false); });
+    document.body.appendChild(ov);
+  }
+  var open=force!==undefined?force:!ov.classList.contains('open');
+  ov.classList.toggle('open',open);
+};
 if(!window._kbShortcuts){
   window._kbShortcuts=true;
   document.addEventListener('keydown',function(e){
     if(e.ctrlKey||e.metaKey||e.altKey) return;
+    var help=document.getElementById('kb-help');
+    var helpOpen=!!(help&&help.classList.contains('open'));
+    // Esc cierra la ayuda antes que cualquier otra cosa, y funciona incluso con
+    // el foco dentro de un campo.
+    if(e.key==='Escape'&&helpOpen){ window.toggleKbHelp(false); return; }
     var t=e.target;
     if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
     var auth=document.getElementById('auth-overlay'); if(auth&&auth.classList.contains('open')) return;
+    if(e.key==='?'){ e.preventDefault(); if(kbHasKeyboard()) window.toggleKbHelp(); return; }
+    // Con la ayuda abierta, cualquier tecla la cierra antes de ejecutar el atajo:
+    // asi se puede leer el panel y usar el atajo en un solo gesto.
+    if(helpOpen) window.toggleKbHelp(false);
     if(e.key==='n'||e.key==='N'){ e.preventDefault(); showPage('transactions',null); openTxForm(); }
     else if(e.key==='/'){ e.preventDefault(); showPage('transactions',null); var sIn=document.getElementById('tf-search'); if(sIn) sIn.focus(); }
     else { var tabs={'1':'summary','2':'transactions','3':'budget','4':'wallets','5':'holdings','6':'tools','7':'settings'}; if(tabs[e.key]) showPage(tabs[e.key],null); }
   });
+  // Pista permanente: un "?" discreto abajo a la derecha. Sin el, el panel es tan
+  // descubrible como los atajos que documenta, o sea nada.
+  if(kbHasKeyboard()){
+    var hint=document.createElement('button');
+    hint.className='kb-hint'; hint.type='button';
+    hint.textContent='?';
+    hint.title='Keyboard shortcuts (?)';
+    hint.setAttribute('aria-label','Keyboard shortcuts');
+    hint.onclick=function(){ window.toggleKbHelp(); };
+    document.body.appendChild(hint);
+  }
 }
 
 // Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
@@ -3738,7 +3831,7 @@ if('serviceWorker' in navigator){
 function showUpdateToast(){
   if(document.getElementById('sw-toast')) return;
   var b=document.createElement('div'); b.id='sw-toast'; b.className='sync-banner show';
-  b.innerHTML='<span>⬆ Nueva version disponible.</span><button onclick="location.reload()">Actualizar</button>';
+  b.innerHTML='<span>⬆ New version available.</span><button onclick="location.reload()">Update</button>';
   document.body.appendChild(b);
 }
 

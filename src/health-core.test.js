@@ -287,7 +287,7 @@ describe('renormalizacion de pesos', () => {
     var r = healthScoreCore(base({ budgetTotal:0 }));
     expect(r.total).toBeNull();
     expect(r.total).not.toBe(0);
-    expect(r.label).toBe('Sin datos');
+    expect(r.label).toBe('No data');
     expect(r.metrics.every(function(m){ return !m.available; })).toBe(true);
   });
 });

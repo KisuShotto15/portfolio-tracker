@@ -100,23 +100,23 @@ function authMsg(t){ var e=document.getElementById('auth-msg'); if(e) e.textCont
 window.authSendCode=async function(){
   var email=(document.getElementById('auth-email').value||'').trim().toLowerCase();
   if(!email||email.indexOf('@')<1){ authMsg('Correo invalido'); return; }
-  authMsg('Enviando codigo...'); window._authEmail=email;
+  authMsg('Sending code...'); window._authEmail=email;
   var res=await sbOtpRequest(email);
   if(res.ok){
     document.getElementById('auth-step-email').style.display='none';
     document.getElementById('auth-step-code').style.display='block';
-    authMsg('Codigo enviado a '+email);
+    authMsg('Code sent to '+email);
     var c=document.getElementById('auth-code'); if(c) c.focus();
   } else if(res.code==='signup_disabled'){
-    authMsg('Este correo no esta autorizado. Pide acceso al administrador.');
-  } else authMsg('No se pudo enviar el codigo. Reintenta.');
+    authMsg('This email is not authorized. Ask the administrator for access.');
+  } else authMsg('Could not send the code. Try again.');
 };
 window.authVerifyCode=async function(){
   var code=(document.getElementById('auth-code').value||'').trim();
-  if(!code){ authMsg('Ingresa el codigo'); return; }
-  authMsg('Verificando...');
+  if(!code){ authMsg('Enter the code'); return; }
+  authMsg('Verifying...');
   if(await sbOtpVerify(window._authEmail,code)){ hideAuthOverlay(); await _onLogin(); }
-  else authMsg('Codigo incorrecto o expirado.');
+  else authMsg('Wrong or expired code.');
 };
 window.authBackToEmail=function(){
   document.getElementById('auth-step-code').style.display='none';
@@ -164,11 +164,11 @@ async function sbAuthedFetch(path,method,body){
   return r;
 }
 window.authPasskey=async function(){
-  if(!pkSupported()){ authMsg('Este navegador no soporta passkeys'); return; }
-  authMsg('Esperando passkey...');
+  if(!pkSupported()){ authMsg('This browser does not support passkeys'); return; }
+  authMsg('Waiting for passkey...');
   try{
     var r=await fetch(SUPABASE_URL+'/auth/v1/passkeys/authentication/options',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:'{}'});
-    if(!r.ok){ authMsg('Passkeys no disponibles ahora mismo'); return; }
+    if(!r.ok){ authMsg('Passkeys are unavailable right now'); return; }
     var j=await r.json(), o=j.options;
     o.challenge=b64uToBuf(o.challenge);
     (o.allowCredentials||[]).forEach(function(c){ c.id=b64uToBuf(c.id); });
@@ -176,16 +176,16 @@ window.authPasskey=async function(){
     var v=await fetch(SUPABASE_URL+'/auth/v1/passkeys/authentication/verify',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({challenge_id:j.challenge_id,credential:pkCredToJson(cred,'get')})});
     var t=await v.json().catch(function(){ return {}; });
     if(v.ok&&t.access_token){ sbSetSession(t); hideAuthOverlay(); authMsg(''); await _onLogin(); }
-    else authMsg('Passkey rechazada'+(t.msg?': '+t.msg:''));
-  }catch(e){ authMsg(e&&e.name==='NotAllowedError'?'Cancelado':'Error con la passkey'); }
+    else authMsg('Passkey rejected'+(t.msg?': '+t.msg:''));
+  }catch(e){ authMsg(e&&e.name==='NotAllowedError'?'Cancelled':'Passkey error'); }
 };
 function pkStatus(t){ var e=document.getElementById('pk-status'); if(e) e.textContent=t||''; }
 window.passkeyRegister=async function(){
-  if(!pkSupported()){ pkStatus('Este navegador no soporta passkeys'); return; }
-  pkStatus('Creando passkey...');
+  if(!pkSupported()){ pkStatus('This browser does not support passkeys'); return; }
+  pkStatus('Creating passkey...');
   try{
     var r=await sbAuthedFetch('/passkeys/registration/options','POST','{}');
-    if(!r.ok){ var e1=await r.json().catch(function(){ return {}; }); pkStatus('No se pudo iniciar: '+(e1.msg||e1.error_code||r.status)); return; }
+    if(!r.ok){ var e1=await r.json().catch(function(){ return {}; }); pkStatus('Could not start: '+(e1.msg||e1.error_code||r.status)); return; }
     var j=await r.json(), o=j.options;
     o.challenge=b64uToBuf(o.challenge);
     o.user.id=b64uToBuf(o.user.id);
@@ -193,14 +193,14 @@ window.passkeyRegister=async function(){
     var cred=await navigator.credentials.create({publicKey:o});
     var v=await sbAuthedFetch('/passkeys/registration/verify','POST',JSON.stringify({challenge_id:j.challenge_id,credential:pkCredToJson(cred,'create')}));
     var t=await v.json().catch(function(){ return {}; });
-    if(v.ok){ pkStatus('Passkey creada'); renderPasskeys(); }
-    else pkStatus('Fallo la verificacion: '+(t.msg||t.error_code||v.status));
-  }catch(e){ pkStatus(e&&e.name==='NotAllowedError'?'Cancelado':'Error: '+(e&&e.message||e)); }
+    if(v.ok){ pkStatus('Passkey created'); renderPasskeys(); }
+    else pkStatus('Verification failed: '+(t.msg||t.error_code||v.status));
+  }catch(e){ pkStatus(e&&e.name==='NotAllowedError'?'Cancelled':'Error: '+(e&&e.message||e)); }
 };
 window.passkeyDelete=async function(id){
-  if(!confirm('Eliminar esta passkey? El dispositivo que la usaba tendra que entrar por correo.')) return;
+  if(!confirm('Delete this passkey? The device using it will have to sign in by email.')) return;
   var r=await sbAuthedFetch('/passkeys/'+id,'DELETE');
-  if(r.ok) renderPasskeys(); else pkStatus('No se pudo eliminar');
+  if(r.ok) renderPasskeys(); else pkStatus('Could not delete');
 };
 export async function renderPasskeys(){
   var el=document.getElementById('pk-list'); if(!el) return;

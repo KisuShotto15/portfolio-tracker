@@ -109,7 +109,7 @@
             <div style="display:flex;align-items:center;gap:6px">
               <button class="btn btns btn-accent" onclick="recordSnapshot()">+ Snapshot</button>
               <div id="equity-hist"></div>
-              <button class="hist-btn" id="eq-holdings-btn" onclick="toggleEqHoldings()" title="Mostrar/ocultar linea + Holdings" aria-label="Linea Holdings">
+              <button class="hist-btn" id="eq-holdings-btn" onclick="toggleEqHoldings()" title="Show/hide the + Holdings line" aria-label="Holdings line">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3"><polyline points="3 17 9 11 13 14 21 6"/></svg>
               </button>
             </div>
@@ -137,7 +137,7 @@
       <!-- Monthly breakdown kept rendered (data integrity), hidden from view -->
       <div class="dash-hidden"><div id="sum-cards"></div></div>
 
-      <!-- Section 3 — Cash Flow (6 meses) -->
+      <!-- Section 3 — Cash Flow (6 months) -->
       <div class="span12">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <span class="cleg" id="mc-months-lbl" style="margin:0">6 Months</span>
@@ -170,15 +170,15 @@
     <div class="tx-mob-hdr">
       <span class="dash-eyebrow" style="font-size:13px;letter-spacing:.06em">Transactions</span>
       <div class="tx-rates-wrap" id="tx-rates-wrap">
-        <button class="tx-rates-btn" onclick="toggleRatesPopup(event)" aria-label="Ver tasas">
+        <button class="tx-rates-btn" onclick="toggleRatesPopup(event)" aria-label="View rates">
           <span style="font-size:12px;color:var(--txt3)">USDT</span>
-          <span class="rval" id="rate-usdt-m" onclick="event.stopPropagation();copyRateVal(this)" title="Tap para copiar">-</span>
+          <span class="rval" id="rate-usdt-m" onclick="event.stopPropagation();copyRateVal(this)" title="Tap to copy">-</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--txt3)"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="tx-rates-popup" id="tx-rates-popup">
-          <div class="tx-rate-row"><span>BCV</span><span class="rval" id="rate-display-m" onclick="copyRateVal(this)" title="Tap para copiar">-</span></div>
-          <div class="tx-rate-row"><span>EUR</span><span class="rval" id="rate-eur-m" onclick="copyRateVal(this)" title="Tap para copiar">-</span></div>
-          <div class="tx-rate-row"><span>INTERV</span><span class="rval" id="rate-interv-m" onclick="copyRateVal(this)" title="Tap para copiar">-</span></div>
+          <div class="tx-rate-row"><span>BCV</span><span class="rval" id="rate-display-m" onclick="copyRateVal(this)" title="Tap to copy">-</span></div>
+          <div class="tx-rate-row"><span>EUR</span><span class="rval" id="rate-eur-m" onclick="copyRateVal(this)" title="Tap to copy">-</span></div>
+          <div class="tx-rate-row"><span>INTERV</span><span class="rval" id="rate-interv-m" onclick="copyRateVal(this)" title="Tap to copy">-</span></div>
         </div>
       </div>
     </div>
@@ -196,20 +196,20 @@
       <span class="dash-eyebrow" style="margin-right:26px">Transactions</span>
       <span style="width:1px;height:16px;background:rgba(255,255,255,0.12);margin-right:26px"></span>
       <span style="color:var(--color-text-secondary)">BCV</span>
-      <span class="rval" id="rate-display" onclick="copyRateVal(this)" title="Click para copiar">-</span>
+      <span class="rval" id="rate-display" onclick="copyRateVal(this)" title="Click to copy">-</span>
       <span style="width:1px;height:15px;background:rgba(255,255,255,0.12);margin:0 3px"></span>
       <span style="color:var(--color-text-secondary)">EUR</span>
-      <span class="rval" id="rate-eur" onclick="copyRateVal(this)" title="Click para copiar">-</span>
+      <span class="rval" id="rate-eur" onclick="copyRateVal(this)" title="Click to copy">-</span>
       <span style="width:1px;height:15px;background:rgba(255,255,255,0.12);margin:0 3px"></span>
       <span style="color:var(--color-text-secondary)">INTERVENCION</span>
-      <span class="rval" id="rate-interv" onclick="copyRateVal(this)" title="Click para copiar">-</span>
+      <span class="rval" id="rate-interv" onclick="copyRateVal(this)" title="Click to copy">-</span>
       <span style="width:1px;height:15px;background:rgba(255,255,255,0.12);margin:0 3px"></span>
       <span style="color:var(--color-text-secondary)">USDT</span>
-      <span class="rval" id="rate-usdt" onclick="copyRateVal(this)" title="Click para copiar">-</span>
-      <button class="btn btns" style="margin-left:6px;padding:6px 10px" onclick="fetchRate(true);fetchUsdtRate()" title="Refrescar todas las tasas" aria-label="Refresh rates">&#8635;</button>
+      <span class="rval" id="rate-usdt" onclick="copyRateVal(this)" title="Click to copy">-</span>
+      <button class="btn btns" style="margin-left:6px;padding:6px 10px" onclick="fetchRate(true);fetchUsdtRate()" title="Refresh all rates" aria-label="Refresh rates">&#8635;</button>
     </div>
     <div class="frow">
-      <button class="tx-search-btn" onclick="toggleTxSearch()" aria-label="Buscar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg></button>
+      <button class="tx-search-btn" onclick="toggleTxSearch()" aria-label="Search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg></button>
       <input type="search" id="tf-search" placeholder="Search..." aria-label="Search transactions" style="min-width:140px" oninput="renderTx()"/>
       <button class="tx-filter-toggle" onclick="toggleTxFilters()"><svg class="tf-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="tf-lbl">Filters <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6l5 5 5-5"/></svg></span></button>
       <button id="btn-undo" class="btn btns" style="padding:5px 8px" title="Undo" aria-label="Undo" disabled onclick="doUndo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
@@ -248,7 +248,7 @@
     <div class="field" id="wm-cur-field"><span class="field-lbl">Moneda</span>
       <select id="wm-cur" onchange="toggleWmBalField()">
         <option value="USD">USD</option>
-        <option value="VES">Bs — se valora solo a tasa USDT</option>
+        <option value="VES">Bs — valued automatically at the USDT rate</option>
       </select>
     </div>
     <div class="field" id="wm-bal-field"><span class="field-lbl" id="wm-bal-lbl">Balance USD</span><input type="number" id="wm-bal" placeholder="0.00" step="0.01"/></div>
@@ -289,7 +289,7 @@
       <input id="xw-address" type="text" placeholder="0x..."/>
     </div>
     <div style="display:flex;justify-content:center;margin-top:18px">
-      <button class="btn btnp" style="min-width:140px" onclick="addExchangeWallet()">Agregar</button>
+      <button class="btn btnp" style="min-width:140px" onclick="addExchangeWallet()">Add</button>
     </div>
     <div id="xw-status" style="font-size:13px;color:var(--color-text-secondary);text-align:center;margin-top:10px"></div>
   </div>
@@ -454,7 +454,7 @@
       <div id="pk-list" style="margin-bottom:8px"></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
         <button class="btn btns btnp" onclick="passkeyRegister()">Crear passkey en este dispositivo</button>
-        <button class="btn btns" onclick="if(confirm('Cerrar sesion? Tus datos quedan sincronizados en la nube; al volver a entrar se restauran.'))logout()">Cerrar sesion</button>
+        <button class="btn btns" onclick="if(confirm('Sign out? Your data stays synced in the cloud and is restored when you sign back in.'))logout()">Sign out</button>
       </div>
       <div id="pk-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
     </div>
@@ -582,7 +582,7 @@
         <input type="date" id="tx-date" tabindex="7" oninput="updateDateDisplay()"/>
       </div>
     </div>
-    <div class="field" id="tx-rec-day-field" style="display:none"><span class="field-lbl">Dia del mes</span><input type="number" id="tx-rec-day" min="1" max="31" placeholder="1-31" inputmode="numeric"/></div>
+    <div class="field" id="tx-rec-day-field" style="display:none"><span class="field-lbl">Day of month</span><input type="number" id="tx-rec-day" min="1" max="31" placeholder="1-31" inputmode="numeric"/></div>
     <div class="field note-field-wrap" style="grid-column:span 2;position:relative"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote();updateNoteSuggest()" style="padding-right:38px"/><button type="button" class="note-dd-btn" onclick="toggleNoteSuggest(event)" aria-label="Notas recientes"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div id="note-suggest-pop" popover="manual"></div></div>
     <div class="field"><span class="field-lbl">Wallet</span><select id="tx-wallet" tabindex="2"></select></div>
   </div>
@@ -590,7 +590,7 @@
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
     <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USDT</option><option value="VES">VES</option></select></div>
-    <div class="field"><span class="field-lbl">Amount</span><input type="text" inputmode="decimal" id="tx-amount" placeholder="0.00" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/></div>
+    <div class="field"><span class="field-lbl">Amount</span><span class="sum-wrap"><input type="text" inputmode="decimal" id="tx-amount" placeholder="0.00" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,'tx-amount')">+</span></span></div>
   </div>
   <div class="tx-rec-row" id="tx-rec-row">
     <label class="tx-rec-check"><input type="checkbox" id="tx-recurring" onchange="toggleTxRecurring()"/><span>Recurrente</span></label>
@@ -604,7 +604,7 @@
     <input type="file" id="tx-receipt" accept="image/*" style="display:none" onchange="onReceiptPick(this)"/>
     <input type="file" id="tx-receipt-cam" accept="image/*" capture="environment" style="display:none" onchange="onReceiptPick(this)"/>
     <div class="receipt-attach">
-      <button class="btn btns" id="btn-receipt" title="Adjuntar factura" onclick="toggleReceiptMenu(event)">📎</button>
+      <button class="btn btns" id="btn-receipt" title="Attach receipt" onclick="toggleReceiptMenu(event)">📎</button>
       <div class="receipt-menu" id="receipt-menu">
         <button class="btn btns receipt-menu-btn" id="receipt-cam-btn" title="Camara" onclick="pickReceipt('tx-receipt-cam')"><svg width="38" height="38" viewBox="1 2 22 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
         <button class="btn btns receipt-menu-btn" title="Galeria" onclick="pickReceipt('tx-receipt')"><svg width="38" height="38" viewBox="2 2 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>

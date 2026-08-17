@@ -162,8 +162,8 @@ export function healthScoreCore(input){
 
   return {
     total: total,
-    label: total === null ? 'Sin datos'
-         : total >= 80 ? 'Excelente' : total >= 60 ? 'Bien' : total >= 40 ? 'Mejorable' : 'Atención',
+    label: total === null ? 'No data'
+         : total >= 80 ? 'Excellent' : total >= 60 ? 'Good' : total >= 40 ? 'Fair' : 'Attention',
     from: from, to: to, netWorth: nwEnd,
     metrics: metrics
   };
