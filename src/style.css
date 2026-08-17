@@ -529,8 +529,8 @@ input,select,textarea,button{font-family:inherit}
    que para girar la rueda habia que apuntar justo sobre los digitos, y el cursor
    tapaba el numero que se estaba ajustando. Con padding y el `%` dentro, la rueda
    se puede accionar desde el borde sin cubrir la cifra. */
-.bdg-lim-wrap{display:inline-flex;align-items:baseline;gap:1px;color:var(--txt3);font-size:12px;flex-shrink:0;
-  background:var(--surface2);border:1px solid var(--line-soft);border-radius:8px;padding:5px 5px;cursor:ns-resize;
+.bdg-lim-wrap{display:inline-flex;align-items:baseline;gap:0;color:var(--txt3);font-size:10px;flex-shrink:0;
+  background:var(--surface2);border:1px solid var(--line-soft);border-radius:8px;padding:5px 3px;cursor:ns-resize;
   transition:border-color .15s,background .15s}
 .bdg-lim-wrap:hover{border-color:rgba(155,112,240,.4);background:rgba(155,112,240,.07)}
 /* La rueda solo actua con el input enfocado (si no, hacer scroll en la pagina
@@ -545,9 +545,12 @@ input,select,textarea,button{font-family:inherit}
    lo que ocupa "100" (27px), y en mobile ese sobrante se lo quitaba al nombre de
    la categoria. Menos de 3ch no sirve: "100" alineado a la derecha se recortaria
    a "00", que es un numero distinto y creible. */
-.bdg-lim-inp{font-family:var(--font-num);font-size:15px;font-weight:600;color:var(--txt);background:transparent;border:none;width:3ch;text-align:right;padding:0;-moz-appearance:textfield}
+.bdg-lim-inp{font-family:var(--font-num);font-size:12px;font-weight:600;color:var(--txt);background:transparent;border:none;width:3ch;text-align:right;padding:0;-moz-appearance:textfield}
 .bdg-lim-inp::-webkit-outer-spin-button,.bdg-lim-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.bdg-lim-inp:focus{outline:none;color:#fff}
+/* El input global trae border-radius:12px + un box-shadow de 3px al enfocar. En
+   un campo de 27x18 ese halo redondeado asomaba por detras de la pastilla como
+   un ovalo. Aca el foco ya lo indica el borde de la pastilla (:focus-within). */
+.bdg-lim-inp:focus{outline:none;color:#fff;box-shadow:none;border-radius:0}
 /* Sin esto el cursor de texto aparece sobre el `%` y el padding, contradiciendo
    el ns-resize que anuncia que la pastilla se ajusta con la rueda. */
 .bdg-lim-inp{cursor:ns-resize}
@@ -614,8 +617,8 @@ input,select,textarea,button{font-family:inherit}
   .bdg-cat-name{font-size:13px;overflow:hidden;text-overflow:ellipsis}
   /* En mobile el nombre compite con la pastilla dentro de media tarjeta, asi que
      aca se aprieta mas: 13px deja "100" en 23px en vez de 27px. */
-  .bdg-lim-wrap{padding:4px 4px}
-  .bdg-lim-inp{font-size:13px}
+  .bdg-lim-wrap{padding:4px 3px}
+  .bdg-lim-inp{font-size:11px}
   .bdg-cat-amt{font-size:21px}
   /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
      anterior, actual y delta) y baja la fuente */
