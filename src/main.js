@@ -2527,13 +2527,25 @@ window.bdgPctFocus=function(wrap){
 // La rueda SOLO mueve el numero en pantalla. No guarda: guardar dispara
 // renderBudget(), que reconstruye las tarjetas y te arranca el foco de debajo del
 // cursor a mitad de ajuste. El commit ocurre al salir del campo (bdgPctCommit).
-window.bdgPctWheel=function(e,el,cat){
-  if(!el||document.activeElement!==el) return;
-  e.preventDefault();
-  var step=parseFloat(el.step)||0.5;
-  var cur=parseFloat(el.value)||0;
-  el.value=Math.max(0,Math.round((cur+(e.deltaY<0?step:-step))*10)/10);
-};
+//
+// El listener va en el DOCUMENTO, no en cada pastilla: el gesto se ata al foco y
+// no a donde este el cursor, asi que una vez seleccionado el campo se ajusta con
+// la rueda desde cualquier parte de la pagina. Sin foco no hace nada, que es lo
+// que evita cambiar un presupuesto al pasar de largo haciendo scroll.
+// passive:false es obligatorio para poder preventDefault y que la pagina no se
+// desplace al mismo tiempo; el precio es que mientras el campo este enfocado la
+// rueda no scrollea (se sale clickeando fuera).
+if(!window._bdgWheelBound){
+  window._bdgWheelBound=true;
+  document.addEventListener('wheel',function(e){
+    var el=document.activeElement;
+    if(!el||!el.classList||!el.classList.contains('bdg-lim-inp')) return;
+    e.preventDefault();
+    var step=parseFloat(el.step)||0.5;
+    var cur=parseFloat(el.value)||0;
+    el.value=Math.max(0,Math.round((cur+(e.deltaY<0?step:-step))*10)/10);
+  },{passive:false});
+}
 // Al saltar de una pastilla a otra, el blur de la primera guarda y renderBudget()
 // reemplaza todas las tarjetas — incluida la que estabas por clickear. El click
 // aterriza en un nodo ya desechado y el foco se pierde. Se anota en el pointerdown
@@ -2748,7 +2760,7 @@ function renderBudget(){
         // La pastilla entera se tiñe cuando el % es un override del mes, en vez de
         // colgar un punto de 6px al lado: el scope cambia el ALCANCE del valor (un
         // mes vs todos los meses) y eso merece leerse de un vistazo.
-        +'<span class="bdg-lim-wrap'+(ci.ovr?' is-ovr':'')+'" data-cat="'+escHtml(cat)+'"'+(ci.ovr?' title="'+mShort+' only — overrides the default %"':'')+' onclick="bdgPctFocus(this)" onwheel="bdgPctWheel(event,this.firstElementChild,\''+cat+'\')"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onblur="bdgPctCommit(this,\''+cat+'\')" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=this.defaultValue;this.blur();}">%</span>'
+        +'<span class="bdg-lim-wrap'+(ci.ovr?' is-ovr':'')+'" data-cat="'+escHtml(cat)+'"'+(ci.ovr?' title="'+mShort+' only — overrides the default %"':'')+' onclick="bdgPctFocus(this)"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onblur="bdgPctCommit(this,\''+cat+'\')" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=this.defaultValue;this.blur();}">%</span>'
       +'</div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
