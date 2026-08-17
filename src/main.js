@@ -2524,15 +2524,47 @@ window.bdgPctFocus=function(wrap){
   var el=wrap.firstElementChild;
   if(el&&document.activeElement!==el){ el.focus(); el.select(); }
 };
+// La rueda SOLO mueve el numero en pantalla. No guarda: guardar dispara
+// renderBudget(), que reconstruye las tarjetas y te arranca el foco de debajo del
+// cursor a mitad de ajuste. El commit ocurre al salir del campo (bdgPctCommit).
 window.bdgPctWheel=function(e,el,cat){
   if(!el||document.activeElement!==el) return;
   e.preventDefault();
   var step=parseFloat(el.step)||0.5;
   var cur=parseFloat(el.value)||0;
-  var next=Math.max(0,Math.round((cur+(e.deltaY<0?step:-step))*10)/10);
-  el.value=next;
-  clearTimeout(el._pctT);
-  el._pctT=setTimeout(function(){ saveCategoryPct(cat,el.value); },500);
+  el.value=Math.max(0,Math.round((cur+(e.deltaY<0?step:-step))*10)/10);
+};
+// Al saltar de una pastilla a otra, el blur de la primera guarda y renderBudget()
+// reemplaza todas las tarjetas — incluida la que estabas por clickear. El click
+// aterriza en un nodo ya desechado y el foco se pierde. Se anota en el pointerdown
+// (que ocurre ANTES del blur) a que categoria ibas, y tras el render se re-enfoca.
+var _bdgPendingFocus=null;
+document.addEventListener('pointerdown',function(e){
+  var w=e.target&&e.target.closest?e.target.closest('.bdg-lim-wrap'):null;
+  _bdgPendingFocus=w?w.getAttribute('data-cat'):null;
+},true);
+// Solo se re-enfoca si el pointerdown apuntaba a OTRA pastilla: eso es "estoy
+// saltando de una a la siguiente". Si coincide con la que acaba de guardar, la
+// bandera quedo vieja (el foco se fue por Tab o por codigo, sin pointerdown nuevo)
+// y devolver el foco ahi seria pelearse con el usuario.
+function bdgRestoreFocus(fromCat){
+  var target=_bdgPendingFocus;
+  _bdgPendingFocus=null;
+  if(!target||target===fromCat) return;
+  var w=document.querySelector('.bdg-lim-wrap[data-cat="'+target.replace(/"/g,'\\"')+'"]');
+  if(!w) return;
+  var el=w.firstElementChild;
+  if(el){ el.focus(); el.select(); }
+}
+// Commit al perder el foco. Se aplaza un tick para no re-renderizar en medio del
+// propio blur.
+window.bdgPctCommit=function(el,cat){
+  if(!el||el._pctCommitting) return;
+  var v=el.value;
+  // Sin cambios respecto a lo guardado: no re-renderizar por nada.
+  if(String(v)===String(el.defaultValue)){ return; }
+  el._pctCommitting=true;
+  setTimeout(function(){ saveCategoryPct(cat,v); },0);
 };
 window.saveCategoryPct=function(cat,val){
   var v=parseFloat(val);
@@ -2547,7 +2579,7 @@ window.saveCategoryPct=function(cat,val){
     if(v>0) S.categoryBudgetPcts[cat]=v; else delete S.categoryBudgetPcts[cat];
     S.categoryBudgetPctsUpdatedAt=stamp();
   }
-  save(); renderBudget();
+  save(); renderBudget(); bdgRestoreFocus(cat);
 };
 // Promedio de gasto por categoria en los 3 meses previos completos (meses sin
 // gasto no bajan el promedio).
@@ -2716,7 +2748,7 @@ function renderBudget(){
         // La pastilla entera se tiñe cuando el % es un override del mes, en vez de
         // colgar un punto de 6px al lado: el scope cambia el ALCANCE del valor (un
         // mes vs todos los meses) y eso merece leerse de un vistazo.
-        +'<span class="bdg-lim-wrap'+(ci.ovr?' is-ovr':'')+'"'+(ci.ovr?' title="'+mShort+' only — overrides the default %"':'')+' onclick="bdgPctFocus(this)" onwheel="bdgPctWheel(event,this.firstElementChild,\''+cat+'\')"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onchange="saveCategoryPct(\''+cat+'\',this.value)">%</span>'
+        +'<span class="bdg-lim-wrap'+(ci.ovr?' is-ovr':'')+'" data-cat="'+escHtml(cat)+'"'+(ci.ovr?' title="'+mShort+' only — overrides the default %"':'')+' onclick="bdgPctFocus(this)" onwheel="bdgPctWheel(event,this.firstElementChild,\''+cat+'\')"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onblur="bdgPctCommit(this,\''+cat+'\')" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=this.defaultValue;this.blur();}">%</span>'
       +'</div>'
       +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'

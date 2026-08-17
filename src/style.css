@@ -529,8 +529,8 @@ input,select,textarea,button{font-family:inherit}
    que para girar la rueda habia que apuntar justo sobre los digitos, y el cursor
    tapaba el numero que se estaba ajustando. Con padding y el `%` dentro, la rueda
    se puede accionar desde el borde sin cubrir la cifra. */
-.bdg-lim-wrap{display:inline-flex;align-items:baseline;gap:1px;color:var(--txt3);font-size:13px;flex-shrink:0;
-  background:var(--surface2);border:1px solid var(--line-soft);border-radius:9px;padding:5px 9px;cursor:ns-resize;
+.bdg-lim-wrap{display:inline-flex;align-items:baseline;gap:1px;color:var(--txt3);font-size:12px;flex-shrink:0;
+  background:var(--surface2);border:1px solid var(--line-soft);border-radius:8px;padding:5px 5px;cursor:ns-resize;
   transition:border-color .15s,background .15s}
 .bdg-lim-wrap:hover{border-color:rgba(155,112,240,.4);background:rgba(155,112,240,.07)}
 /* La rueda solo actua con el input enfocado (si no, hacer scroll en la pagina
@@ -541,7 +541,11 @@ input,select,textarea,button{font-family:inherit}
 .bdg-lim-wrap.is-ovr{background:rgba(155,112,240,.16);border-color:rgba(155,112,240,.55)}
 .bdg-lim-wrap.is-ovr .bdg-lim-inp{color:#C9AEFF}
 .bdg-lim-wrap.is-ovr:hover{background:rgba(155,112,240,.24);border-color:rgba(155,112,240,.75)}
-.bdg-lim-inp{font-family:var(--font-num);font-size:15px;font-weight:600;color:var(--txt);background:transparent;border:none;width:32px;text-align:right;padding:0;-moz-appearance:textfield}
+/* 3ch = exactamente 3 digitos en la fuente mono. Antes eran 32px sueltos, mas de
+   lo que ocupa "100" (27px), y en mobile ese sobrante se lo quitaba al nombre de
+   la categoria. Menos de 3ch no sirve: "100" alineado a la derecha se recortaria
+   a "00", que es un numero distinto y creible. */
+.bdg-lim-inp{font-family:var(--font-num);font-size:15px;font-weight:600;color:var(--txt);background:transparent;border:none;width:3ch;text-align:right;padding:0;-moz-appearance:textfield}
 .bdg-lim-inp::-webkit-outer-spin-button,.bdg-lim-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .bdg-lim-inp:focus{outline:none;color:#fff}
 /* Sin esto el cursor de texto aparece sobre el `%` y el padding, contradiciendo
@@ -608,10 +612,10 @@ input,select,textarea,button{font-family:inherit}
   /* Nombre mas chico y recortable: un nombre largo (Discretionary) con un % de
      4 cifras (14.7%) chocaba en 2 columnas. overflow hidden evita el solape. */
   .bdg-cat-name{font-size:13px;overflow:hidden;text-overflow:ellipsis}
-  /* La pastilla del % se aprieta un poco en mobile: con 2 columnas le robaba
-     demasiado ancho al nombre. Sigue siendo mucho mayor que el input pelado. */
-  .bdg-lim-wrap{padding:4px 7px}
-  .bdg-lim-inp{font-size:14px;width:28px}
+  /* En mobile el nombre compite con la pastilla dentro de media tarjeta, asi que
+     aca se aprieta mas: 13px deja "100" en 23px en vez de 27px. */
+  .bdg-lim-wrap{padding:4px 4px}
+  .bdg-lim-inp{font-size:13px}
   .bdg-cat-amt{font-size:21px}
   /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
      anterior, actual y delta) y baja la fuente */
