@@ -812,11 +812,11 @@ input::placeholder{color:var(--txt3)}
 .tcalc-sm .tcalc-lbl{font-size:11px}
 .tcalc-sm .tcalc-sub{font-size:11px}
 
-/* La 3ra card de BCV→Emily ("From Bs") es el camino inverso, no parte del par
-   Total Bs / Received: ocupa su propia fila completa debajo. */
-#be-cards .tcalc-card:nth-child(3){grid-column:1/-1}
+/* Las 3 cards de BCV→Emily van en una sola fila, asi que el aire lateral se
+   recorta: con 3 columnas cada una queda en ~1/3 del ancho de la tool. */
+#be-cards .tcalc-card{padding:12px 6px}
 /* Los dos numeros de "From Bs" valen igual, asi que el subtitulo no se atenua. */
-#be-cards .tcalc-card:nth-child(3) .tcalc-sub{font-size:15px;color:var(--txt2)}
+#be-cards .tcalc-card:nth-child(3) .tcalc-sub{color:var(--txt2);font-weight:500}
 
 /* P2P spread chip compact so the card matches Profit Calculator's height */
 #p2p-cards .tcalc-card{padding:8px 8px}
