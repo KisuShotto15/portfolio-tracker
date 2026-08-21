@@ -2604,13 +2604,20 @@ window.bdgPctCommit=function(el,cat){
   el._pctCommitting=true;
   setTimeout(function(){ saveCategoryPct(cat,v); },0);
 };
+// Editar un % escribe SIEMPRE el mes visible, igual que el total del hero. Antes
+// escribia el global salvo que _budEditScope fuera 'month', y como la fila de
+// scope esta oculta (BUDGET_SCOPE_UI) ese scope no se podia elegir: planificar
+// septiembre reescribia agosto y todos los meses cerrados sin avisar.
+// Vaciar el campo guarda 0 para ESE mes (no hay presupuesto para esa categoria
+// este mes), no un hueco que vuelva a heredar el default: para volver al default
+// esta el chip "Reset <mes>".
 window.saveCategoryPct=function(cat,val){
   var v=parseFloat(val);
-  if(_budEditScope==='month'&&_budMonth){
+  if(!isFinite(v)||v<0) v=0;
+  if(_budMonth){
     if(!S.categoryBudgetPctsByMonth) S.categoryBudgetPctsByMonth={};
     var o=S.categoryBudgetPctsByMonth[_budMonth]||(S.categoryBudgetPctsByMonth[_budMonth]={});
-    if(v>0) o[cat]=v; else delete o[cat];
-    if(!Object.keys(o).length) delete S.categoryBudgetPctsByMonth[_budMonth];
+    o[cat]=v;
     S.categoryBudgetPctsByMonthUpdatedAt=stamp();
   } else {
     if(!S.categoryBudgetPcts) S.categoryBudgetPcts={};

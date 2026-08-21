@@ -7,7 +7,8 @@
 //   2. Reload de A → todo restaurado desde nube/local.
 //   3. Dispositivo B virgen (sin localStorage) → ve los datos de A y su boot
 //      NO destruye nada en la nube (pull+push de un dispositivo limpio es inocuo).
-//   4. B edita un % de budget → sobrevive reload y queda en la nube.
+//   4. B edita un % de budget → queda como override del mes visible, sobrevive
+//      reload y llega a la nube.
 //   5. B edita el TOTAL del budget → se guarda como override del mes visible
 //      (budgetTotalByMonth), sin tocar el default global.
 //   6. Tres txs del mismo dia: la lista respeta el orden de alta y NO se reordena
@@ -183,18 +184,23 @@ check('nube conserva profitCalc tras boot de B', cloudDoc.profitCalc && cloudDoc
 check('nube conserva la tx tras boot de B', (cloudDoc.transactions || []).some((t) => t.desc === 'E2E Grocery'));
 
 // ── escenario 4: campo LWW generico (budget %) sobrevive ────────────────────
+// El % se guarda como override del mes visible: editarlo planificando un mes no
+// puede reescribir los porcentajes de los meses ya cerrados.
 console.log('E2E sync — budget % LWW');
+const mesBud = await ev("(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');})()");
+await ev("window.showPage('budget',null)");
 await ev("saveCategoryPct('Groceries','25')");
 try {
   await waitFor(
-    () => cloudDoc.categoryBudgetPcts && cloudDoc.categoryBudgetPcts.Groceries === 25,
+    () => cloudDoc.categoryBudgetPctsByMonth && (cloudDoc.categoryBudgetPctsByMonth[mesBud] || {}).Groceries === 25,
     15000, 150,
     'budget pct de Groceries llegando a la nube (push con debounce de 1.5s)',
   );
 } catch (e) { console.warn(`  ! ${e.message}`); }
-check('budget pct en la nube', cloudDoc.categoryBudgetPcts && cloudDoc.categoryBudgetPcts.Groceries === 25, JSON.stringify(cloudDoc.categoryBudgetPcts));
+check('budget pct del mes en la nube', cloudDoc.categoryBudgetPctsByMonth && (cloudDoc.categoryBudgetPctsByMonth[mesBud] || {}).Groceries === 25, JSON.stringify(cloudDoc.categoryBudgetPctsByMonth));
+check('el % global NO se movio', !(cloudDoc.categoryBudgetPcts || {}).Groceries, JSON.stringify(cloudDoc.categoryBudgetPcts));
 await boot();
-check('budget pct tras reload', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').categoryBudgetPcts.Groceries===25"));
+check('budget pct tras reload', await ev(`JSON.parse(localStorage.getItem('ft13')||'{}').categoryBudgetPctsByMonth['${mesBud}'].Groceries===25`));
 
 // ── escenario 5: el total del budget se guarda POR MES ──────────────────────
 // Editarlo desde el hero no puede mover el default global: eso reescribiria el
