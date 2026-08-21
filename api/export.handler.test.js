@@ -19,6 +19,7 @@ function jsonRes(status, body){
 
 var realFetch=global.fetch;
 beforeEach(function(){
+  delete process.env.EXPORT_SECRET;
   process.env.CRON_SECRET='s3cret';
   process.env.SUPABASE_URL='https://sb.test';
   process.env.SUPABASE_SERVICE_KEY='svc';
@@ -34,11 +35,22 @@ describe('api/export', function(){
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('sin CRON_SECRET configurado: 401 (nunca abierto por omision)', async function(){
+  it('sin ningun secret configurado: 401 (nunca abierto por omision)', async function(){
     delete process.env.CRON_SECRET;
     var res=mkRes();
     await handler(mkReq({auth:'Bearer '}), res);
     expect(res.statusCode).toBe(401);
+  });
+
+  it('EXPORT_SECRET le gana a CRON_SECRET: el de CI no sirve para /api/restore', async function(){
+    process.env.EXPORT_SECRET='solo-export';
+    global.fetch=vi.fn(function(){ return jsonRes(200,[{doc:{transactions:[]}}]); });
+    var conExport=mkRes();
+    await handler(mkReq({auth:'Bearer solo-export'}), conExport);
+    expect(conExport.statusCode).toBe(200);
+    var conCron=mkRes();
+    await handler(mkReq({auth:'Bearer s3cret'}), conCron);   // el del cron ya no entra aca
+    expect(conCron.statusCode).toBe(401);
   });
 
   it('devuelve el doc del usuario que corresponde al email', async function(){

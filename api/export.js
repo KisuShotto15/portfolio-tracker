@@ -6,10 +6,15 @@
 // Por que no reusar /api/sync: ese endpoint pide el JWT del usuario, y la app
 // solo entrega JWTs por OTP de correo o passkey — las dos necesitan a una persona
 // adelante, asi que un cron no puede autenticarse ahi. Este endpoint usa el mismo
-// esquema que /api/backup y /api/restore: CRON_SECRET por Bearer con comparacion
+// esquema que /api/backup y /api/restore: secret por Bearer con comparacion
 // timing-safe, y la service key solo del lado del server.
 //
-// Requiere env: SUPABASE_URL, SUPABASE_SERVICE_KEY, CRON_SECRET.
+// El secret es EXPORT_SECRET, propio de este endpoint, con fallback a CRON_SECRET.
+// Separarlos importa: este valor vive en los secrets de un repo de GitHub, y
+// CRON_SECRET tambien abre /api/restore, que SOBREESCRIBE el estado. Con un secret
+// aparte, una filtracion del lado de CI deja leer un backup, nunca pisar los datos.
+//
+// Requiere env: SUPABASE_URL, SUPABASE_SERVICE_KEY, y EXPORT_SECRET (o CRON_SECRET).
 import crypto from 'node:crypto';
 
 // Comparacion constant-time: hasheamos ambos lados a digest de largo fijo para
@@ -21,7 +26,7 @@ function safeEqual(a, b) {
 }
 
 export default async function handler(req, res) {
-  const secret = process.env.CRON_SECRET || '';
+  const secret = process.env.EXPORT_SECRET || process.env.CRON_SECRET || '';
   const auth = req.headers['authorization'] || '';
   if (!secret || !safeEqual(auth, 'Bearer ' + secret)) {
     return res.status(401).json({ error: 'Unauthorized' });
