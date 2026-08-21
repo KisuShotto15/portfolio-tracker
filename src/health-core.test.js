@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { healthScoreCore, addDaysISO, netWorthAt } from './health-core.js';
+import { healthScoreCore, addDaysISO, netWorthAt, budgetAllowedCore } from './health-core.js';
 
 var CATS = ['Home','Groceries','Transport','Health','Business','Discretionary','Eating Out','Support'];
 var MONTHS_IN_WINDOW = 90 / 30.4375;   // 2.9589
+// El presupuesto NO se prorratea con el mes promedio sino con los dias reales de
+// cada mes que toca la ventana: para asOf 2026-12-31 la ventana es 2026-10-03..12-31,
+// o sea 29 dias de octubre (de 31) + noviembre y diciembre enteros.
+var BUDGET_MONTHS = 29/31 + 1 + 1;     // 2.9355
 
 function tx(date, type, category, amountUSD){ return { date:date, type:type, category:category, amountUSD:amountUSD }; }
 function snap(date, total, id){ return { date:date, total:total, id:id || 1 }; }
@@ -186,7 +190,7 @@ describe('ahorro', () => {
 describe('presupuesto', () => {
   it('en el limite exacto = 100 pts', () => {
     var r = healthScoreCore(base({
-      transactions:[tx('2026-12-01','Debit','Groceries', 600 * MONTHS_IN_WINDOW)]
+      transactions:[tx('2026-12-01','Debit','Groceries', 600 * BUDGET_MONTHS)]
     }));
     expect(byKey(r,'budget').score).toBe(100);
     expect(byKey(r,'budget').display).toBe('100%');
@@ -198,8 +202,8 @@ describe('presupuesto', () => {
   });
 
   it('25% de sobregiro = 50 pts, 50% = 0', () => {
-    var r1 = healthScoreCore(base({ transactions:[tx('2026-12-01','Debit','Groceries', 600*MONTHS_IN_WINDOW*1.25)] }));
-    var r2 = healthScoreCore(base({ transactions:[tx('2026-12-01','Debit','Groceries', 600*MONTHS_IN_WINDOW*1.5)] }));
+    var r1 = healthScoreCore(base({ transactions:[tx('2026-12-01','Debit','Groceries', 600*BUDGET_MONTHS*1.25)] }));
+    var r2 = healthScoreCore(base({ transactions:[tx('2026-12-01','Debit','Groceries', 600*BUDGET_MONTHS*1.5)] }));
     expect(byKey(r1,'budget').score).toBeCloseTo(50, 5);
     expect(byKey(r2,'budget').score).toBeCloseTo(0, 5);
   });
@@ -209,6 +213,29 @@ describe('presupuesto', () => {
     var sinGasto = healthScoreCore(base({ transactions:[tx('2026-12-01','Credit','Income',100)] }));
     expect(byKey(sinTotal,'budget').available).toBe(false);
     expect(byKey(sinGasto,'budget').available).toBe(false);
+  });
+
+  it('el total por mes se prorratea por los dias que caen en la ventana', () => {
+    // Diciembre a 1200 y el resto en 600: el permitido sube exactamente el mes de
+    // diciembre entero (600 extra), no un promedio difuso sobre toda la ventana.
+    var byMonth = { '2026-12': 1200 };
+    expect(budgetAllowedCore(600, byMonth, '2026-10-03', '2026-12-31'))
+      .toBeCloseTo(600 * (29/31 + 1) + 1200, 6);
+    // Sin overrides es identico a repartir el default mes por mes.
+    expect(budgetAllowedCore(600, {}, '2026-10-03', '2026-12-31'))
+      .toBeCloseTo(600 * BUDGET_MONTHS, 6);
+  });
+
+  it('un override de mes mueve el ratio del score', () => {
+    var gasto = [tx('2026-12-01','Debit','Groceries', 600 * BUDGET_MONTHS * 1.25)];
+    var sinOvr = healthScoreCore(base({ transactions:gasto }));
+    // Subir el budget de diciembre absorbe el sobregiro: el mes malo deja de castigar.
+    var conOvr = healthScoreCore(base({ transactions:gasto, budgetTotalByMonth:{ '2026-12': 1200 } }));
+    expect(byKey(sinOvr,'budget').score).toBeCloseTo(50, 5);
+    expect(byKey(conOvr,'budget').score).toBe(100);
+    // Y no reescribe los meses de antes: octubre/noviembre siguen valiendo 600.
+    expect(byKey(conOvr,'budget').value)
+      .toBeCloseTo(600 * BUDGET_MONTHS * 1.25 / (600 * (29/31 + 1) + 1200), 6);
   });
 });
 

@@ -2,7 +2,7 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore,
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -60,7 +60,11 @@ var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transpor
 var S = {
   rate:null, rateDate:null, rateFetchedAt:null,
   transactions:[], portfolio:[], manualWallets:[],
-  budgetTotal:600, budgetTotalUpdatedAt:null,
+  budgetTotal:600, budgetTotalUpdatedAt:null,   // default de los meses sin override
+  // Total por mes: {'2026-08':850}. Editar el total desde el hero escribe SIEMPRE
+  // aca (el mes visible), nunca el default: subirlo porque este mes salieron gastos
+  // inesperados no debe reescribir el "me pase / no me pase" de los meses cerrados.
+  budgetTotalByMonth:{}, budgetTotalByMonthUpdatedAt:null,
   binanceKey:'', binanceSecret:'',
   binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
   bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
@@ -1706,6 +1710,7 @@ function renderHealthScore(){
     snapshots:S.snapshots,
     expenseCats:EXPENSE_CATS_DASH,
     budgetTotal:S.budgetTotal,
+    budgetTotalByMonth:S.budgetTotalByMonth,
     liveNetWorth:getTotalBalance()
   });
   var total=h.total, label=h.label;
@@ -2198,7 +2203,7 @@ function renderInsights(month){
     var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
     var dayOfMonth=now.getDate();
     var daysLeft=Math.max(1,daysInMonth-dayOfMonth+1);
-    var budget=S.budgetTotal||600;
+    var budget=budgetTotalFor(month)||600;
     var remaining=budget-spent;
     var perDay=remaining>0?remaining/daysLeft:0;
     var projected=dayOfMonth>0?spent/dayOfMonth*daysInMonth:0;
@@ -2498,9 +2503,15 @@ window.editSnapshot=editSnapshot;
 function saveBudget(){
   var el=document.getElementById('bud-total'); if(!el) return;
   var v=evalMath(el.value);
-  if(v>0&&v!==S.budgetTotal){ S.budgetTotal=parseFloat(v.toFixed(2)); S.budgetTotalUpdatedAt=stamp(); save(); }
+  if(v>0&&_budMonth&&v!==budgetTotalFor(_budMonth)){
+    if(!S.budgetTotalByMonth) S.budgetTotalByMonth={};
+    S.budgetTotalByMonth[_budMonth]=parseFloat(v.toFixed(2));
+    S.budgetTotalByMonthUpdatedAt=stamp(); save();
+  }
   _budSig=null; renderBudget(); // cerrar el modo edicion aunque no cambie
 }
+// Total efectivo de un mes: override del mes > default global.
+function budgetTotalFor(month){ return budgetTotalForCore(S.budgetTotal, S.budgetTotalByMonth, month); }
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
@@ -2514,10 +2525,16 @@ var BUDGET_SCOPE_UI=false;
 var _budEditScope='default';
 window._budScope=function(s){ if(!BUDGET_SCOPE_UI) return; _budEditScope=s; renderBudget(); };
 window._budResetMonth=function(){
+  var touched=false;
   if(S.categoryBudgetPctsByMonth&&S.categoryBudgetPctsByMonth[_budMonth]){
     delete S.categoryBudgetPctsByMonth[_budMonth];
-    S.categoryBudgetPctsByMonthUpdatedAt=stamp(); save();
+    S.categoryBudgetPctsByMonthUpdatedAt=stamp(); touched=true;
   }
+  if(S.budgetTotalByMonth&&S.budgetTotalByMonth[_budMonth]!=null){
+    delete S.budgetTotalByMonth[_budMonth];
+    S.budgetTotalByMonthUpdatedAt=stamp(); touched=true;
+  }
+  if(touched) save();
   renderBudget();
 };
 // Scroll del mouse sube/baja el % (solo si el input esta enfocado, para no
@@ -2617,7 +2634,7 @@ function _budHistAvg(){
 window.applyBudgetRec=function(kind){
   var avg=_budHistAvg(), pcts={};
   if(kind==='hist'){
-    var tot=S.budgetTotal||0; if(tot<=0) return;
+    var tot=budgetTotalFor(_budMonth)||0; if(tot<=0) return;
     BUDGET_CATS.forEach(function(c){ if(avg[c]>0) pcts[c]=parseFloat((avg[c]/tot*100).toFixed(1)); });
   } else {
     [[GROUP_ESSENTIAL,50],[GROUP_LIFESTYLE,30],[GROUP_BUSINESS,10]].forEach(function(g){
@@ -2642,16 +2659,29 @@ window.applyBudgetRec=function(kind){
   save(); renderBudget();
 };
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
+// getMonths() solo lista meses CON transacciones. El Budget suma el mes en curso y
+// el siguiente: el total por mes se planifica antes de gastar (bajar hoy el del mes
+// que viene), y sin esto no habria mes que seleccionar para hacerlo.
+function budgetMonths(){
+  var now=new Date();
+  var seen={}, out=[];
+  getMonths().concat([monthKey(now), monthKey(new Date(now.getFullYear(),now.getMonth()+1,1))])
+    .forEach(function(m){ if(!seen[m]){ seen[m]=1; out.push(m); } });
+  return out.sort().reverse();
+}
 function renderBudget(){
-  var months=getMonths();
-  if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months[0]||'';
+  var months=budgetMonths();
+  // Default: el mes en curso, no months[0] (que ahora es el mes SIGUIENTE).
+  var curKey=monthKey(new Date());
+  if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months.indexOf(curKey)>=0?curKey:(months[0]||'');
   var month=_budMonth;
+  var budTotal=budgetTotalFor(month);
   var income=monthIncome(month);
   var spent=catNetSpend(month, BUDGET_CATS);
   var net=income-spent;
   var savRate=income>0?Math.round((net/income)*100):0;
-  var remaining=S.budgetTotal-spent;
-  var pct=Math.min(100,S.budgetTotal>0?Math.round(spent/S.budgetTotal*100):0);
+  var remaining=budTotal-spent;
+  var pct=Math.min(100,budTotal>0?Math.round(spent/budTotal*100):0);
   var bc=pct>90?'#E24B4A':pct>70?'#EF9F27':'#1D9E75';
   // Ritmo: proyeccion lineal a fin de mes (solo mes actual, desde el dia 3 para
   // no proyectar ruido de los primeros dias).
@@ -2662,6 +2692,8 @@ function renderBudget(){
   var projTotal=canPace&&spent>0?spent/dayNum*dimP:null;
 
   var monthLabel=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'';
+  // ¿el total de este mes es un override o hereda el default?
+  var totOvr=(S.budgetTotalByMonth||{})[month]!=null;
   var remColor=remaining>=0?'#4ED9A4':'#E24B4A';
   function bstat(l,v,col){ return '<div class="bdg-stat"><span class="bdg-stat-l">'+l+'</span><span class="bdg-stat-v"'+(col?' style="color:'+col+'"':'')+'>'+v+'</span></div>'; }
 
@@ -2682,17 +2714,17 @@ function renderBudget(){
       +'<div class="bdg-hero-val" style="color:'+remColor+'">'+fmtUSD(Math.abs(remaining))+(remaining<0?' over':'')+'</div>'
       +'<div class="bdg-pb"><div class="bdg-pf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
       +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '
-        +'<span class="bdg-total-view" title="Tap to edit the budget for this month" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(S.budgetTotal)+'</span>'
+        +'<span class="bdg-total-view'+(totOvr?' is-ovr':'')+'" title="'+(totOvr?monthLabel+' only — tap to edit':'Tap to set the budget for '+monthLabel)+'" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(budTotal)+'</span>'
         // onblur guardaba y cerraba el modo edicion; tocar el chip "+" hacia
         // justamente eso. sumChipTap cancela el blur con preventDefault, pero se
         // deja el chip dentro del wrap para que el foco nunca salga del input.
-        +'<span class="bdg-total-edit" style="display:none">$<span class="sum-wrap"><input type="text" inputmode="decimal" id="bud-total" value="'+S.budgetTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,\'bud-total\')">+</span></span></span>'
+        +'<span class="bdg-total-edit" style="display:none">$<span class="sum-wrap"><input type="text" inputmode="decimal" id="bud-total" value="'+budTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,\'bud-total\')">+</span></span></span>'
         +'</span><span class="bdg-pct">'+pct+'%</span></div>'
       +'<div class="bdg-stats">'
         +bstat('Income',fmtUSD(income),'#5DCAA5')
         +bstat('Spent',fmtUSD(spent),'')
         +bstat('Savings rate',savRate+'%','#9B70F0')
-        +(projTotal!=null?bstat('Proyeccion',fmtUSD(projTotal),projTotal>S.budgetTotal?'#E24B4A':'#4ED9A4'):'')
+        +(projTotal!=null?bstat('Proyeccion',fmtUSD(projTotal),projTotal>budTotal?'#E24B4A':'#4ED9A4'):'')
       +'</div>'
     +'</div>'
     +'<div class="bdg-donut-card">'
@@ -2710,7 +2742,7 @@ function renderBudget(){
   // Categories grid — header con scope de edicion (default vs solo este mes)
   var mShort=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}):'';
   var monthOvr=(S.categoryBudgetPctsByMonth||{})[month]||null;
-  var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length);
+  var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length)||totOvr;
   // Medidor de asignacion total: cuanto % del presupuesto esta repartido entre
   // las categorias (con overrides del mes visible) y cuanto falta/sobra para 100%.
   var sumPctHead=BUDGET_CATS.reduce(function(s,c){ return s+catBudgetPct(c,month); },0);
@@ -2733,7 +2765,7 @@ function renderBudget(){
       // Con la fila oculta sobrevive UN boton, y solo si hay overrides de mes
       // guardados de antes: sin el, ese override seguiria pisando en silencio el
       // % que edites y no quedaria ninguna via para quitarlo.
-      :(hasOvr?'<span class="bdg-scope"><button class="bdg-scope-btn reset" title="Remove the % overrides saved for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button></span>':''))
+      :(hasOvr?'<span class="bdg-scope"><button class="bdg-scope-btn reset" title="Back to the default budget for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button></span>':''))
     +'</div>';
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
@@ -2741,14 +2773,14 @@ function renderBudget(){
   var catInfo=BUDGET_CATS.map(function(cat){
     var s=catNetSpend(month,[cat]);
     var pcta=catBudgetPct(cat,month);
-    var lim=pcta>0?parseFloat((pcta/100*S.budgetTotal).toFixed(2)):0;
+    var lim=pcta>0?parseFloat((pcta/100*budTotal).toFixed(2)):0;
     return {cat:cat,s:s,pct:pcta,lim:lim,ovr:!!(monthOvr&&monthOvr[cat]!=null)};
   });
   var freeOthers=catInfo.reduce(function(t,ci){ return t+(ci.lim>0&&ci.s<ci.lim?ci.lim-ci.s:0); },0);
   // Pasada 2: tarjetas.
   catInfo.forEach(function(ci){
     var cat=ci.cat, s=ci.s, catLim=ci.lim;
-    var limBase=catLim>0?catLim:S.budgetTotal;
+    var limBase=catLim>0?catLim:budTotal;
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;

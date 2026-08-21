@@ -142,6 +142,16 @@ export function catBudgetPctCore(globalPcts, byMonth, cat, month) {
   return g != null ? g : 0;
 }
 
+// Total de presupuesto efectivo de un mes: override del mes > default global.
+// Mismo contrato que catBudgetPctCore (los dos ejes del budget — cuanto hay y
+// como se reparte — se resuelven igual), y por eso mismo los meses ya cerrados
+// no se mueven cuando cambia el default.
+export function budgetTotalForCore(globalTotal, byMonth, month) {
+  var o = (byMonth || {})[month];
+  if (o != null) return o;
+  return globalTotal != null ? globalTotal : 0;
+}
+
 // Balance por-wallet-tracker derivado de las txs (Credit suma, Debit resta;
 // imported se ignora). Ante nombres duplicados, si CUALQUIER entrada es tracker
 // las txs cuentan (tracker gana sobre manual).

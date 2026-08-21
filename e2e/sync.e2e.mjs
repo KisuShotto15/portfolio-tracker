@@ -8,6 +8,8 @@
 //   3. Dispositivo B virgen (sin localStorage) → ve los datos de A y su boot
 //      NO destruye nada en la nube (pull+push de un dispositivo limpio es inocuo).
 //   4. B edita un % de budget → sobrevive reload y queda en la nube.
+//   5. B edita el TOTAL del budget → se guarda como override del mes visible
+//      (budgetTotalByMonth), sin tocar el default global.
 import { spawn, execSync } from 'node:child_process';
 import net from 'node:net';
 import { mergeDocs } from '../api/sync.js';
@@ -191,6 +193,25 @@ try {
 check('budget pct en la nube', cloudDoc.categoryBudgetPcts && cloudDoc.categoryBudgetPcts.Groceries === 25, JSON.stringify(cloudDoc.categoryBudgetPcts));
 await boot();
 check('budget pct tras reload', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').categoryBudgetPcts.Groceries===25"));
+
+// ── escenario 5: el total del budget se guarda POR MES ──────────────────────
+// Editarlo desde el hero no puede mover el default global: eso reescribiria el
+// "me pase / no me pase" de todos los meses ya cerrados.
+console.log('E2E sync — budget total por mes');
+const curMonth = await ev("(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');})()");
+await ev("window.showPage('budget',null)");
+await ev("(function(){var i=document.getElementById('bud-total'); if(!i) return 0; i.value='850'; window.saveBudget(); return 1;})()");
+try {
+  await waitFor(
+    () => cloudDoc.budgetTotalByMonth && cloudDoc.budgetTotalByMonth[curMonth] === 850,
+    15000, 150,
+    'total del mes llegando a la nube (push con debounce de 1.5s)',
+  );
+} catch (e) { console.warn(`  ! ${e.message}`); }
+check('total del mes en la nube', cloudDoc.budgetTotalByMonth && cloudDoc.budgetTotalByMonth[curMonth] === 850, JSON.stringify(cloudDoc.budgetTotalByMonth));
+check('el default global NO se movio', cloudDoc.budgetTotal === 600, String(cloudDoc.budgetTotal));
+await boot();
+check('total del mes tras reload', await ev(`JSON.parse(localStorage.getItem('ft13')||'{}').budgetTotalByMonth['${curMonth}']===850`));
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

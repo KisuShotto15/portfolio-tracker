@@ -46,6 +46,33 @@ export function netWorthAt(snapshots, iso){
   return best && typeof best.total === 'number' ? best.total : null;
 }
 
+// Presupuesto permitido dentro de [from, to] (ambos inclusive). La ventana es
+// movil y cruza 3-4 meses calendario, asi que con un total distinto por mes ya no
+// alcanza con `budgetTotal * mesesEnLaVentana`: se prorratea mes por mes segun los
+// dias de cada uno que caen adentro. Con un total uniforme da practicamente lo
+// mismo que antes (la diferencia es usar los dias reales del mes en vez del
+// promedio 30.4375).
+export function budgetAllowedCore(globalTotal, byMonth, from, to){
+  var m = byMonth || {};
+  var p = from.split('-');
+  var cur = new Date(Date.UTC(+p[0], +p[1] - 1, 1));
+  var endKey = to.slice(0, 7);
+  var total = 0;
+  while(true){
+    var key = cur.toISOString().slice(0, 7);
+    if(key > endKey) break;
+    var dim = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 0)).getUTCDate();
+    var lo = key + '-01', hi = key + '-' + (dim < 10 ? '0' : '') + dim;
+    if(lo < from) lo = from;
+    if(hi > to) hi = to;
+    var days = (Date.parse(hi) - Date.parse(lo)) / 86400000 + 1;
+    var b = m[key] != null ? m[key] : (globalTotal || 0);
+    total += (b || 0) * days / dim;
+    cur.setUTCMonth(cur.getUTCMonth() + 1);
+  }
+  return total;
+}
+
 export function healthScoreCore(input){
   input = input || {};
   var windowDays = input.windowDays || 90;
@@ -116,7 +143,7 @@ export function healthScoreCore(input){
   });
 
   // ── Presupuesto: techo, no objetivo ─────────────────────────────────────────
-  var allowed = (input.budgetTotal || 0) * monthsInWindow;   // prorrateado por dias
+  var allowed = budgetAllowedCore(input.budgetTotal, input.budgetTotalByMonth, from, to);
   var budOk = allowed > 0 && exp > 0;
   var ratio = budOk ? exp / allowed : null;
   metrics.push({

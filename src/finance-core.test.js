@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
-  holdingsTotalUsdCore, catBudgetPctCore, trackerTxBalancesCore,
+  holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -225,6 +225,22 @@ describe('catBudgetPctCore', () => {
     expect(catBudgetPctCore(g, bm, 'Home', '2026-07')).toBe(10);
     expect(catBudgetPctCore(g, bm, 'Groceries', '2026-08')).toBe(25);
     expect(catBudgetPctCore(g, bm, 'Health', '2026-07')).toBe(0);
+  });
+});
+
+describe('budgetTotalForCore', () => {
+  const bm = { '2026-08': 850, '2026-09': 500 };
+  it('override del mes gana al default; sin override hereda', () => {
+    expect(budgetTotalForCore(600, bm, '2026-08')).toBe(850);
+    expect(budgetTotalForCore(600, bm, '2026-09')).toBe(500);
+    expect(budgetTotalForCore(600, bm, '2026-07')).toBe(600);
+    expect(budgetTotalForCore(600, {}, '2026-07')).toBe(600);
+  });
+  it('un 0 explicito es un override valido, no un hueco', () => {
+    expect(budgetTotalForCore(600, { '2026-08': 0 }, '2026-08')).toBe(0);
+  });
+  it('sin default configurado devuelve 0 (la metrica queda no disponible)', () => {
+    expect(budgetTotalForCore(null, {}, '2026-08')).toBe(0);
   });
 });
 

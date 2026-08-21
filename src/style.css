@@ -1477,6 +1477,10 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 /* Budget del mes editable en el hero */
 .bdg-total-view{cursor:pointer;border-bottom:1px dashed var(--line);color:var(--txt2)}
 .bdg-total-view:hover{color:var(--txt);border-bottom-color:var(--txt3)}
+/* Total pisado solo para ESE mes: mismo violeta que la pastilla de % con override,
+   para que se lea de un vistazo que no es el default heredado. */
+.bdg-total-view.is-ovr{color:#C9AEFF;border-bottom-color:rgba(155,112,240,.55)}
+.bdg-total-view.is-ovr:hover{color:#D9C6FF;border-bottom-color:rgba(155,112,240,.75)}
 .bdg-total-edit{display:inline-flex;align-items:center;gap:2px;color:var(--txt2)}
 .bdg-total-edit input{width:76px;background:transparent;border:none;border-bottom:1px dashed var(--accent);color:#fff;font-family:var(--font-num);font-size:inherit;padding:0 2px;text-align:center}
 .bdg-total-edit input:focus{outline:none}
