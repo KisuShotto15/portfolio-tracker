@@ -63,11 +63,44 @@ export function pruneRevokedTombstones(tombs, txs){
   return (tombs || []).filter(function(e){ return !live[tombId(e)]; });
 }
 
+// Momento de ALTA de una tx — nunca el de su ultima edicion. El orden de la lista
+// sale de aca: adjuntarle una foto a una tx de la manana no puede mandarla al tope
+// como si la acabaras de anotar.
+//   - manual/importada: el id ES el Date.now() del alta.
+//   - recurrente: el id es DETERMINISTICO (dia + ruleId) para poder revocar
+//     tombstones entre dispositivos, asi que no dice nada de cuando se genero; ahi
+//     el unico rastro del alta es el updatedAt con el que nacio.
+// createdAt explicito gana siempre: una vez congelado, ninguna edicion lo mueve.
+export function txCreatedAt(t){
+  if(!t) return 0;
+  if(t.createdAt != null) return t.createdAt;
+  if(t.recurringId != null || t.auto) return t.updatedAt || t.id || 0;
+  return t.id || t.updatedAt || 0;
+}
+
+// Congela createdAt en las txs que no lo tienen (todas las anteriores a este
+// cambio). Idempotente y derivado solo de campos que ya se sincronizan, asi que
+// cada dispositivo calcula el MISMO valor sin necesidad de propagarlo.
+// No toca updatedAt a proposito: hacerlo reordenaria todo otra vez y pelearia
+// contra el merge.
+export function backfillTxCreatedAt(txs){
+  var n = 0;
+  (txs || []).forEach(function(t){ if(t && t.createdAt == null){ t.createdAt = txCreatedAt(t); n++; } });
+  return n;
+}
+
 // Merge two transaction arrays using per-transaction last-writer-wins (updatedAt).
 // Cloud version of a tx wins unless local has a strictly higher updatedAt.
 // Local-only transactions (not in cloud) are always preserved. `tombs` es la
 // lista de tombstones ya unida (mergeTombstones); cada tx se compara contra su
 // tombstone via tombKills, asi un undo (updatedAt mas nuevo) resucita la tx.
+// createdAt es inmutable: si el que pierde el LWW lo tiene y el ganador no (copia
+// vieja, o un dispositivo que todavia no actualizo), se conserva. Perderlo mandaria
+// la fila de vuelta a ordenarse por su ultima edicion.
+function keepCreatedAt(win, loser){
+  if(!win || win.createdAt != null || !loser || loser.createdAt == null) return win;
+  return Object.assign({}, win, { createdAt: loser.createdAt });
+}
 export function mergeTxArrays(localTxs, cloudTxs, tombs){
   var tm = {};
   (tombs || []).forEach(function(e){ tm[tombId(e)] = e; });
@@ -79,6 +112,7 @@ export function mergeTxArrays(localTxs, cloudTxs, tombs){
   cloudTxs.forEach(function(t){
     var local = localById[t.id];
     var win = (local && (local.updatedAt || 0) > (t.updatedAt || 0)) ? local : t;
+    win = keepCreatedAt(win, win === t ? local : t);
     if(!killed(win)) merged.push(win);
   });
   localTxs.forEach(function(t){

@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore,
@@ -200,7 +200,7 @@ function flushSaveLocal(){
 }
 window.addEventListener('pagehide',flushSaveLocal);
 document.addEventListener('visibilitychange',function(){ if(document.hidden) flushSaveLocal(); });
-function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); }
+function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); }
 
 // mergeTxArrays / dueMonths / vesToUsd / localFieldWins / maxObservedStamp / nextStamp
 // live in ./sync-core.js (pure, unit-tested).
@@ -259,6 +259,7 @@ async function pullFromCloud(quiet){
       if(cloud.transactions){
         var tombs=mergeTombstones(S.deletedTxIds,cloud.deletedTxIds);
         S.transactions=mergeTxArrays(S.transactions,cloud.transactions,tombs);
+        backfillTxCreatedAt(S.transactions);   // las que llegan sin createdAt se congelan aca
         S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
         S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
       }
@@ -984,7 +985,7 @@ function addTx(){
   if(cur==='VES'){ if(!_vr){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=vesToUsd(amt,_vr); }
   snapshot();
   var _now=Date.now(), _ut=stamp();
-  S.transactions.push({id:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
+  S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
@@ -1342,11 +1343,12 @@ function emptyState(title, sub){
 // Pill hue mirrors the category icon background (CAT_META[cat].bg) so both stay consistent.
 function tagCat(cat){ var m={Income:'tG',Home:'tB',Groceries:'tG',Transport:'tB',Health:'tP',Business:'tT',Discretionary:'tP','Eating Out':'tA',Support:'tR',Investments:'tA',Savings:'tB',
   Services:'tP','Help others':'tA',Emergency:'tR',Other:'tX'}; return m[cat]||'tX'; }
-// Desempate por updatedAt (momento real de alta/edicion), no por id: las recurrentes
-// usan un id deterministico (fecha + ruleId) para poder revocar tombstones entre
-// dispositivos, no la hora real en que se generaron — por eso con b.id-a.id quedaban
-// siempre "flotando" arriba del dia sin importar cuando se agregaron las demas txs.
-function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return (b.updatedAt||b.id)-(a.updatedAt||a.id); }); }
+// Desempate dentro del mismo dia por MOMENTO DE ALTA (txCreatedAt), no por
+// updatedAt: con updatedAt, editar una tx o adjuntarle una foto le cambiaba el
+// updatedAt y la fila saltaba al tope como si fuera la ultima anotada. txCreatedAt
+// tambien resuelve lo que updatedAt vino a arreglar (el id deterministico de las
+// recurrentes), pero sin quedar atado a la ultima edicion.
+function sortTx(data){ return data.slice().sort(function(a,b){ if(b.date!==a.date) return b.date.localeCompare(a.date); return txCreatedAt(b)-txCreatedAt(a); }); }
 
 var CAT_META={
   'Income':       {bg:'#0f4d35', svg:'<polyline points="2 11 6 7 9 9.5 14 4"/><polyline points="10 4 14 4 14 8"/>'},
@@ -1987,7 +1989,8 @@ function applyRecurring(){
       var txId=dayMs+(r.id%86400000), oldId=dayMs+(r.id%100000);
       if(deleted.has(txId)||deleted.has(oldId)){ r.lastRun=d.ym; return; }   // borrada por el usuario: no resucitar
       if(S.transactions.some(function(t){ return t.id===txId||t.id===oldId||(t.recurringId===r.id&&t.date===dateStr); })){ r.lastRun=d.ym; return; }
-      S.transactions.push({id:txId,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,rateSrc:_rs,imported:false,receiptUrl:null,updatedAt:stamp(),auto:true,recurringId:r.id});
+      var _gen=stamp();   // alta real de la recurrente: su id es deterministico por fecha, no dice cuando se genero
+      S.transactions.push({id:txId,createdAt:_gen,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,rateSrc:_rs,imported:false,receiptUrl:null,updatedAt:_gen,auto:true,recurringId:r.id});
       r.lastRun=d.ym;
       added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
     });
@@ -3283,7 +3286,8 @@ function _parseCSV(file){
       var isNotImported=String(r['Tracker']||r['tracker']||'')==='1';
       if(!date||!desc||!amt) return;
       var k=date+'|'+desc+'|'+amt; if(keys[k]){ skipped++; return; } keys[k]=1;
-      S.transactions.push({id:Date.now()+Math.random(),seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported,updatedAt:stamp()});
+      var _imp=Date.now()+Math.random();
+      S.transactions.push({id:_imp,createdAt:_imp,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported,updatedAt:stamp()});
       added++;
     });
     if(added>0) S.transactionsUpdatedAt=stamp();
@@ -3318,6 +3322,9 @@ function importJSON(file){
       // nube (mas nueva) y el restore se revierte solo en el siguiente pull.
       var n=stamp();
       tsFields().forEach(function(f){ S[f]=n; });
+      // createdAt PRIMERO: el re-estampado deja a todas las txs con el mismo
+      // updatedAt, asi que si se derivara despues el orden del backup se perderia.
+      if(Array.isArray(S.transactions)) backfillTxCreatedAt(S.transactions);
       if(Array.isArray(S.transactions)) S.transactions.forEach(function(t){ t.updatedAt=n; });
       save(); populateWalletSelects(); updateRateUI(); renderSummary();
       st.textContent='Restored: '+(S.transactions||[]).length+' transactions, '+(S.portfolio||[]).length+' holdings.';

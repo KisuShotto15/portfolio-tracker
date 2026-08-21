@@ -24,6 +24,14 @@ export function pruneRevokedTombstones(tombs, txs) {
   return (tombs || []).filter(function (e) { return !live[tombId(e)]; });
 }
 
+// createdAt es inmutable (espejo de src/sync-core.js): si el que pierde el LWW lo
+// tiene y el ganador no, se conserva. Es lo que ancla el orden de la lista al alta
+// de la tx y no a su ultima edicion.
+function keepCreatedAt(win, loser) {
+  if (!win || win.createdAt != null || !loser || loser.createdAt == null) return win;
+  return Object.assign({}, win, { createdAt: loser.createdAt });
+}
+
 // Per-transaction last-writer-wins merge (mirror of the client helper).
 // Cloud version of a tx wins unless the incoming side has a strictly higher updatedAt.
 export function mergeTxArrays(incomingTxs, cloudTxs, tombs) {
@@ -37,6 +45,7 @@ export function mergeTxArrays(incomingTxs, cloudTxs, tombs) {
   cloudTxs.forEach(function (t) {
     var inc = incomingById[t.id];
     var win = (inc && (inc.updatedAt || 0) > (t.updatedAt || 0)) ? inc : t;
+    win = keepCreatedAt(win, win === t ? inc : t);
     if (!killed(win)) merged.push(win);
   });
   incomingTxs.forEach(function (t) {

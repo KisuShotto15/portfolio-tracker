@@ -5,6 +5,16 @@ import { mergeDocs } from './sync.js';
 // etc.) porque el server no los tenia en su lista. Ahora el merge es generico por
 // convencion "<campo>UpdatedAt"; estos tests bloquean la regresion.
 
+describe('mergeDocs: createdAt de una tx es inmutable', () => {
+  it('el merge del server conserva createdAt aunque gane la copia que no lo tiene', () => {
+    const cloud = { transactions: [{ id: 1, updatedAt: 20, desc: 'nube' }] };
+    const incoming = { transactions: [{ id: 1, updatedAt: 10, createdAt: 3 }] };
+    const out = mergeDocs(cloud, incoming);
+    expect(out.transactions[0].desc).toBe('nube');
+    expect(out.transactions[0].createdAt).toBe(3);
+  });
+});
+
 describe('mergeDocs LWW generico por convencion', () => {
   it('un device viejo NO pisa recurring mas nuevo de la nube', () => {
     const cloud = { recurring: [{ id: 1 }, { id: 2 }], recurringUpdatedAt: 100 };

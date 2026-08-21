@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -71,6 +71,17 @@ describe('mergeTxArrays (per-tx last-writer-wins)', () => {
     expect(m.map(t => t.id).sort()).toEqual([1, 2]);
   });
 
+  it('conserva createdAt cuando el ganador del LWW no lo trae', () => {
+    // Un dispositivo sin actualizar pisa la tx sin createdAt: si se perdiera, la
+    // fila volveria a ordenarse por su ultima edicion.
+    const local = [{ id: 1, updatedAt: 10, createdAt: 3 }];
+    const cloud = [{ id: 1, updatedAt: 20, desc: 'viejo' }];
+    const m = mergeTxArrays(local, cloud, del());
+    expect(m[0].desc).toBe('viejo');
+    expect(m[0].createdAt).toBe(3);
+    expect(cloud[0].createdAt).toBeUndefined();   // no muta el objeto de entrada
+  });
+
   it('local wins when its updatedAt is strictly higher', () => {
     const local = [{ id: 1, updatedAt: 20, desc: 'local' }];
     const cloud = [{ id: 1, updatedAt: 10, desc: 'cloud' }];
@@ -97,6 +108,64 @@ describe('mergeTxArrays (per-tx last-writer-wins)', () => {
   it('missing updatedAt counts as 0 (cloud wins)', () => {
     const m = mergeTxArrays([{ id: 1, desc: 'local' }], [{ id: 1, updatedAt: 1, desc: 'cloud' }], del());
     expect(m[0].desc).toBe('cloud');
+  });
+});
+
+// EL bug: la lista se ordenaba por updatedAt, asi que editar una tx (o adjuntarle
+// una foto) la mandaba al tope como si se acabara de anotar.
+describe('txCreatedAt (orden por alta, no por ultima edicion)', () => {
+  it('una tx manual se ordena por su id (= Date.now() del alta), no por updatedAt', () => {
+    var manual = { id: 1000, updatedAt: 9999 };   // creada temprano, editada al rato
+    expect(txCreatedAt(manual)).toBe(1000);
+  });
+
+  it('una recurrente usa updatedAt: su id es deterministico por fecha, no hora de alta', () => {
+    var rec = { id: 500, updatedAt: 8000, recurringId: 7, auto: true };
+    expect(txCreatedAt(rec)).toBe(8000);
+  });
+
+  it('createdAt explicito gana sobre todo', () => {
+    expect(txCreatedAt({ id: 1, updatedAt: 2, createdAt: 42 })).toBe(42);
+    expect(txCreatedAt({ id: 1, updatedAt: 2, createdAt: 0 })).toBe(0);   // 0 es un valor, no un hueco
+  });
+
+  it('el orden del dia NO cambia al editar una tx vieja', () => {
+    var txs = [
+      { id: 100, desc: 'bomba',    updatedAt: 100 },
+      { id: 200, desc: 'empanada', updatedAt: 200 },
+      { id: 300, desc: 'chinos',   updatedAt: 300 },
+      { id: 400, desc: 'mi super', updatedAt: 400 },
+    ];
+    backfillTxCreatedAt(txs);
+    // Se le adjunta una foto a "mi super" y se edita "bomba": updatedAt salta al tope.
+    txs[3].updatedAt = 9000;
+    txs[0].updatedAt = 9500;
+    var desc = txs.slice().sort(function(a, b){ return txCreatedAt(b) - txCreatedAt(a); }).map(function(t){ return t.desc; });
+    expect(desc).toEqual(['mi super', 'chinos', 'empanada', 'bomba']);
+  });
+});
+
+describe('backfillTxCreatedAt', () => {
+  it('congela el createdAt derivado y es idempotente', () => {
+    var txs = [{ id: 10, updatedAt: 99 }, { id: 20, updatedAt: 50, recurringId: 3 }];
+    expect(backfillTxCreatedAt(txs)).toBe(2);
+    expect(txs[0].createdAt).toBe(10);
+    expect(txs[1].createdAt).toBe(50);
+    txs[0].updatedAt = 100000;                  // una edicion posterior
+    expect(backfillTxCreatedAt(txs)).toBe(0);   // ya congelado: no lo recalcula
+    expect(txs[0].createdAt).toBe(10);
+  });
+
+  it('no toca updatedAt (re-estamparlo reordenaria todo y pelearia con el merge)', () => {
+    var txs = [{ id: 10, updatedAt: 99 }];
+    backfillTxCreatedAt(txs);
+    expect(txs[0].updatedAt).toBe(99);
+  });
+
+  it('dos dispositivos derivan el MISMO createdAt sin sincronizarlo', () => {
+    var a = [{ id: 10, updatedAt: 99 }], b = [{ id: 10, updatedAt: 99 }];
+    backfillTxCreatedAt(a); backfillTxCreatedAt(b);
+    expect(a[0].createdAt).toBe(b[0].createdAt);
   });
 });
 

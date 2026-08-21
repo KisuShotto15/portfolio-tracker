@@ -10,6 +10,8 @@
 //   4. B edita un % de budget → sobrevive reload y queda en la nube.
 //   5. B edita el TOTAL del budget → se guarda como override del mes visible
 //      (budgetTotalByMonth), sin tocar el default global.
+//   6. Tres txs del mismo dia: la lista respeta el orden de alta y NO se reordena
+//      al editar una (el bug de ordenar por updatedAt).
 import { spawn, execSync } from 'node:child_process';
 import net from 'node:net';
 import { mergeDocs } from '../api/sync.js';
@@ -212,6 +214,39 @@ check('total del mes en la nube', cloudDoc.budgetTotalByMonth && cloudDoc.budget
 check('el default global NO se movio', cloudDoc.budgetTotal === 600, String(cloudDoc.budgetTotal));
 await boot();
 check('total del mes tras reload', await ev(`JSON.parse(localStorage.getItem('ft13')||'{}').budgetTotalByMonth['${curMonth}']===850`));
+
+// ── escenario 6: el orden de la lista es por ALTA, no por ultima edicion ────
+// Regresion directa: se anotan 3 txs del mismo dia y se edita la primera. Con el
+// desempate viejo (updatedAt) esa fila saltaba al tope como si fuera la ultima.
+console.log('E2E orden de transacciones');
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+const hoy = await ev("(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})()");
+for (const desc of ['ORD uno', 'ORD dos', 'ORD tres']) {
+  await ev('openTxForm()'); await sleep(250);
+  await ev(`document.getElementById('tx-date').value='${hoy}';document.getElementById('tx-desc').value='${desc}';document.getElementById('tx-amount').value='5';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+  await sleep(250);
+}
+// La lista es descendente: la ultima anotada arriba.
+// Orden visible de las filas ORD, de arriba hacia abajo.
+const ORDEN_EXPR = "Array.from(document.querySelectorAll('.tx-row')).map(r=>['uno','dos','tres'].find(w=>r.textContent.includes('ORD '+w))).filter(Boolean)";
+const ordenAlta = await ev(ORDEN_EXPR);
+check('orden inicial = alta (mas nueva arriba)', JSON.stringify(ordenAlta) === JSON.stringify(['tres', 'dos', 'uno']), JSON.stringify(ordenAlta));
+
+// Editar la MAS VIEJA (equivale a adjuntarle una foto: cambia su updatedAt).
+const idUno = await ev("JSON.parse(localStorage.getItem('ft13')||'{}').transactions.find(t=>t.desc==='ORD uno').id");
+await ev(`editTx(${idUno})`); await sleep(300);
+await ev("document.getElementById('tx-amount').value='7';addTxOrUpdate()");
+await sleep(300);
+const ordenPostEdit = await ev(ORDEN_EXPR);
+check('editar una tx NO la mueve de lugar', JSON.stringify(ordenPostEdit) === JSON.stringify(['tres', 'dos', 'uno']), JSON.stringify(ordenPostEdit));
+
+// Y sobrevive a un reload + pull (el createdAt viaja con la tx en el merge).
+await boot();
+await ev("window.showPage('transactions',null)");
+await waitFor(async () => (await ev(ORDEN_EXPR)).length === 3, 10000, 150, 'las 3 filas ORD renderizadas tras el reload').catch((e) => console.warn(`  ! ${e.message}`));
+const ordenPostReload = await ev(ORDEN_EXPR);
+check('orden estable tras reload + sync', JSON.stringify(ordenPostReload) === JSON.stringify(['tres', 'dos', 'uno']), JSON.stringify(ordenPostReload));
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
