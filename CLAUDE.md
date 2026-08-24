@@ -97,4 +97,9 @@ No hay linter configurado. Despues de cualquier cambio en `src/` o `api/`, corre
 
 **api/ (Vercel serverless functions, una por archivo).** `sync.js` es la unica con merge complejo. `backup.js`/`restore.js` hacen snapshot/restore completo de `S` protegido con comparacion timing-safe. `blob-upload.js` sube adjuntos con whitelist de mime types. `*-balance.js` (ankr, binance, bybit, okx) son proxies a esas APIs porque no tienen CORS abierto para pedirlas desde el navegador. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
 
-**Deploy.** Vercel (`vercel.json`: build command, cron diario a `/api/backup`, headers de cache para `sw.js`/`manifest.json`/iconos) detras de Cloudflare en `portfolio.kisushotto.com`. `index.html` redirige a `kisushotto.com` si el hostname no coincide (protege contra acceso por el dominio `.vercel.app` crudo).
+**Deploy.** Vercel cuenta CADA archivo de `api/` como una serverless function y el plan Hobby
+permite **12 por deployment** — pasarse rompe el build entero, no solo el archivo de mas. Por eso
+`.vercelignore` saca los `api/**/*.test.js` (son tests, no endpoints). Hoy quedan 10 functions
+reales: al agregar la 13ra hay que fusionar endpoints (los cuatro `*-balance.js` son candidatos
+obvios a un solo proxy con `?ex=`) o subir de plan. Vercel (`vercel.json`: build command, cron
+diario a `/api/backup`, headers de cache para `sw.js`/`manifest.json`/iconos) detras de Cloudflare en `portfolio.kisushotto.com`. `index.html` redirige a `kisushotto.com` si el hostname no coincide (protege contra acceso por el dominio `.vercel.app` crudo).

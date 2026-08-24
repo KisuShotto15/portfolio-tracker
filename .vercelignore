@@ -1,0 +1,9 @@
+# Vercel convierte en serverless function CADA archivo de api/, tests incluidos, y
+# el plan Hobby permite 12 por deployment. Con los *.test.js adentro eramos 13 y el
+# build fallaba entero ("No more than 12 Serverless Functions...").
+# Los tests corren en local/CI con vitest; en el deploy no pintan nada.
+api/**/*.test.js
+
+# Suite e2e (Chrome via CDP): tampoco se despliega. No suma functions porque vive
+# fuera de api/, pero no tiene por que viajar en el bundle del deploy.
+e2e/
