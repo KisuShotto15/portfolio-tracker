@@ -2779,15 +2779,12 @@ function renderBudget(){
     +'</div>';
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
-  // Pasada 1: datos por categoria (para el margen libre del rebalanceo).
   var catInfo=BUDGET_CATS.map(function(cat){
     var s=catNetSpend(month,[cat]);
     var pcta=catBudgetPct(cat,month);
     var lim=pcta>0?parseFloat((pcta/100*budTotal).toFixed(2)):0;
     return {cat:cat,s:s,pct:pcta,lim:lim,ovr:!!(monthOvr&&monthOvr[cat]!=null)};
   });
-  var freeOthers=catInfo.reduce(function(t,ci){ return t+(ci.lim>0&&ci.s<ci.lim?ci.lim-ci.s:0); },0);
-  // Pasada 2: tarjetas.
   catInfo.forEach(function(ci){
     var cat=ci.cat, s=ci.s, catLim=ci.lim;
     var limBase=catLim>0?catLim:budTotal;
@@ -2799,7 +2796,7 @@ function renderBudget(){
     // pedido — ensuciaba la tarjeta.
     var note='';
     if(catLim>0&&s>catLim){
-      note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtShortUSD(freeOthers)+' free':'')+'</div>';
+      note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over</div>';
     } else if(catLim>0){
       note='<div class="bdg-pace bdg-left"><b>'+fmtShortUSD(catLim-s)+'</b> left</div>';
     }
