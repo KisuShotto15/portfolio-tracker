@@ -564,6 +564,11 @@ input,select,textarea,button{font-family:inherit}
 .bdg-scope-btn.on{border-color:var(--accent);color:#fff;background:rgba(155,112,240,0.14)}
 .bdg-scope-btn.reset{color:#E24B4A}
 .bdg-pace{margin-top:7px;font-size:11px;font-family:var(--font-num);font-weight:500}
+/* "left" es el dato que faltaba: la tarjeta decia lo gastado y el limite, pero la
+   resta quedaba en la cabeza. Va en la misma linea que usa el aviso de "over", que
+   es su caso opuesto — nunca aparecen las dos. */
+.bdg-left{color:var(--txt3)}
+.bdg-left b{color:var(--txt2);font-weight:600}
 .tx-rec-row{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
 .tx-rec-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt2);cursor:pointer;padding:6px 0;user-select:none}
 /* especificidad extra: .tx-form-panel input (width:100%,height:42px) lo agrandaba */
@@ -610,15 +615,19 @@ input,select,textarea,button{font-family:inherit}
   .bdg-stats{grid-template-columns:1fr 1fr;row-gap:20px}
   .bdg-stat{border-right:0}
   .bdg-stat-v{font-size:19px}
-  .bdg-cat{padding:14px 12px}
+  /* El nombre se queda con la fila entera: la pastilla de % sale del flujo y baja
+     a la esquina inferior derecha, emparejada con el "left" (el % asignado y lo
+     que queda son el mismo dato visto de dos formas). En media tarjeta (~165px)
+     compartir la fila dejaba a los dos apretados y el nombre con puntos
+     suspensivos. El padding-bottom reserva la banda de abajo para la pastilla,
+     haya nota o no; el aviso de "over" se corta antes de ella (right) en vez de
+     superponerse cuando trae el "· $N free". */
+  .bdg-cat{padding:14px 12px 46px;position:relative}
   .bdg-cat-top{gap:6px}
-  /* Nombre mas chico y recortable: un nombre largo (Discretionary) con un % de
-     4 cifras (14.7%) chocaba en 2 columnas. overflow hidden evita el solape. */
   .bdg-cat-name{font-size:13px;overflow:hidden;text-overflow:ellipsis}
-  /* En mobile el nombre compite con la pastilla dentro de media tarjeta, asi que
-     aca se aprieta mas: 13px deja "100" en 23px en vez de 27px. */
-  .bdg-lim-wrap{padding:4px 3px}
+  .bdg-lim-wrap{position:absolute;right:11px;bottom:11px;padding:4px 3px}
   .bdg-lim-inp{font-size:11px}
+  .bdg-pace{position:absolute;left:13px;right:52px;bottom:15px;margin-top:0;text-align:left}
   .bdg-cat-amt{font-size:21px}
   /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
      anterior, actual y delta) y baja la fuente */

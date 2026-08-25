@@ -2794,11 +2794,14 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    // Nota (solo si hay algo que decir): pasado del limite. La proyeccion "a fin
-    // de mes" se quito por pedido — ensuciaba la tarjeta.
+    // Nota: cuanto queda (o cuanto te pasaste). La tarjeta ya dice lo gastado y el
+    // limite, pero la resta era mental. La proyeccion "a fin de mes" se quito por
+    // pedido — ensuciaba la tarjeta.
     var note='';
     if(catLim>0&&s>catLim){
       note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over'+(freeOthers>0?' · '+fmtShortUSD(freeOthers)+' free':'')+'</div>';
+    } else if(catLim>0){
+      note='<div class="bdg-pace bdg-left"><b>'+fmtShortUSD(catLim-s)+'</b> left</div>';
     }
     // Layout: input de % (asignacion) arriba a la derecha del label; monto grande
     // centrado; barra; debajo % usado (izq) y limite derivado (der). Sin delta
