@@ -254,6 +254,53 @@ await waitFor(async () => (await ev(ORDEN_EXPR)).length === 3, 10000, 150, 'las 
 const ordenPostReload = await ev(ORDEN_EXPR);
 check('orden estable tras reload + sync', JSON.stringify(ordenPostReload) === JSON.stringify(['tres', 'dos', 'uno']), JSON.stringify(ordenPostReload));
 
+// ── escenario 5: el dropdown de alertas (mobile) sobrevive al descarte ──────
+// Regresion: cada descarte re-renderiza la barra mobile entera (innerHTML), y la
+// clase .open vivia en el DOM — el dropdown se cerraba solo y habia que reabrirlo
+// para descartar la alerta siguiente.
+console.log('E2E alertas mobile');
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+// Las alertas descartables salen de recurringLog, y pruneRecurringLog borra las
+// entradas cuya tx no existe: por eso las txs se crean por la UI (shape real) y
+// recien despues se cuelga el log de sus ids.
+for (const desc of ['ALERTA uno', 'ALERTA dos']) {
+  await ev('openTxForm()'); await sleep(250);
+  await ev(`document.getElementById('tx-date').value='${hoy}';document.getElementById('tx-desc').value='${desc}';document.getElementById('tx-amount').value='5';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+  await sleep(250);
+}
+await ev(`(function(){
+  var d=JSON.parse(localStorage.getItem('ft13')||'{}');
+  var ids=['ALERTA uno','ALERTA dos'].map(function(n){ return d.transactions.find(function(t){ return t.desc===n; }).id; });
+  d.recurringLog=ids.map(function(id,i){ return {id:id,label:'ALERTA '+(i?'dos':'uno'),amount:'5',currency:'USD',date:'${hoy}'}; });
+  d.recurringLogUpdatedAt=Date.now();
+  localStorage.setItem('ft13',JSON.stringify(d));
+})()`);
+await boot();
+
+const N_ALERTAS = "document.querySelectorAll('#alerts-drop-m .hbm-alert-item').length";
+const ABIERTO = "!!document.querySelector('#alerts-drop-m.open')";
+await waitFor(async () => (await ev(N_ALERTAS)) === 2, 10000, 150, 'las 2 alertas renderizadas').catch((e) => console.warn(`  ! ${e.message}`));
+await ev('toggleAlertsDrop()');
+check('el dropdown abre', await ev(ABIERTO));
+
+// Descartar la primera: el bloque se re-renderiza y debe quedar abierto con 1.
+await ev("document.querySelector('#alerts-drop-m .hbm-alert-item').click()");
+await sleep(200);
+check('sigue abierto tras descartar la 1ra', await ev(ABIERTO));
+check('queda 1 alerta', (await ev(N_ALERTAS)) === 1, String(await ev(N_ALERTAS)));
+
+// Tap afuera si cierra.
+await ev('document.body.click()');
+await sleep(100);
+check('tap afuera cierra', (await ev(ABIERTO)) === false);
+
+// Descartar la ultima: sin alertas no queda dropdown.
+await ev('toggleAlertsDrop()');
+await ev("document.querySelector('#alerts-drop-m .hbm-alert-item').click()");
+await sleep(200);
+check('sin alertas no queda dropdown', (await ev("!document.getElementById('alerts-drop-m')")) === true);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

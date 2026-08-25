@@ -1785,33 +1785,43 @@ function renderHealthScore(){
     +'</div>'
     +healthDrop+alertDrop;
     if(mHtml!==_healthMSig){ barEl.innerHTML=mHtml; _healthMSig=mHtml; }
+    _applyHbmDrop(); // el render nuevo nace cerrado: devolverle el estado
   }
 }
 
-function _closeHbmDrop(id,chevIdx){
-  var d=document.getElementById(id);
-  if(d&&d.classList.contains('open')){
-    d.classList.remove('open');
-    var chevs=document.querySelectorAll('#health-bar-m .hbm-chev');
-    if(chevs[chevIdx]) chevs[chevIdx].style.transform='';
-  }
+// La barra mobile se reconstruye entera (innerHTML) cada vez que cambia su
+// contenido, asi que el estado abierto/cerrado NO puede vivir en el DOM: descartar
+// una alerta desde el dropdown lo re-renderiza y se llevaba puesta la clase .open,
+// obligando a reabrirlo para descartar la siguiente. Vive aca y se re-aplica
+// despues de cada render (mismo criterio que _alertsOpen en el popup de desktop).
+var _hbmOpen=null; // 'health' | 'alerts' | null
+function _applyHbmDrop(){
+  var h=document.getElementById('health-drop-m'), a=document.getElementById('alerts-drop-m');
+  // Sin alertas no hay dropdown que abrir: se descarto la ultima.
+  if(!a&&_hbmOpen==='alerts') _hbmOpen=null;
+  if(h) h.classList.toggle('open',_hbmOpen==='health');
+  if(a) a.classList.toggle('open',_hbmOpen==='alerts');
+  var chevs=document.querySelectorAll('#health-bar-m .hbm-chev');
+  if(chevs[0]) chevs[0].style.transform=_hbmOpen==='health'?'rotate(180deg)':'';
+  if(chevs[1]) chevs[1].style.transform=_hbmOpen==='alerts'?'rotate(180deg)':'';
+  if(_hbmOpen) document.addEventListener('click',_hbmOutsideClick);
+  else document.removeEventListener('click',_hbmOutsideClick);
 }
-window.toggleHealthDrop=function(){
-  _closeHbmDrop('alerts-drop-m',1);
-  var d=document.getElementById('health-drop-m');
-  if(!d) return;
-  var open=d.classList.toggle('open');
-  var chev=document.querySelectorAll('#health-bar-m .hbm-chev')[0];
-  if(chev) chev.style.transform=open?'rotate(180deg)':'';
-};
-window.toggleAlertsDrop=function(){
-  _closeHbmDrop('health-drop-m',0);
-  var d=document.getElementById('alerts-drop-m');
-  if(!d) return;
-  var open=d.classList.toggle('open');
-  var chev=document.querySelectorAll('#health-bar-m .hbm-chev')[1];
-  if(chev) chev.style.transform=open?'rotate(180deg)':'';
-};
+// Tap afuera cierra. Ojo: el tap que descarta una alerta re-renderiza la barra, y
+// para cuando el click burbujea hasta document su target ya esta detached — pero
+// conserva su cadena de ancestros hasta .hbm-drop, asi que closest() lo sigue
+// reconociendo como "adentro". Por eso se matchea .hbm-drop/.hbm-row y no solo
+// #health-bar-m, que en esa cadena ya no esta.
+function _hbmOutsideClick(ev){
+  if(ev.target.closest&&ev.target.closest('.hbm-drop,.hbm-row,#health-bar-m')) return;
+  _hbmOpen=null; _applyHbmDrop();
+}
+function _hbmToggle(which){
+  _hbmOpen=_hbmOpen===which?null:which;
+  _applyHbmDrop();
+}
+window.toggleHealthDrop=function(){ _hbmToggle('health'); };
+window.toggleAlertsDrop=function(){ _hbmToggle('alerts'); };
 
 // ── Alerts ─────────────────────────────────────────────────────────────────
 function getActiveAlerts(){
@@ -3356,6 +3366,7 @@ function showPage(id,btn,arg){
     var _xwp=document.getElementById('xw-form-panel');
     if(_xwp&&_xwp.classList.contains('open')) closeExchangeForm();
     setAlertsPopup(false); // el popup de alertas tampoco sobrevive al cambio de tab
+    _hbmOpen=null; _applyHbmDrop(); // idem el dropdown mobile
   }catch(e){}
   document.querySelectorAll('.page.active').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nb.active,#mob-settings-btn.active').forEach(function(b){ b.classList.remove('active'); });
