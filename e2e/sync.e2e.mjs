@@ -301,6 +301,33 @@ await ev("document.querySelector('#alerts-drop-m .hbm-alert-item').click()");
 await sleep(200);
 check('sin alertas no queda dropdown', (await ev("!document.getElementById('alerts-drop-m')")) === true);
 
+// ── escenario 6: back del sistema en History no cierra la app ───────────────
+// Regresion: History es una pagina secundaria (se entra desde un boton en
+// Summary, no vive en el bottom-nav) y showPage() nunca apilaba una entrada de
+// historial al entrar ahi. El back del sistema (history.back() / gesto en
+// mobile) no tenia a donde volver DENTRO de la app y salia de ella entera.
+console.log('E2E back en History');
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+await ev("window.showPage('summary',null)");
+const ACTIVA = "(function(){var p=document.querySelector('.page.active');return p?p.id:null;})()";
+check('arranca en Summary', (await ev(ACTIVA)) === 'page-summary', String(await ev(ACTIVA)));
+
+// Delta de history.length, no el valor absoluto: boot() ya corrio varias veces
+// antes de este escenario (Page.navigate en CDP tambien apila), asi que el valor
+// absoluto no discrimina nada. Lo que SI discrimina el bug es si entrar a History
+// suma una entrada nueva (pushState) o pisa la actual (replaceState, el bug viejo:
+// history.back() caia a una navegacion anterior de sobra en vez de a Summary).
+const lenAntes = await ev('history.length');
+await ev("window.showPage('history',null,'snapshots')");
+await sleep(100);
+check('entra a History', (await ev(ACTIVA)) === 'page-history', String(await ev(ACTIVA)));
+check('entrar a History apila una entrada nueva (no pisa la de Summary)', (await ev('history.length')) === lenAntes + 1, `antes=${lenAntes} despues=${await ev('history.length')}`);
+
+await ev('history.back()');
+await waitFor(async () => (await ev(ACTIVA)) !== 'page-history', 5000, 100, 'back saca de History').catch((e) => console.warn(`  ! ${e.message}`));
+check('back vuelve a Summary (no sale de la app)', (await ev(ACTIVA)) === 'page-summary', String(await ev(ACTIVA)));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

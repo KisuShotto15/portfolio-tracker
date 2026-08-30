@@ -3355,9 +3355,14 @@ function importJSON(file){
 function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ _slDisabled=true; flushSaveLocal(); localStorage.removeItem('ft13'); location.reload(); } }
 
 var _pageInTimer=null;
+var _historyCameFrom=null;
 function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
+  // History no vive en el bottom-nav (se entra desde un boton de Summary), asi
+  // que a diferencia de un tab normal necesitamos recordar de donde se vino.
+  var prevActive=document.querySelector('.page.active');
+  var prevId=prevActive?prevActive.id.replace('page-',''):null;
   // Cambiar de tab cierra cualquier bottom-sheet abierto (en mobile quedaban
   // flotando sobre la tab nueva).
   try{
@@ -3381,7 +3386,17 @@ function showPage(id,btn,arg){
   if(btn) btn.classList.add('active');
   // Reflect the tab in the URL WITHOUT stacking history entries, so the back
   // button is reserved for closing an open sheet (not bouncing between tabs).
-  try{ history.replaceState(null,'','#'+id); }catch(e){ window.location.hash=id; }
+  // History es la excepcion: es una pagina secundaria, no un tab del bottom-nav,
+  // y entrar sin apilar dejaba SIN entrada a la que volver — el back del sistema
+  // salia directo de la app en vez de volver a Summary. Solo se apila al ENTRAR
+  // desde otra pagina (prevId!=='history'); de ahi en mas (otro render de
+  // History, o salir hacia un tab normal) sigue siendo replaceState in-place.
+  if(id==='history'&&prevId!=='history'){
+    _historyCameFrom=prevId||'summary';
+    try{ history.pushState({historyPage:1},'','#'+id); }catch(e){ window.location.hash=id; }
+  } else {
+    try{ history.replaceState(null,'','#'+id); }catch(e){ window.location.hash=id; }
+  }
   var fab=document.getElementById('fab-add');
   if(fab) fab.style.display=(id==='transactions'?'flex':'none');
   if(id==='summary') renderSummary();
@@ -3564,6 +3579,10 @@ if(!window._sheetBackListener){
     if(s==='tx'||txOpen) closeTxForm(true);
     else if(s==='wallet'||wvOpen) closeWalletForm(true);
     else if(s==='exchange'||xwOpen) closeExchangeForm(true);
+    // Back en la pagina de History (la entrada que se apilo al entrar ya se
+    // consumio): volver a la pagina de origen en vez de dejar la UI mostrando
+    // History con el hash de otra pagina.
+    else if(document.getElementById('page-history').classList.contains('active')) showPage(_historyCameFrom||'summary', null);
   });
 }
 // Web: ESC cierra el form de tx (nueva o edicion). Solo actua si esta abierto.
