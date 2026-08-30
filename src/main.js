@@ -1386,7 +1386,9 @@ var NOTE_ICONS=[
   { keywords:['yummy'],    src:'/icon-yummy.png?v=1',    zoom:1 },
   { keywords:['emily','remesa','zelle'], src:'/logo-zelle.png?v=1', zoom:1 },
   { keywords:['claude'],   src:'/icon-claude.png?v=1',   zoom:1 },
-  { keywords:['pan','panes','pancito','panecillo','panaderia','panadería','panadero','canilla','canillas','baguette','croissant','cachito','cachitos','sobado','sobados'], src:'/icon-pan.png?v=2', zoom:1.1 },
+  // Panaderia. "canilla", "sobao"/"sobado", "acema" y "cachito" son nombres
+  // locales de pan. Fuera las ambiguas: "andino" (region/banco) y "dulce".
+  { keywords:['pan','panes','pancito','panecillo','panecillos','panaderia','panadería','panadero','canilla','canillas','sobao','sobado','sobados','acema','acemas','baguette','baguettes','croissant','croissants','cachito','cachitos','tostada','tostadas','bakery'], src:'/logo-pan.png?v=1', zoom:1 },
   { keywords:['gatarina','mimosa','kittens','gatos','gato'], src:'/icon-mimosa.png?v=2', zoom:1 },
   { keywords:['mercantil','merpa'], src:'/icon-merpa.png?v=2', zoom:1 },
   { keywords:['verduras','verdura','vegetales','vegetal','hortalizas','platano','platanos','tomate','tomates','cebolla','cebollas','papa','papas','zanahoria','zanahorias','lechuga','aguacate','pimenton','yuca','ajo','frutas','fruta','verduleria','fruteria'], src:'/icon-veggies.png?v=4', zoom:1 },
