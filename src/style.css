@@ -630,7 +630,7 @@ input,select,textarea,button{font-family:inherit}
   .bdg-lim-inp{font-size:10.5px}
   .bdg-cat-hero{gap:5px;margin-bottom:11px}
   .bdg-cat-amt{font-size:21px}
-  .bdg-cat-lbl{font-size:11px}
+  .bdg-cat-lbl{font-size:9.5px}
   .bdg-cat-sub{font-size:11.5px}
   /* Mes vs mes: sin espacio para 3 meses — se oculta el mas viejo (queda mes
      anterior, actual y delta) y baja la fuente */
