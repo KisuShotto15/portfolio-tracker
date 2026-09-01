@@ -166,18 +166,20 @@ export function trackerTxBalancesCore(manualWallets, transactions) {
   return map;
 }
 
-// Deudas a favor y en contra. Los dos tipos de wallet guardan CUANTO FALTA, siempre
-// positivo ("me deben 1550" / "debo 300"), y las dos se mueven con la misma regla:
-// Debit baja lo que falta, Credit lo sube (es lo que ya hace trackerTxBalancesCore).
-// El signo aparece recien aca: una deuda a favor suma al patrimonio y una en contra
-// resta. Sin esto habria que recordar una convencion espejada por cada tipo.
+// Deudas. Un wallet tracker puede ser tres cosas: una wallet normal cuyo balance
+// sale de las txs (debt ausente), plata que te deben (debt:'in') o plata que debes
+// (debt:'out'). Los tres guardan un numero positivo y se mueven con la MISMA regla:
+// Debit baja el saldo, Credit lo sube (lo que ya hace trackerTxBalancesCore). El
+// signo aparece recien aca — solo lo que debes resta.
+// Los trackers sin marcar caen del lado de receivable, que es donde vivian antes de
+// que existiera esto: plata contada en el patrimonio pero que no es liquida.
 // `balances` es {nombre: saldo ya resuelto} — override si lo hay, si no base+txs.
 export function debtSplitCore(manualWallets, balances) {
   var receivable = 0, owed = 0;
   (manualWallets || []).forEach(function (w) {
     if (!w.trackerOnly) return;
     var v = (balances || {})[w.name] || 0;
-    if (w.owed) owed += v; else receivable += v;
+    if (w.debt === 'out') owed += v; else receivable += v;
   });
   return { receivable: parseFloat(receivable.toFixed(2)), owed: parseFloat(owed.toFixed(2)) };
 }

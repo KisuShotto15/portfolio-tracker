@@ -264,32 +264,34 @@ describe('trackerTxBalancesCore', () => {
 
 describe('debtSplitCore', () => {
   var W = [
-    { name: 'Roi', trackerOnly: true },              // me deben
-    { name: 'Ana', trackerOnly: true, owed: true },  // debo
-    { name: 'Cash' },                                // manual normal: no participa
+    { name: 'Emily', trackerOnly: true },                 // tracker comun: no es deuda
+    { name: 'Roi', trackerOnly: true, debt: 'in' },       // me deben
+    { name: 'Ana', trackerOnly: true, debt: 'out' },      // debo
+    { name: 'Cash' },                                     // manual normal: no participa
   ];
-  var B = { Roi: 1550, Ana: 300, Cash: 99 };
+  var B = { Emily: 200, Roi: 1550, Ana: 300, Cash: 99 };
 
-  it('separa lo que te deben de lo que debes', () => {
-    expect(debtSplitCore(W, B)).toEqual({ receivable: 1550, owed: 300 });
+  it('separa lo que debes del resto', () => {
+    expect(debtSplitCore(W, B)).toEqual({ receivable: 1750, owed: 300 });
   });
 
-  it('un tracker sin owed sigue siendo deuda a favor (nada que migrar)', () => {
-    expect(debtSplitCore([{ name: 'Roi', trackerOnly: true }], { Roi: 40 }).owed).toBe(0);
+  it('un tracker sin marcar sigue contando como antes (nada que migrar)', () => {
+    expect(debtSplitCore([{ name: 'Emily', trackerOnly: true }], { Emily: 40 }))
+      .toEqual({ receivable: 40, owed: 0 });
   });
 
   it('ignora los wallets que no son tracker', () => {
-    expect(debtSplitCore([{ name: 'Cash', owed: true }], { Cash: 500 }))
+    expect(debtSplitCore([{ name: 'Cash', debt: 'out' }], { Cash: 500 }))
       .toEqual({ receivable: 0, owed: 0 });
   });
 
   it('un wallet sin saldo en el mapa cuenta 0, no NaN', () => {
-    expect(debtSplitCore([{ name: 'X', trackerOnly: true, owed: true }], {}).owed).toBe(0);
+    expect(debtSplitCore([{ name: 'X', trackerOnly: true, debt: 'out' }], {}).owed).toBe(0);
   });
 
-  // La regla unica: Debit baja lo que falta en los DOS tipos. Lo que cambia es el
-  // signo con el que cada uno entra al patrimonio, no como se mueve.
-  it('un Debit baja tanto la deuda a favor como la que debes', () => {
+  // La regla unica: Debit baja el saldo en los tres tipos. Lo que cambia es el signo
+  // con el que cada uno entra al patrimonio, no como se mueve.
+  it('un Debit baja tanto lo que te deben como lo que debes', () => {
     var txs = [
       { wallet: 'Roi', type: 'Debit', amountUSD: 150 },
       { wallet: 'Ana', type: 'Debit', amountUSD: 150 },
@@ -297,9 +299,9 @@ describe('debtSplitCore', () => {
     var mv = trackerTxBalancesCore(W, txs);
     expect(mv.Roi).toBe(-150);
     expect(mv.Ana).toBe(-150);
-    var d = debtSplitCore(W, { Roi: 1550 + mv.Roi, Ana: 300 + mv.Ana });
-    expect(d).toEqual({ receivable: 1400, owed: 150 });
+    var d = debtSplitCore(W, { Emily: 200, Roi: 1550 + mv.Roi, Ana: 300 + mv.Ana });
+    expect(d).toEqual({ receivable: 1600, owed: 150 });
     // te pagaron 150 y con eso pagaste 150: el patrimonio no se movio
-    expect(d.receivable - d.owed).toBe(1550 - 300);
+    expect(d.receivable - d.owed).toBe(1750 - 300);
   });
 });

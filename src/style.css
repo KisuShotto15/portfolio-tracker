@@ -759,6 +759,13 @@ input,select,textarea,button{font-family:inherit}
 .wm-bal-stack{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0}
 .wm-bal-sub{font-family:var(--font-num);font-size:12px;color:var(--txt3);white-space:nowrap}
 .wm-badge{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:2px 6px;border-radius:5px}
+.wm-badge.is-debt{color:#E45858;background:rgba(228,88,88,.13)}
+/* Dos altas en el grupo de deudas (te deben / debes): comparten la fila que el
+   resto de los grupos usa para un solo boton. */
+.wm-add-pair{display:flex;gap:8px}
+.wm-add-pair .wm-add{width:auto;flex:1;margin-left:0;margin-right:0}
+.wm-add-pair .wm-add:first-child{margin-left:16px}
+.wm-add-pair .wm-add:last-child{margin-right:16px}
 .wm-connect{font-size:12px;padding:5px 13px;flex-shrink:0}
 /* Fuera del flujo: antes reservaba 68px de ancho SIEMPRE, visible o no, y ese
    ancho se lo quitaba al nombre. En la franja de ~900-1400px (tres columnas

@@ -1362,8 +1362,9 @@ async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ 
 async function settleTracker(id){
   var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return;
   var falta=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name);
-  var r=await appPrompt(w.owed?'Pagar deuda':'Cobrar',
-    escHtml(w.name)+' · '+(w.owed?'debes ':'te deben ')+fmtUSD(falta)+' · acepta sumas (50+100)',
+  var esDeuda=w.debt==='out';
+  var r=await appPrompt(esDeuda?'Pagar deuda':'Cobrar',
+    escHtml(w.name)+' · '+(esDeuda?'debes ':'te deben ')+fmtUSD(falta)+' · acepta sumas (50+100)',
     '',{math:true});
   if(!r) return;
   var v=evalMath(r.value);
@@ -1372,7 +1373,7 @@ async function settleTracker(id){
   snapshot();
   var _now=Date.now(), _ut=stamp();
   S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:localToday(),
-    desc:(w.owed?'Pago ':'Cobro ')+w.name,wallet:w.name,type:'Debit',category:'Savings',
+    desc:(esDeuda?'Pago ':'Cobro ')+w.name,wallet:w.name,type:'Debit',category:'Savings',
     amountUSD:parseFloat(v.toFixed(2)),amountVES:null,originalCurrency:'USD',rateUsed:null,
     imported:false,receiptUrl:null,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
@@ -2941,13 +2942,24 @@ function saveManualWallet(){
   if(!name){ return; }
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var curSel=document.getElementById('wm-cur');
-  // 'debt' es un tracker con el signo dado vuelta: mismo motor de txs, resta del
-  // patrimonio en vez de sumar. owed:false explicito (y no ausente) para que
-  // convertir una deuda en un cobrable con el mismo nombre lo apague de verdad.
-  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type!=='normal',owed:type==='debt',currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
+  // Los tres tipos tracker comparten motor (el balance sale de las txs); lo unico
+  // que cambia es debt, que decide con que signo entra al patrimonio y en que
+  // grupo se lista. null explicito y no ausente: convertir una deuda de vuelta en
+  // tracker comun con el mismo nombre tiene que apagar la marca de verdad.
+  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type!=='normal',
+    debt:type==='lent'?'in':type==='debt'?'out':null,
+    currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
   // Conversion Manual → Tracker (re-agregar con el mismo nombre): conservar el
   // balance mostrado. El tracker suma sus txs, asi que la base se rebasa
   // restando las txs existentes del wallet; sin esto arrancaria desde 0.
+  // Cambiar de tipo entre trackers (ej: marcar un tracker que ya existe como "me
+  // deben") es solo re-guardarlo con el mismo nombre. El balance base es suyo y no
+  // se toca: el campo del form esta oculto para los tipos tracker, asi que tomar su
+  // 0 le borraria el saldo.
+  if(idx>=0&&type!=='normal'&&S.manualWallets[idx].trackerOnly===true){
+    obj.balance=S.manualWallets[idx].balance||0;
+    obj.name=S.manualWallets[idx].name;
+  }
   if(idx>=0&&type!=='normal'&&S.manualWallets[idx].trackerOnly!==true){
     var _old=S.manualWallets[idx];
     var txSum=S.transactions.reduce(function(s,t){ return (t.imported||t.wallet!==_old.name)?s:s+(t.type==='Credit'?1:-1)*t.amountUSD; },0);
@@ -3176,27 +3188,28 @@ function renderWallets(){
   var xwList=showEx?(S.exchangeWallets||[]):[];
   var xwTotal=xwList.reduce(function(s,w){ return s+(w.balance||0); },0);
   var apiTotal=showEx?xwTotal:0;
-  var trackerNames=[], debtNames=[];
+  var trackerNames=[], lentNames=[], debtNames=[];
   S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){
-    var into=w.owed?debtNames:trackerNames;
+    var into=w.debt==='out'?debtNames:w.debt==='in'?lentNames:trackerNames;
     if(into.indexOf(w.name)<0) into.push(w.name);
   });
   // Orden por balance, de mayor a menor.
   var _trkVal=function(n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n); };
   trackerNames.sort(function(a,b){ return _trkVal(b)-_trkVal(a); });
   var trackerTotal=trackerNames.reduce(function(s,n){ return s+_trkVal(n); },0);
-  debtNames.sort(function(a,b){ return _trkVal(b)-_trkVal(a); });
+  [lentNames,debtNames].forEach(function(l){ l.sort(function(a,b){ return _trkVal(b)-_trkVal(a); }); });
+  var lentTotal=lentNames.reduce(function(s,n){ return s+_trkVal(n); },0);
   var debtTotal=debtNames.reduce(function(s,n){ return s+_trkVal(n); },0);
   var manualNormal=manualNormalTotal();
-  // `assets` es de lo que se reparten la barra, la dona y los %: una deuda no es una
-  // porcion de nada, es plata que ya no es tuya. `grand` (el total del hero) si la
-  // resta, para que coincida con el net worth del dashboard.
-  var assets=apiTotal+trackerTotal+manualNormal;
+  // `assets` es de lo que se reparten la barra, la dona y los %: lo que debes no es
+  // una porcion de nada, es plata que ya no es tuya. `grand` (el total del hero) si
+  // lo resta, para que coincida con el net worth del dashboard.
+  var assets=apiTotal+trackerTotal+lentTotal+manualNormal;
   var grand=assets-debtTotal;
   // ── allocation bar data ──────────────────────────────────────────────
   // Each tracker wallet gets its own segment (palette avoids the exchange hues).
   var TRK_COLORS=['#A78BFA','#2DD4BF','#F472B6','#22D3EE','#84CC16','#F59E0B','#EC4899','#14B8A6'];
-  var trkEntries=trackerNames.map(function(n,i){
+  var trkEntries=trackerNames.concat(lentNames).map(function(n,i){
     var mw=S.manualWallets.find(function(w){return w.name===n;});
     var v=mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n);
     return {nm:n,v:v,col:TRK_COLORS[i%TRK_COLORS.length]};
@@ -3248,21 +3261,26 @@ function renderWallets(){
   // ── Trackers + Manual ─────────────────────────────────────────────────
   // Una sola fabrica para las dos listas: lo unico que cambia es el color, la
   // etiqueta y el verbo del boton. El movimiento es el mismo en los dos casos.
-  function trkRow(name,isDebt){
+  // Una sola fabrica para los tres tipos: cambia la etiqueta, el color y si hay
+  // boton de saldar. El movimiento por debajo es identico.
+  function trkRow(name,kind){
     var mw=S.manualWallets.find(function(w){return w.name===name&&w.trackerOnly;});
-    var total=_trkVal(name);
-    var meta='<span class="wm-badge">'+(isDebt?'debo':'me deben')+'</span>';
+    var total=_trkVal(name), isDebt=kind==='out';
+    var meta='<span class="wm-badge'+(isDebt?' is-debt':'')+'">'+(kind==='in'?'me deben':isDebt?'debo':'tracker')+'</span>';
     var right='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
     var acts='';
     if(mw){
-      if(total>0) acts+='<button class="wico wsettle" title="'+(isDebt?'Pagar':'Cobrar')+'" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pagar':'Cobrar')+'</button>';
+      if(kind&&total>0) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pagar':'Cobrar')+'</button>';
       acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
     return wmRow(isDebt?'#E24B4A':'#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,walletLogo(name));
   }
-  var trRows=trackerNames.map(function(n){ return trkRow(n,false); }).join('');
-  var dbRows=debtNames.map(function(n){ return trkRow(n,true); }).join('');
+  var trRows=trackerNames.map(function(n){ return trkRow(n,null); }).join('');
+  // Las dos direcciones en la misma lista: son la misma pregunta ("quien le debe a
+  // quien") y separarlas obligaba a mirar dos lugares para saber como estas parado.
+  var dbRows=lentNames.map(function(n){ return trkRow(n,'in'); })
+    .concat(debtNames.map(function(n){ return trkRow(n,'out'); })).join('');
   // Orden por balance (en USD), de mayor a menor.
   var mnList=S.manualWallets.filter(function(w){return !w.trackerOnly;})
     .slice().sort(function(a,b){ return manualWalletUsd(b)-manualWalletUsd(a); });
@@ -3273,9 +3291,11 @@ function renderWallets(){
     return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),meta,balHtml(manualWalletUsd(w)),acts,walletLogo(w.name));
   }).join('');
 
+  // Neto: positivo si te deben mas de lo que debes.
+  var debtNet=parseFloat((lentTotal-debtTotal).toFixed(2));
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
   var exCount=showEx?xwList.length:0;
-  var walletCount=exCount+trackerNames.length+debtNames.length+manualNormalCount;
+  var walletCount=exCount+trackerNames.length+lentNames.length+debtNames.length+manualNormalCount;
   var notConn=0;
 
   function htile(lbl,val,col){
@@ -3294,7 +3314,7 @@ function renderWallets(){
           +(showEx?htile('Exchanges',apiTotal,'#9B70F0'):'')
           +htile('Trackers',trackerTotal,'#2DD4BF')
           +htile('Manual',manualNormal,'#6B7280')
-          +(debtTotal>0?'<div class="whtile"><span class="whtile-lbl"><i style="background:#E24B4A"></i>Debts</span><span class="whtile-val" style="color:#E24B4A">-'+fmtUSD(debtTotal)+'</span><span class="whtile-sub">ya restado del total</span></div>':'')
+          +(lentTotal>0||debtTotal>0?'<div class="whtile"><span class="whtile-lbl"><i style="background:#E24B4A"></i>Debts</span><span class="whtile-val"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span><span class="whtile-sub">'+fmtUSD(lentTotal)+' te deben · '+fmtUSD(debtTotal)+' debes</span></div>':'')
         +'</div>'
       +'</div>'
       +'<div class="wm-alloc">'+wvBar+'</div>'
@@ -3307,7 +3327,7 @@ function renderWallets(){
       +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div><button class="wm-add" onclick="openExchangeForm()">+ Add exchange</button></div>':'')
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
-      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Debts</span><span class="wm-group-sum" style="color:#E24B4A">'+(debtTotal>0?'-'+fmtUSD(debtTotal):fmtUSD(0))+'</span></div><div class="wm-rows">'+(dbRows||'<p class="hint" style="padding:8px 4px">Plata que debes. Resta del patrimonio.</p>')+'</div><button class="wm-add" onclick="openWalletForm(\'debt\')">+ Add debt</button></div>'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Debts</span><span class="wm-group-sum"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span></div><div class="wm-rows">'+(dbRows||'<p class="hint" style="padding:8px 4px">Quien te debe y a quien le debes, en una sola lista.</p>')+'</div><div class="wm-add-pair"><button class="wm-add" onclick="openWalletForm(\'lent\')">+ Me deben</button><button class="wm-add" onclick="openWalletForm(\'debt\')">+ Debo</button></div></div>'
     +'</div>';
   // Skip re-render when unchanged → no flicker / re-animation on tab return.
   if(wHtml!==_walletsSig){ grid.innerHTML=wHtml; _walletsSig=wHtml; }
@@ -3908,6 +3928,13 @@ var MIGRATIONS=[
     if(!frozen.length) return;
     frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; });
     S.manualWalletsUpdatedAt=stamp();
+  }},
+  // Va al final a proposito: runMigrations referencia MIGRATIONS[2] (la v3, que
+  // corre en cada boot) por indice, y toma la ultima entrada como version vigente.
+  { v:4, fn:function(){ // owed:true → debt:'out' (el flag paso a tener tres estados)
+    var hit=S.manualWallets.filter(function(w){ return w.owed===true; });
+    S.manualWallets.forEach(function(w){ if('owed' in w){ if(w.owed===true) w.debt='out'; delete w.owed; } });
+    if(hit.length) S.manualWalletsUpdatedAt=stamp();
   }},
 ];
 function runMigrations(){

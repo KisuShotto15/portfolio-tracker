@@ -356,10 +356,15 @@ check('al abrir el form vuelve a vacio', (await ev(HINT)) === '');
 // (un Debit). Se maneja por la UI real — el boton y su modal — porque el bundle
 // no deja S como global y porque eso es lo que de verdad usa una persona.
 console.log('E2E deudas');
+// Nube vacia: los escenarios anteriores ya dejaron ahi un schemaVersion al dia, y
+// el pull (que corre ANTES de runMigrations) lo traeria de vuelta y saltearia la
+// migracion que este escenario quiere probar.
+cloudDoc = {};
 await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   JSON.parse(localStorage.getItem('ft13')||'{}'),
-  { transactions: [], deletedTxIds: [], manualWallets: [
-      { id: 11, name: 'Roi', trackerOnly: true, balance: 1700 },
+  { transactions: [], deletedTxIds: [], schemaVersion: 3, manualWallets: [
+      { id: 33, name: 'Emily', trackerOnly: true, balance: 200 },
+      { id: 11, name: 'Roi', trackerOnly: true, balance: 1700, debt: 'in' },
       { id: 22, name: 'Ana', trackerOnly: true, balance: 300, owed: true } ],
     manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
 await boot();
@@ -370,8 +375,17 @@ const heroTotal = async () => Number(
 const liqSub = async () => await ev(
   "[...document.querySelectorAll('.kpi-card')].filter(c=>c.textContent.includes('Liquid')).map(c=>c.querySelector('.kpi-sub').textContent)[0]||''");
 
+// Ana entra con el owed:true viejo: la migracion v4 tiene que convertirlo.
+const anaDebt = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).filter(function(w){return w.name==='Ana'}).map(function(w){return w.debt+'/'+('owed' in w)})[0]");
+check('migra owed:true a debt:out', anaDebt === 'out/false', `Ana=${anaDebt}`);
+
 const nw0 = await heroTotal();
-check('la deuda resta del total de wallets', nw0 === 1700 - 300, `total=${nw0} (esperado 1400)`);
+check('la deuda resta del total de wallets', nw0 === 200 + 1700 - 300, `total=${nw0} (esperado 1600)`);
+
+// Un tracker sin marcar NO es una deuda: sigue en su grupo y con su etiqueta.
+const grupos = await ev("[...document.querySelectorAll('#page-wallets .wm-group')].map(function(g){var t=g.querySelector('.wm-group-title');return (t?t.textContent:'')+':'+[...g.querySelectorAll('.wm-row')].map(function(r){return r.querySelector('.wm-name').textContent+'|'+(r.querySelector('.wm-badge')||{}).textContent}).join(',')}).join(' ~ ')");
+check('Emily queda como tracker comun', /Trackers:Emily\|tracker/.test(grupos), grupos);
+check('las dos direcciones van juntas en Debts', /Debts:Roi\|me deben,Ana\|debo/.test(grupos), grupos);
 
 await ev("showPage('summary')"); await sleep(400);
 const sub = await liqSub();
@@ -387,6 +401,7 @@ const settle = async (id, monto) => {
 };
 await settle(11, 150);
 check('cobrar baja lo que te deben', (await heroTotal()) === nw0 - 150, `total=${await heroTotal()}`);
+check('un tracker comun no ofrece Cobrar/Pagar', (await ev("[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(r){return r.querySelector('.wm-name').textContent==='Emily'}).map(function(r){return !!r.querySelector('.wsettle')})[0]")) === false);
 await settle(22, 150);
 check('pagar con esa plata deja el patrimonio igual', (await heroTotal()) === nw0, `antes=${nw0} despues=${await heroTotal()}`);
 
