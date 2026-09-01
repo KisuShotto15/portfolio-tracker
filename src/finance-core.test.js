@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
-  holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore,
+  holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -259,5 +259,47 @@ describe('trackerTxBalancesCore', () => {
     const dup = [{ name: 'Provincial', trackerOnly: true }, { name: 'Provincial', trackerOnly: false }];
     const map = trackerTxBalancesCore(dup, [tx({ wallet: 'Provincial', amountUSD: 5.99 })]);
     expect(map.Provincial).toBeCloseTo(-5.99);
+  });
+});
+
+describe('debtSplitCore', () => {
+  var W = [
+    { name: 'Roi', trackerOnly: true },              // me deben
+    { name: 'Ana', trackerOnly: true, owed: true },  // debo
+    { name: 'Cash' },                                // manual normal: no participa
+  ];
+  var B = { Roi: 1550, Ana: 300, Cash: 99 };
+
+  it('separa lo que te deben de lo que debes', () => {
+    expect(debtSplitCore(W, B)).toEqual({ receivable: 1550, owed: 300 });
+  });
+
+  it('un tracker sin owed sigue siendo deuda a favor (nada que migrar)', () => {
+    expect(debtSplitCore([{ name: 'Roi', trackerOnly: true }], { Roi: 40 }).owed).toBe(0);
+  });
+
+  it('ignora los wallets que no son tracker', () => {
+    expect(debtSplitCore([{ name: 'Cash', owed: true }], { Cash: 500 }))
+      .toEqual({ receivable: 0, owed: 0 });
+  });
+
+  it('un wallet sin saldo en el mapa cuenta 0, no NaN', () => {
+    expect(debtSplitCore([{ name: 'X', trackerOnly: true, owed: true }], {}).owed).toBe(0);
+  });
+
+  // La regla unica: Debit baja lo que falta en los DOS tipos. Lo que cambia es el
+  // signo con el que cada uno entra al patrimonio, no como se mueve.
+  it('un Debit baja tanto la deuda a favor como la que debes', () => {
+    var txs = [
+      { wallet: 'Roi', type: 'Debit', amountUSD: 150 },
+      { wallet: 'Ana', type: 'Debit', amountUSD: 150 },
+    ];
+    var mv = trackerTxBalancesCore(W, txs);
+    expect(mv.Roi).toBe(-150);
+    expect(mv.Ana).toBe(-150);
+    var d = debtSplitCore(W, { Roi: 1550 + mv.Roi, Ana: 300 + mv.Ana });
+    expect(d).toEqual({ receivable: 1400, owed: 150 });
+    // te pagaron 150 y con eso pagaste 150: el patrimonio no se movio
+    expect(d.receivable - d.owed).toBe(1550 - 300);
   });
 });

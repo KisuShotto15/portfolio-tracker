@@ -2,7 +2,7 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore,
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -1352,6 +1352,33 @@ async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ 
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
+// Cobrar / Pagar. Lo unico que hay que decidir es cuanto se movio: la direccion la
+// pone la app. Un Debit baja lo que falta en los dos casos (te pagaron parte de lo
+// que te deben, o pagaste parte de lo que debes), asi que no hay convencion que
+// recordar ni que anotar al reves. Categoria Savings: es plata cambiando de lugar
+// entre cosas que la app ya cuenta, no un gasto ni un ingreso — no toca budget ni P&L.
+// Escribe UNA sola tx, la de la deuda. El otro lado (la plata que entro o salio de
+// verdad) ya lo ve la app sola: por el fetch del exchange, o editando el wallet manual.
+async function settleTracker(id){
+  var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return;
+  var falta=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name);
+  var r=await appPrompt(w.owed?'Pagar deuda':'Cobrar',
+    escHtml(w.name)+' · '+(w.owed?'debes ':'te deben ')+fmtUSD(falta)+' · acepta sumas (50+100)',
+    '',{math:true});
+  if(!r) return;
+  var v=evalMath(r.value);
+  if(isNaN(v)||v<=0) return;
+  w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
+  snapshot();
+  var _now=Date.now(), _ut=stamp();
+  S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:localToday(),
+    desc:(w.owed?'Pago ':'Cobro ')+w.name,wallet:w.name,type:'Debit',category:'Savings',
+    amountUSD:parseFloat(v.toFixed(2)),amountVES:null,originalCurrency:'USD',rateUsed:null,
+    imported:false,receiptUrl:null,updatedAt:_ut});
+  S.transactionsUpdatedAt=_ut;
+  save(); renderWallets(); renderSummary(); renderTx();
+  showTxToast();
+}
 async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · accepts sums (1000+2500)',cur,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
@@ -1712,7 +1739,10 @@ function renderKPIStrip(month){
   // el total (no el reparto liquido/por cobrar), asi que no hay mes anterior contra
   // que compararlo sin inventarlo.
   var bal=getBalanceSplit();
-  var liqSub=bal.receivable>0?fmtUSD(bal.receivable)+' receivable':'no receivables';
+  var _liqBits=[];
+  if(bal.receivable>0) _liqBits.push(fmtUSD(bal.receivable)+' receivable');
+  if(bal.owed>0) _liqBits.push(fmtUSD(bal.owed)+' owed');
+  var liqSub=_liqBits.length?_liqBits.join(' · '):'no debts';
   var kHtml='<div class="kpi-strip">'
     +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
     +kpi('Net Profit',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
@@ -2373,18 +2403,27 @@ function renderEquityChart(){
   if(_eqShowHoldings) _eqDs.push({label:'+ Holdings',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]});
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:_eqDs},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false,min:_eqYMin}}}});}
 
-// El patrimonio partido en lo que puedes gastar HOY vs. lo que solo tienes anotado.
-// Las wallets trackerOnly son deudas a favor (ej: Roi): suman al net worth pero esa
-// plata todavia no esta en ningun lado. El KPI Liquid vive de esta separacion.
+// El patrimonio partido en tres: lo que puedes gastar HOY, lo que te deben y lo que
+// debes. Las wallets trackerOnly son deudas — a favor por defecto (ej: Roi), en
+// contra si llevan owed. Las dos guardan cuanto FALTA, siempre positivo; el signo
+// lo pone debtSplitCore. El KPI Liquid vive de esta separacion.
+function trackerBalances(){
+  var out={};
+  S.manualWallets.forEach(function(w){
+    if(!w.trackerOnly) return;
+    out[w.name]=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name);
+  });
+  return out;
+}
 function getBalanceSplit(){
   var api=(S.exchangeWallets||[]).reduce(function(s,w){ return s+(w.balance||0); },0);
-  var receivable=S.manualWallets.filter(function(w){ return w.trackerOnly; }).reduce(function(s,w){ return s+(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)); },0);
+  var d=debtSplitCore(S.manualWallets,trackerBalances());
   var liquid=api+manualNormalTotal();
-  return {liquid:parseFloat(liquid.toFixed(2)),receivable:parseFloat(receivable.toFixed(2))};
+  return {liquid:parseFloat(liquid.toFixed(2)),receivable:d.receivable,owed:d.owed};
 }
 function getTotalBalance(){
   var b=getBalanceSplit();
-  return parseFloat((b.liquid+b.receivable).toFixed(2));
+  return parseFloat((b.liquid+b.receivable-b.owed).toFixed(2));
 }
 
 function appPrompt(title,infoHtml,defaultVal,opts){
@@ -2902,11 +2941,14 @@ function saveManualWallet(){
   if(!name){ return; }
   var idx=S.manualWallets.findIndex(function(w){ return w.name.toLowerCase()===name.toLowerCase(); });
   var curSel=document.getElementById('wm-cur');
-  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type==='tracker',currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
+  // 'debt' es un tracker con el signo dado vuelta: mismo motor de txs, resta del
+  // patrimonio en vez de sumar. owed:false explicito (y no ausente) para que
+  // convertir una deuda en un cobrable con el mismo nombre lo apague de verdad.
+  var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type!=='normal',owed:type==='debt',currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
   // Conversion Manual → Tracker (re-agregar con el mismo nombre): conservar el
   // balance mostrado. El tracker suma sus txs, asi que la base se rebasa
   // restando las txs existentes del wallet; sin esto arrancaria desde 0.
-  if(idx>=0&&type==='tracker'&&S.manualWallets[idx].trackerOnly!==true){
+  if(idx>=0&&type!=='normal'&&S.manualWallets[idx].trackerOnly!==true){
     var _old=S.manualWallets[idx];
     var txSum=S.transactions.reduce(function(s,t){ return (t.imported||t.wallet!==_old.name)?s:s+(t.type==='Credit'?1:-1)*t.amountUSD; },0);
     obj.balance=parseFloat(((_old.balance||0)-txSum).toFixed(2));
@@ -3134,14 +3176,23 @@ function renderWallets(){
   var xwList=showEx?(S.exchangeWallets||[]):[];
   var xwTotal=xwList.reduce(function(s,w){ return s+(w.balance||0); },0);
   var apiTotal=showEx?xwTotal:0;
-  var trackerNames=[];
-  S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){ if(trackerNames.indexOf(w.name)<0) trackerNames.push(w.name); });
+  var trackerNames=[], debtNames=[];
+  S.manualWallets.filter(function(w){ return w.trackerOnly; }).forEach(function(w){
+    var into=w.owed?debtNames:trackerNames;
+    if(into.indexOf(w.name)<0) into.push(w.name);
+  });
   // Orden por balance, de mayor a menor.
   var _trkVal=function(n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n); };
   trackerNames.sort(function(a,b){ return _trkVal(b)-_trkVal(a); });
-  var trackerTotal=trackerNames.reduce(function(s,n){ var mw=S.manualWallets.find(function(w){return w.name===n;}); return s+(mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(n)); },0);
+  var trackerTotal=trackerNames.reduce(function(s,n){ return s+_trkVal(n); },0);
+  debtNames.sort(function(a,b){ return _trkVal(b)-_trkVal(a); });
+  var debtTotal=debtNames.reduce(function(s,n){ return s+_trkVal(n); },0);
   var manualNormal=manualNormalTotal();
-  var grand=apiTotal+trackerTotal+manualNormal;
+  // `assets` es de lo que se reparten la barra, la dona y los %: una deuda no es una
+  // porcion de nada, es plata que ya no es tuya. `grand` (el total del hero) si la
+  // resta, para que coincida con el net worth del dashboard.
+  var assets=apiTotal+trackerTotal+manualNormal;
+  var grand=assets-debtTotal;
   // ── allocation bar data ──────────────────────────────────────────────
   // Each tracker wallet gets its own segment (palette avoids the exchange hues).
   var TRK_COLORS=['#A78BFA','#2DD4BF','#F472B6','#22D3EE','#84CC16','#F59E0B','#EC4899','#14B8A6'];
@@ -3155,8 +3206,8 @@ function renderWallets(){
   var wvA=xwEntries.concat(trkEntries).concat([
     {nm:'Cash',v:manualNormal,col:'#6B7280'}
   ]).filter(function(a){return a.v>0;}).sort(function(a,b){return b.v-a.v;});
-  var wvBar=grand>0?wvA.map(function(a){return '<i style="width:'+(a.v/grand*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
-  var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i><span class="wm-key-nm">'+a.nm+'</span><b>'+(grand>0?(a.v/grand*100).toFixed(1):'0')+'%</b></span>';}).join('');
+  var wvBar=assets>0?wvA.map(function(a){return '<i style="width:'+(a.v/assets*100).toFixed(2)+'%;background:'+a.col+'"></i>';}).join(''):'';
+  var wvLeg=wvA.map(function(a){return '<span class="wm-key"><i style="background:'+a.col+'"></i><span class="wm-key-nm">'+a.nm+'</span><b>'+(assets>0?(a.v/assets*100).toFixed(1):'0')+'%</b></span>';}).join('');
 
   // ── icon helpers ─────────────────────────────────────────────────────
   var icP='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
@@ -3195,19 +3246,23 @@ function renderWallets(){
     ||'<p class="hint" style="padding:8px 4px">Aun no agregaste exchanges.</p>');
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
-  var trRows=trackerNames.map(function(name){
-    var mw=S.manualWallets.find(function(w){return w.name===name;});
-    var total=mw&&mw.balanceOverride!=null?mw.balanceOverride:calcTrackerBal(name);
-    var meta='<span class="wm-badge">tracker</span>';
-    var right=balHtml(total);
+  // Una sola fabrica para las dos listas: lo unico que cambia es el color, la
+  // etiqueta y el verbo del boton. El movimiento es el mismo en los dos casos.
+  function trkRow(name,isDebt){
+    var mw=S.manualWallets.find(function(w){return w.name===name&&w.trackerOnly;});
+    var total=_trkVal(name);
+    var meta='<span class="wm-badge">'+(isDebt?'debo':'me deben')+'</span>';
+    var right='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
     var acts='';
     if(mw){
+      if(total>0) acts+='<button class="wico wsettle" title="'+(isDebt?'Pagar':'Cobrar')+'" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pagar':'Cobrar')+'</button>';
       acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
-    var tlogo=walletLogo(name);
-    return wmRow('#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,tlogo);
-  }).join('');
+    return wmRow(isDebt?'#E24B4A':'#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,walletLogo(name));
+  }
+  var trRows=trackerNames.map(function(n){ return trkRow(n,false); }).join('');
+  var dbRows=debtNames.map(function(n){ return trkRow(n,true); }).join('');
   // Orden por balance (en USD), de mayor a menor.
   var mnList=S.manualWallets.filter(function(w){return !w.trackerOnly;})
     .slice().sort(function(a,b){ return manualWalletUsd(b)-manualWalletUsd(a); });
@@ -3220,11 +3275,11 @@ function renderWallets(){
 
   var manualNormalCount=S.manualWallets.filter(function(w){return !w.trackerOnly;}).length;
   var exCount=showEx?xwList.length:0;
-  var walletCount=exCount+trackerNames.length+manualNormalCount;
+  var walletCount=exCount+trackerNames.length+debtNames.length+manualNormalCount;
   var notConn=0;
 
   function htile(lbl,val,col){
-    var pct=grand>0?(val/grand*100).toFixed(1):'0';
+    var pct=assets>0?(val/assets*100).toFixed(1):'0';
     return '<div class="whtile"><span class="whtile-lbl"><i style="background:'+col+'"></i>'+lbl+'</span><span class="whtile-val">'+fmtUSD(val)+'</span><span class="whtile-sub">'+pct+'% of total</span></div>';
   }
   var wHtml=
@@ -3239,6 +3294,7 @@ function renderWallets(){
           +(showEx?htile('Exchanges',apiTotal,'#9B70F0'):'')
           +htile('Trackers',trackerTotal,'#2DD4BF')
           +htile('Manual',manualNormal,'#6B7280')
+          +(debtTotal>0?'<div class="whtile"><span class="whtile-lbl"><i style="background:#E24B4A"></i>Debts</span><span class="whtile-val" style="color:#E24B4A">-'+fmtUSD(debtTotal)+'</span><span class="whtile-sub">ya restado del total</span></div>':'')
         +'</div>'
       +'</div>'
       +'<div class="wm-alloc">'+wvBar+'</div>'
@@ -3251,12 +3307,13 @@ function renderWallets(){
       +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div><button class="wm-add" onclick="openExchangeForm()">+ Add exchange</button></div>':'')
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Debts</span><span class="wm-group-sum" style="color:#E24B4A">'+(debtTotal>0?'-'+fmtUSD(debtTotal):fmtUSD(0))+'</span></div><div class="wm-rows">'+(dbRows||'<p class="hint" style="padding:8px 4px">Plata que debes. Resta del patrimonio.</p>')+'</div><button class="wm-add" onclick="openWalletForm(\'debt\')">+ Add debt</button></div>'
     +'</div>';
   // Skip re-render when unchanged → no flicker / re-animation on tab return.
   if(wHtml!==_walletsSig){ grid.innerHTML=wHtml; _walletsSig=wHtml; }
   // Draw outside the signature guard: the first render happens while the page is
   // hidden (offsetParent null), so the donut must be (re)attempted on every visible render.
-  drawWalletDonut(wvA, grand);
+  drawWalletDonut(wvA, assets);
 }
 function drawWalletDonut(data, grand){
   var el=document.getElementById('wm-donut'); if(!el||el.offsetParent===null) return;
@@ -3760,6 +3817,7 @@ window.renderBudget = renderBudget;
 window.saveBudget = saveBudget;
 window.saveManualWallet = saveManualWallet;
 window.deleteManualWallet = deleteManualWallet;
+window.settleTracker = settleTracker;
 window.saveOnchainWallet = saveOnchainWallet;
 window.deleteOnchainWallet = deleteOnchainWallet;
 window.copyAddr = copyAddr;

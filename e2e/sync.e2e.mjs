@@ -350,6 +350,64 @@ await ev('closeTxForm()'); await sleep(300);
 await ev('openTxForm()'); await sleep(300);
 check('al abrir el form vuelve a vacio', (await ev(HINT)) === '');
 
+// ── 10 · deudas: el signo con el que entran al patrimonio ─────────────────
+// La propiedad que hace util al modelo: cobrar $150 y pagar $150 con esa misma
+// plata deja el patrimonio donde estaba, y en los dos lados el gesto es EL MISMO
+// (un Debit). Se maneja por la UI real — el boton y su modal — porque el bundle
+// no deja S como global y porque eso es lo que de verdad usa una persona.
+console.log('E2E deudas');
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { transactions: [], deletedTxIds: [], manualWallets: [
+      { id: 11, name: 'Roi', trackerOnly: true, balance: 1700 },
+      { id: 22, name: 'Ana', trackerOnly: true, balance: 300, owed: true } ],
+    manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('wallets')"); await sleep(400);
+
+const heroTotal = async () => Number(
+  (await ev("(document.querySelector('.wm-hero-val')||{}).textContent||''")).replace(/[^0-9.-]/g, ''));
+const liqSub = async () => await ev(
+  "[...document.querySelectorAll('.kpi-card')].filter(c=>c.textContent.includes('Liquid')).map(c=>c.querySelector('.kpi-sub').textContent)[0]||''");
+
+const nw0 = await heroTotal();
+check('la deuda resta del total de wallets', nw0 === 1700 - 300, `total=${nw0} (esperado 1400)`);
+
+await ev("showPage('summary')"); await sleep(400);
+const sub = await liqSub();
+check('el KPI Liquid muestra lo que te deben', sub.includes('receivable'), sub);
+check('el KPI Liquid muestra lo que debes', sub.includes('owed'), sub);
+
+// Cobrar 150 de Roi y pagar 150 a Ana, por los botones de la fila.
+await ev("showPage('wallets')"); await sleep(400);
+const settle = async (id, monto) => {
+  await ev(`settleTracker(${id})`); await sleep(350);
+  await ev(`document.getElementById('_ami').value='${monto}';document.getElementById('_amo').click()`);
+  await sleep(400);
+};
+await settle(11, 150);
+check('cobrar baja lo que te deben', (await heroTotal()) === nw0 - 150, `total=${await heroTotal()}`);
+await settle(22, 150);
+check('pagar con esa plata deja el patrimonio igual', (await heroTotal()) === nw0, `antes=${nw0} despues=${await heroTotal()}`);
+
+// Las dos txs salieron iguales: mismo tipo, misma categoria neutra. Se filtran por
+// wallet porque el pull inicial trae las txs de los escenarios anteriores.
+const txs = JSON.parse(await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[])"))
+  .filter((t) => t.wallet === 'Roi' || t.wallet === 'Ana');
+check('escribio una tx por cada lado', txs.length === 2, `txs=${txs.length}`);
+check('las dos son Debit (una sola regla que recordar)', txs.every((t) => t.type === 'Debit'), JSON.stringify(txs.map((t) => t.type)));
+check('las dos son Savings (no tocan budget ni P&L)', txs.every((t) => t.category === 'Savings'), JSON.stringify(txs.map((t) => t.category)));
+
+// Captura opcional de la pagina de Wallets con una deuda cargada: SHOT=<archivo>.
+if (process.env.SHOT) {
+  await ev("document.querySelectorAll('[class*=form-panel],[class*=overlay],.action-toast').forEach(function(e){e.style.display='none'});document.documentElement.classList.remove('sheet-open');showPage('wallets')"); await sleep(600);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false });
+  await sleep(400);
+  const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  (await import('node:fs')).writeFileSync(process.env.SHOT, Buffer.from(shot.result.data, 'base64'));
+  console.log('  · captura en ' + process.env.SHOT);
+}
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

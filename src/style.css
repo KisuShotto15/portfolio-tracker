@@ -714,7 +714,9 @@ input,select,textarea,button{font-family:inherit}
 /* Los 3 tiles miden 148px minimo cada uno y no encogen: sin wrap, el hero forzaba
    ~752px de min-content y sacaba scroll horizontal entre 721 y 900px. */
 .wm-hero-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:24px}
-.wm-hero-tiles{display:flex;flex-wrap:wrap;gap:12px;flex-shrink:0}
+/* shrink:1 + min-width:0 para que el wrap actue: con shrink:0 la 4ta tarjeta
+   (Debts) desbordaba el hero en vez de bajar a una segunda linea. */
+.wm-hero-tiles{display:flex;flex-wrap:wrap;gap:12px;flex-shrink:1;min-width:0;justify-content:flex-end}
 .whtile{display:flex;flex-direction:column;gap:5px;padding:12px 16px;min-width:148px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:12px}
 .whtile-lbl{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3)}
 .whtile-lbl i{width:8px;height:8px;border-radius:3px;flex-shrink:0}
@@ -729,6 +731,9 @@ input,select,textarea,button{font-family:inherit}
 .wm-key b{font-family:var(--font-num);color:var(--txt3);font-weight:400}
 .wm-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
 .wm-cols-3{grid-template-columns:1fr 1fr 1fr}
+/* Cobrar/Pagar: el unico boton de la fila con texto, porque es el que se usa. */
+.wico.wsettle{width:auto;padding:0 9px;font-size:11px;font-weight:600;color:var(--txt2)}
+.wico.wsettle:hover{color:var(--txt)}
 /* Cada fila de wallet mide ~200px de min-content (chip + saldo + acciones), asi que
    3 columnas piden ~640px y no entraban entre 721 y ~830px: la pagina se iba a
    scroll horizontal. A 2 columnas entra de sobra; ≤720px ya baja a 1. */
@@ -738,7 +743,7 @@ input,select,textarea,button{font-family:inherit}
 .wm-group-title{font-size:13px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
 .wm-group-sum{font-family:var(--font-num);font-size:14px;color:var(--txt3);margin-right:83px}
 .wm-rows{display:flex;flex-direction:column}
-.wm-row{display:flex;align-items:center;gap:13px;padding:11px 16px;border-radius:12px;transition:background .12s,transform .08s ease}
+.wm-row{position:relative;display:flex;align-items:center;gap:13px;padding:11px 16px;border-radius:12px;transition:background .12s,transform .08s ease}
 .wm-row:active{transform:scale(.99)}
 .wm-row:hover{background:rgba(255,255,255,.025)}
 .wm-chip{position:relative;width:36px;height:36px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-num);font-weight:600;font-size:14px;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c)}
@@ -755,7 +760,15 @@ input,select,textarea,button{font-family:inherit}
 .wm-bal-sub{font-family:var(--font-num);font-size:12px;color:var(--txt3);white-space:nowrap}
 .wm-badge{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:2px 6px;border-radius:5px}
 .wm-connect{font-size:12px;padding:5px 13px;flex-shrink:0}
-.wm-acts{display:flex;gap:4px;justify-content:flex-end;opacity:0;pointer-events:none;transition:opacity .12s;flex-shrink:0;margin-left:2px;min-width:68px}
+/* Fuera del flujo: antes reservaba 68px de ancho SIEMPRE, visible o no, y ese
+   ancho se lo quitaba al nombre. En la franja de ~900-1400px (tres columnas
+   angostas) el nombre se quedaba con 10px y se montaba sobre el balance apenas la
+   fila sumaba un boton mas. Al aparecer tapa el balance, que es justo lo que la
+   fila deja de necesitar mientras estas eligiendo que hacer con ella. */
+.wm-acts{position:absolute;right:16px;top:50%;transform:translateY(-50%);
+  display:flex;gap:4px;justify-content:flex-end;align-items:center;opacity:0;pointer-events:none;
+  transition:opacity .12s;padding-left:14px;border-radius:10px;
+  background:linear-gradient(90deg,transparent,var(--surface) 14px)}
 .wm-row:hover .wm-acts,.wm-row:focus-within .wm-acts{opacity:1;pointer-events:auto}
 .wm-add{width:calc(100% - 32px);margin:8px 16px 4px;background:none;border:1px dashed var(--line);color:var(--txt3);font-size:14px;font-weight:500;padding:11px 0;border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .wm-add:hover{color:var(--txt2);border-color:rgba(255,255,255,.2)}
@@ -1251,9 +1264,10 @@ input::placeholder{color:var(--txt3)}
   .wm-group-sum{margin-right:0}
   /* Mobile: no reserved space — amount sits at the edge; tapping the row reveals the
      edit/delete buttons which push the amount left (like transactions). */
-  .wm-acts{display:none;min-width:0}
+  .wm-acts{display:none}
   .wm-row.wm-sel{background:rgba(255,255,255,.06)}
   .wm-row.wm-sel .wm-acts{display:flex;opacity:1;pointer-events:auto}
+  .wm-acts{right:14px}
 
   /* Budget + Holdings hero font */
   .bdg-hero-val{font-size:38px}
