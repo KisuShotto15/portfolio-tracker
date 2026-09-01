@@ -545,10 +545,9 @@ input,select,textarea,button{font-family:inherit}
 /* La rueda solo actua con el input enfocado (si no, hacer scroll en la pagina
    cambiaria presupuestos al pasar por encima). El punteado avisa cuando esta activo. */
 .bdg-lim-wrap:focus-within{border-bottom-color:var(--accent)}
-/* Override de mes: el % vale solo para el mes en pantalla, no para todos. Sin
-   pastilla que teñir, lo dice el color del propio numero. */
-.bdg-lim-wrap.is-ovr{color:rgba(201,174,255,.6)}
-.bdg-lim-wrap.is-ovr .bdg-lim-inp{color:#C9AEFF}
+/* El override de mes (un % que vale solo para el mes en pantalla) ya no se
+   distingue por color: todos los % se ven igual. Queda el title de la pastilla,
+   que lo dice al pasar por encima. */
 /* 3ch = exactamente 3 digitos en la fuente mono. Antes eran 32px sueltos, mas de
    lo que ocupa "100" (27px), y en mobile ese sobrante se lo quitaba al nombre de
    la categoria. Menos de 3ch no sirve: "100" alineado a la derecha se recortaria
