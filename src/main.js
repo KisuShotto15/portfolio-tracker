@@ -2823,18 +2823,15 @@ function renderBudget(){
     var cp=limBase>0?Math.min(100,Math.round(s/limBase*100)):0;
     var cc=CCOLORS[cat]||'#9B70F0';
     var barC=cp>90?'#E24B4A':cp>70?'#EF9F27':cc;
-    // Nota: cuanto queda (o cuanto te pasaste). La tarjeta ya dice lo gastado y el
-    // limite, pero la resta era mental. La proyeccion "a fin de mes" se quito por
-    // pedido — ensuciaba la tarjeta.
-    var note='';
-    if(catLim>0&&s>catLim){
-      note='<div class="bdg-pace" style="color:#E24B4A">'+fmtShortUSD(s-catLim)+' over</div>';
-    } else if(catLim>0){
-      note='<div class="bdg-pace bdg-left"><b>'+fmtShortUSD(catLim-s)+'</b> left</div>';
-    }
-    // Layout: input de % (asignacion) arriba a la derecha del label; monto grande
-    // centrado; barra; debajo % usado (izq) y limite derivado (der). Sin delta
-    // mes-a-mes (ya vive en la card Mes vs mes).
+    // Titular = lo que QUEDA (o lo que te pasaste), no lo gastado: es la pregunta
+    // que le haces a la tarjeta. Lo gastado y el limite bajan al pie. Sin limite
+    // no hay "queda", asi que ahi el titular vuelve a ser lo gastado.
+    var hero=fmtUSD(s), heroLbl='', heroCls='';
+    if(catLim>0&&s>catLim){ hero=fmtUSD(s-catLim); heroLbl='over'; heroCls=' is-ovr'; }
+    else if(catLim>0){ hero=fmtUSD(catLim-s); heroLbl='left'; }
+    // Layout: nombre + input de % (asignacion) en la primera fila; titular grande
+    // a la izquierda con su etiqueta (left/over) al ras derecho; barra; y al pie,
+    // centrado, gastado of limite. Sin delta mes-a-mes (vive en la card Mes vs mes).
     html+='<div class="bdg-cat">'
       // El nombre va en su propio span: text-overflow:ellipsis no aplica al texto
       // suelto dentro de un contenedor flex, y en mobile "Discretionary" se cortaba
@@ -2848,10 +2845,9 @@ function renderBudget(){
         // mes vs todos los meses) y eso merece leerse de un vistazo.
         +'<span class="bdg-lim-wrap'+(ci.ovr?' is-ovr':'')+'" data-cat="'+escHtml(cat)+'"'+(ci.ovr?' title="'+mShort+' only — overrides the default %"':'')+' onclick="bdgPctFocus(this)"><input type="number" class="bdg-lim-inp" value="'+(ci.pct>0?ci.pct:'')+'" placeholder="—" step="0.5" min="0" inputmode="decimal" onblur="bdgPctCommit(this,\''+cat+'\')" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=this.defaultValue;this.blur();}">%</span>'
       +'</div>'
-      +'<div class="bdg-cat-amt">'+fmtUSD(s)+'</div>'
+      +'<div class="bdg-cat-hero'+heroCls+'"><span class="bdg-cat-amt">'+hero+'</span>'+(heroLbl?'<span class="bdg-cat-lbl">'+heroLbl+'</span>':'')+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-sub"><span>'+cp+'%</span><span>'+(catLim>0?'of '+fmtUSD(catLim):'$0 planned')+'</span></div>'
-      +note
+      +'<div class="bdg-cat-sub">'+(catLim>0?fmtUSD(s)+' of '+fmtUSD(catLim):'$0 planned')+'</div>'
       +'</div>';
   });
   html+='</div>';
