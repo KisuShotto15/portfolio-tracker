@@ -328,6 +328,28 @@ await ev('history.back()');
 await waitFor(async () => (await ev(ACTIVA)) !== 'page-history', 5000, 100, 'back saca de History').catch((e) => console.warn(`  ! ${e.message}`));
 check('back vuelve a Summary (no sale de la app)', (await ev(ACTIVA)) === 'page-summary', String(await ev(ACTIVA)));
 
+// ── escenario 7: la ayuda de categoria dice la verdad ──────────────────────
+// El hint se DERIVA de EXPENSE_CATS_DASH / NEUTRAL_CATS / isExtFlow, asi que este
+// test es la red que evita que quede mintiendo si alguien mueve una categoria de
+// grupo (una lista hardcodeada en el hint no fallaria ningun test).
+console.log('E2E hint de categoria');
+await boot();
+await ev('openTxForm()'); await sleep(300);
+const HINT = "(document.getElementById('cat-hint')||{}).textContent||''";
+const setCat = async (c) => { await ev(`document.getElementById('tx-cat').value=${JSON.stringify(c)};updateCatHint()`); return await ev(HINT); };
+
+check('sin categoria no hay hint', (await setCat('')) === '');
+check('Groceries = Gasto', (await setCat('Groceries')).startsWith('Gasto'), await ev(HINT));
+check('Support = Gasto', (await setCat('Support')).startsWith('Gasto'), await ev(HINT));
+check('Savings = Neutra', (await setCat('Savings')).startsWith('Neutra'), await ev(HINT));
+check('Transfer = Flujo externo', (await setCat('Transfer')).startsWith('Flujo externo'), await ev(HINT));
+check('Investments = Flujo externo', (await setCat('Investments')).startsWith('Flujo externo'), await ev(HINT));
+check('Income = Income', (await setCat('Income')).startsWith('Income'), await ev(HINT));
+// Y que se actualice solo cuando el form se puebla por codigo, no solo al tocarlo.
+await ev('closeTxForm()'); await sleep(300);
+await ev('openTxForm()'); await sleep(300);
+check('al abrir el form vuelve a vacio', (await ev(HINT)) === '');
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

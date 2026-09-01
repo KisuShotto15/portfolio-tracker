@@ -588,9 +588,10 @@
   </div>
   <div class="field-row">
     <div class="field"><span class="field-lbl">In / Out</span><select id="tx-type" tabindex="3"><option value="Debit">Debit</option><option value="Credit">Credit</option></select></div>
-    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select></div>
+    <div class="field"><span class="field-lbl">Category</span><select id="tx-cat" tabindex="4" onchange="updateCatHint()"><option value="">—</option><option>Income</option><option>Home</option><option>Groceries</option><option>Transport</option><option>Health</option><option>Business</option><option>Discretionary</option><option>Eating Out</option><option>Support</option><option>Investments</option><option>Savings</option><option>Transfer</option></select></div>
     <div class="field"><span class="field-lbl">Currency</span><select id="tx-cur" tabindex="5" onchange="toggleVesHint()"><option value="USD">USDT</option><option value="VES">VES</option></select></div>
     <div class="field"><span class="field-lbl">Amount</span><span class="sum-wrap"><input type="text" inputmode="decimal" id="tx-amount" placeholder="0.00" tabindex="6" autocomplete="off" oninput="updateVesPreview()" onkeydown="if(event.key==='Enter')addTxOrUpdate()"/><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,'tx-amount')">+</span></span></div>
+    <div class="cat-hint" id="cat-hint"></div>
   </div>
   <div class="tx-rec-row" id="tx-rec-row">
     <label class="tx-rec-check"><input type="checkbox" id="tx-recurring" onchange="toggleTxRecurring()"/><span>Recurrente</span></label>

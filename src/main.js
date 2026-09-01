@@ -866,6 +866,26 @@ window.removeManualHolding=function(id){
   S.manualHoldingsUpdatedAt=stamp(); save(); renderManualHoldings(); renderWalletHoldings();
 };
 
+// Ayuda contextual bajo el selector de categoria: que le hace ESA categoria a tus
+// numeros. Las reglas ya existian (EXPENSE_CATS_DASH / NEUTRAL_CATS / isExtFlow en
+// finance-core.js) pero solo como comentario del codigo, asi que habia que
+// acordarselas de memoria al anotar. Se derivan de esos mismos arrays a proposito:
+// una lista hardcodeada aca mentiria en silencio el dia que se mueva una categoria.
+function catHintFor(cat){
+  if(!cat) return '';
+  if(cat==='Income') return '<b>Income</b> · entra plata nueva. Es la unica que suma al income del mes.';
+  if(EXPENSE_CATS_DASH.indexOf(cat)>=0) return '<b>Gasto</b> · baja tu patrimonio y cuenta en el budget del mes.';
+  if(NEUTRAL_CATS.indexOf(cat)>=0) return '<b>Neutra</b> · no toca budget ni P&L. Plata que cambia de wallet entre cuentas que la app ya ve.';
+  if(isExtFlow(cat)) return '<b>Flujo externo</b> · no cuenta como gasto y se netea del P&L. Plata que sale o entra de lo rastreado.';
+  return '';
+}
+function updateCatHint(){
+  var el=document.getElementById('cat-hint'); if(!el) return;
+  var sel=document.getElementById('tx-cat');
+  el.innerHTML=sel?catHintFor(sel.value):'';
+}
+window.updateCatHint=updateCatHint;
+
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
 
 function autofillFromNote(){
@@ -880,7 +900,7 @@ function autofillFromNote(){
     if(!matched) continue;
     // Apply only fields defined in the rule
     if(rule.type)     document.getElementById('tx-type').value=rule.type;
-    if(rule.category) document.getElementById('tx-cat').value=rule.category;
+    if(rule.category){ document.getElementById('tx-cat').value=rule.category; updateCatHint(); }
     if(rule.currency){ document.getElementById('tx-cur').value=rule.currency; toggleVesHint(); }
     if(rule.wallet){
       var ws=document.getElementById('tx-wallet');
@@ -1029,7 +1049,7 @@ function editTx(id){
   document.getElementById('tx-desc').value=t.desc;
   document.getElementById('tx-wallet').value=t.wallet||'';
   document.getElementById('tx-type').value=t.type;
-  document.getElementById('tx-cat').value=t.category;
+  document.getElementById('tx-cat').value=t.category; updateCatHint();
   document.getElementById('tx-cur').value=t.originalCurrency||'USD';
   document.getElementById('tx-amount').value=t.originalCurrency==='VES'&&t.amountVES?t.amountVES:t.amountUSD;
   pendingReceiptUrl=t.receiptUrl||null; renderReceiptPreview();
@@ -1209,7 +1229,7 @@ function _resetTxFields(){
   document.getElementById('tx-desc').value='';
   setDefaultWallet();
   document.getElementById('tx-type').value='Debit';
-  document.getElementById('tx-cat').value='';
+  document.getElementById('tx-cat').value=''; updateCatHint();
   document.getElementById('tx-amount').value='';
   document.getElementById('tx-cur').value='USD';
   removeReceipt();
@@ -2086,7 +2106,7 @@ window.editRecurringRule=function(id){
   // mejor que el usuario lo vea y elija, a que se guarde uno inventado.
   document.getElementById('tx-wallet').value=r.wallet||'';
   document.getElementById('tx-type').value=r.type||'Debit';
-  document.getElementById('tx-cat').value=r.category||'';
+  document.getElementById('tx-cat').value=r.category||''; updateCatHint();
   document.getElementById('tx-cur').value=r.currency||'USD';
   document.getElementById('tx-amount').value=r.amount||'';
   document.getElementById('tx-rec-day').value=r.dayOfMonth||'';

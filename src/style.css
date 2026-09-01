@@ -1037,6 +1037,12 @@ input::placeholder{color:var(--txt3)}
 .tx-form-panel .field-row .field[style*="span 2"]{grid-column:span 2}
 /* Minimalist form: lighter labels, calmer inputs, prominent amount */
 .tx-form-panel .field{gap:5px}
+/* Ayuda de la categoria: ocupa la fila entera de la grilla (4 col en desktop, 2 en
+   mobile) para caer justo debajo del selector sin romper el layout. :empty la
+   colapsa cuando no hay categoria elegida, si no el gap dejaba un hueco. */
+.cat-hint{grid-column:1/-1;font-size:11px;line-height:1.45;color:var(--txt3);margin-top:-4px}
+.cat-hint:empty{display:none}
+.cat-hint b{color:var(--txt2);font-weight:600}
 .tx-form-panel .field-lbl{font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--txt3)}
 .tx-form-panel input,.tx-form-panel select{font-size:15px;padding:9px 13px;border-radius:10px;background:rgba(255,255,255,.03);height:42px;box-sizing:border-box;min-width:0;width:100%}
 .tx-form-panel #tx-amount{font-size:19px;font-weight:600;font-family:var(--font-num)}
