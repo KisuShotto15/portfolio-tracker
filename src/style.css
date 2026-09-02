@@ -562,10 +562,20 @@ input,select,textarea,button{font-family:inherit}
    el ns-resize que anuncia que la pastilla se ajusta con la rueda. */
 .bdg-lim-inp{cursor:ns-resize}
 .bdg-lim-inp::placeholder{color:var(--txt3)}
-.bdg-alloc-chip{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-family:var(--font-num);font-weight:600;color:var(--ac);margin-left:auto;margin-right:12px;white-space:nowrap}
-.bdg-alloc-mini{width:64px;height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;display:inline-block}
-.bdg-alloc-mini > i{display:block;height:100%;background:var(--ac);border-radius:3px;transition:width .2s}
-@media(max-width:720px){.bdg-cat-head{flex-wrap:wrap}.bdg-alloc-chip{margin-left:0;order:3;flex-basis:100%;margin-top:6px}}
+/* Cabecera de Categories: titulo + % en la misma linea y los chips al extremo
+   derecho. Antes .bdg-cat-head no tenia regla propia, asi que sus cuatro hijos
+   eran bloques que se apilaban uno por linea. */
+.bdg-cat-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:9px}
+.bdg-alloc{font-family:var(--font-num);font-size:12px;font-weight:600;color:var(--ac);white-space:nowrap}
+.bdg-alloc b,.bdg-alloc i{font-weight:inherit;font-style:normal}
+.bdg-acts{display:flex;gap:6px;align-items:center;margin-left:auto}
+/* El medidor deja de ser una pastilla y pasa a ser la regla que separa la
+   cabecera de las cards: a 100% se lee de punta a punta. */
+.bdg-alloc-rule{height:3px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-bottom:18px}
+.bdg-alloc-rule > i{display:block;height:100%;background:var(--ac);border-radius:3px;transition:width .2s}
+/* En mobile el detalle ("· 20% short") se calla: ese ancho lo necesitan los
+   chips. En web sobra espacio y la info vale, asi que ahi se queda. */
+@media(max-width:720px){.bdg-alloc i{display:none}}
 .bdg-scope{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 /* Fila desplegable para elegir que categorias arrastran su sobrante */
 .bdg-roll-row{display:flex;flex-direction:column;gap:9px;margin:10px 0 20px}
@@ -574,7 +584,7 @@ input,select,textarea,button{font-family:inherit}
    parte del limite mismo. */
 .bdg-carry{display:block;margin-top:3px;font-size:10.5px;color:var(--green)}
 .bdg-carry.is-neg{color:#E24B4A}
-.bdg-scope-btn{font-size:11px;padding:3px 11px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s}
+.bdg-scope-btn{font-size:10.5px;padding:3px 10px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s}
 .bdg-scope-btn.on{border-color:var(--accent);color:#fff;background:rgba(155,112,240,0.14)}
 .bdg-scope-btn.reset{color:#E24B4A}
 /* Todas/Ninguna manda sobre el resto de la fila: se separa con un divisor para

@@ -3030,29 +3030,33 @@ function renderBudget(){
   var sumPctHead=BUDGET_CATS.reduce(function(s,c){ return s+catBudgetPct(c,month); },0);
   var allocDiff=Math.round((100-sumPctHead)*10)/10;
   var allocCol=Math.abs(allocDiff)<0.5?'#1D9E75':allocDiff>0?'#EF9F27':'#E24B4A';
-  var allocTxt=Math.abs(allocDiff)<0.5?sumPctHead.toFixed(1)+'% ✓'
-    :allocDiff>0?sumPctHead.toFixed(1)+'% · '+allocDiff+'% short'
-    :sumPctHead.toFixed(1)+'% · '+Math.abs(allocDiff)+'% over';
+  // El % va pegado al titulo y el detalle ("· 20% short") aparte, porque en mobile
+  // ese detalle se oculta por CSS: ahi el ancho lo necesitan los botones.
+  var ok=Math.abs(allocDiff)<0.5;
+  var allocPct=sumPctHead.toFixed(1)+'%'+(ok?' ✓':'');
+  var allocDet=ok?'':' · '+Math.abs(allocDiff)+'% '+(allocDiff>0?'short':'over');
   var rollN=BUDGET_CATS.filter(function(c){ return rollOn(c,month); }).length;
-  html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
-    +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Sum of allocated % (target: 100%)">'
-    +'<i class="bdg-alloc-mini"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></i>'+allocTxt+'</span>'
+  html+='<div class="bdg-cat-head" style="--ac:'+allocCol+'"><span class="cleg" style="margin:0">Categories</span>'
+    +'<span class="bdg-alloc" title="Sum of allocated % (target: 100%)"><b>'+allocPct+'</b><i>'+allocDet+'</i></span>'
+    // Un solo contenedor para TODOS los chips: antes eran dos <span> block-level
+    // y cada boton caia en su propia linea.
+    +'<span class="bdg-acts">'
+    // La fila de scope hoy esta apagada (BUDGET_SCOPE_UI) pero el rollover se ve igual.
+    +'<button class="bdg-scope-btn'+(_rolloverUI?' on':'')+'" title="Arrastrar a '+mShort+' lo que sobro (o falto) el mes anterior. Se elige mes por mes." onclick="window._budRolloverUI()">Rollover '+mShort+' · '+rollN+'/'+BUDGET_CATS.length+'</button>'
     +(BUDGET_SCOPE_UI
-      ?'<span class="bdg-scope">'
-        +'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
+      ?'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
         +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
         +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
         +'<button class="bdg-scope-btn" title="Allocate % from your 3-month average spend" onclick="applyBudgetRec(\'hist\')">3-mo avg</button>'
         +'<button class="bdg-scope-btn" title="50% essentials / 30% lifestyle / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
-        +'</span>'
       // Con la fila oculta sobrevive UN boton, y solo si hay overrides de mes
       // guardados de antes: sin el, ese override seguiria pisando en silencio el
       // % que edites y no quedaria ninguna via para quitarlo.
-      :(hasOvr?'<span class="bdg-scope"><button class="bdg-scope-btn reset" title="Back to the default budget for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button></span>':''))
-    // Fuera del ternario: la fila de scope hoy esta apagada (BUDGET_SCOPE_UI) y el
-    // rollover tiene que verse igual.
-    +'<span class="bdg-scope"><button class="bdg-scope-btn'+(_rolloverUI?' on':'')+'" title="Arrastrar a '+mShort+' lo que sobro (o falto) el mes anterior. Se elige mes por mes." onclick="window._budRolloverUI()">Rollover '+mShort+' · '+rollN+'/'+BUDGET_CATS.length+'</button></span>'
-    +'</div>';
+      :(hasOvr?'<button class="bdg-scope-btn reset" title="Back to the default budget for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button>':''))
+    +'</span></div>'
+    // La barra pasa a ser una regla de ancho completo bajo el titulo: separa la
+    // cabecera de las cards y a 100% se lee de punta a punta.
+    +'<div class="bdg-alloc-rule" style="--ac:'+allocCol+'"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></div>';
   // Elegir a que categorias se les arrastra el sobrante. Se despliega desde el
   // boton para no ocupar una fila permanente por una opcion que se toca una vez.
   if(_rolloverUI){

@@ -187,14 +187,23 @@ check('profitCalc llega a la nube', cloudDoc.profitCalc && cloudDoc.profitCalc.s
 // ── escenario 2: reload de A restaura ───────────────────────────────────────
 console.log('E2E sync — reload de A');
 await boot();
-check('tx visible tras reload', await ev("document.body.textContent.includes('E2E Grocery')||JSON.parse(localStorage.getItem('ft13')||'{}').transactions.some(t=>t.desc==='E2E Grocery')"));
+const aTx = "document.body.textContent.includes('E2E Grocery')||(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(t=>t.desc==='E2E Grocery')";
+await waitFor(async () => await ev(aTx), 5000, 100, 'la tx de A tras el reload').catch((e) => console.warn(`  ! ${e.message}`));
+check('tx visible tras reload', await ev(aTx));
+await waitFor(async () => (await ev("document.getElementById('pc-sell').value")) === '163.5', 5000, 100,
+  'los profit fields tras el reload').catch((e) => console.warn(`  ! ${e.message}`));
 check('profit fields restaurados', (await ev("document.getElementById('pc-sell').value")) === '163.5');
 
 // ── escenario 3: dispositivo B virgen no destruye la nube ───────────────────
 console.log('E2E sync — dispositivo B virgen');
 await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
 await boot();
-check('B ve la tx de A', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').transactions.some(t=>t.desc==='E2E Grocery')"));
+const bTx = "JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]";
+await waitFor(async () => await ev(`(${bTx}).some(t=>t.desc==='E2E Grocery')`), 5000, 100,
+  'B con la tx de A ya persistida').catch((e) => console.warn(`  ! ${e.message}`));
+check('B ve la tx de A', await ev(`(${bTx}).some(t=>t.desc==='E2E Grocery')`));
+await waitFor(async () => (await ev("document.getElementById('pc-sell').value")) === '163.5', 5000, 100,
+  'B con los profit fields ya renderizados').catch((e) => console.warn(`  ! ${e.message}`));
 check('B restaura profit fields', (await ev("document.getElementById('pc-sell').value")) === '163.5');
 try {
   // B no edita nada: solo confirmamos que su boot (pull+push inocuo) no altero la nube.
@@ -522,6 +531,36 @@ const card = async (cat) => await ev(`(function(){var c=[...document.querySelect
 
 // Arranca apagado: el rollover se enciende mes por mes, no viene puesto.
 check('sin encender no hay arrastre', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+
+// Cabecera de Categories: titulo, % y chips en UNA linea; la regla debajo.
+const head = async () => await ev(`(function(){
+  var h=document.querySelector('#page-budget .bdg-cat-head'); if(!h) return '{}';
+  var r=h.getBoundingClientRect(), a=h.querySelector('.bdg-alloc'), acts=h.querySelector('.bdg-acts');
+  var det=a.querySelector('i'), rule=document.querySelector('#page-budget .bdg-alloc-rule');
+  var bs=[].slice.call(acts.querySelectorAll('button'));
+  return JSON.stringify({h:Math.round(r.height),
+    btnLines:new Set(bs.map(function(b){return Math.round(b.getBoundingClientRect().top)})).size,
+    nbtn:bs.length,
+    actsRight:Math.round(r.right-acts.getBoundingClientRect().right),
+    det:getComputedStyle(det).display, ruleW:Math.round(rule.getBoundingClientRect().width),
+    txt:(a.innerText||'').trim()});
+})()`);
+if (process.env.SHOT4) { await ev("var _m=document.getElementById('month-close');_m&&_m.remove();window.scrollTo(0,document.querySelector('#page-budget .bdg-cat-head').offsetTop-150)"); await send('Emulation.setDeviceMetricsOverride',{width:412,height:900,deviceScaleFactor:2,mobile:true}); await sleep(500); const s4=await send('Page.captureScreenshot',{format:'png'}); (await import('node:fs')).writeFileSync(process.env.SHOT4, Buffer.from(s4.result.data,'base64')); await send('Emulation.clearDeviceMetricsOverride'); await sleep(300); }
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
+await sleep(500);
+const HM = JSON.parse(await head());
+check('mobile: titulo, % y chips en una sola linea', HM.h <= 34, JSON.stringify(HM));
+check('mobile: los chips no se apilan', HM.nbtn >= 1 && HM.btnLines === 1, JSON.stringify(HM));
+check('mobile: los chips quedan a la derecha', HM.actsRight <= 1, JSON.stringify(HM));
+check('mobile: el detalle del % se calla', HM.det === 'none', JSON.stringify(HM));
+check('mobile: y queda solo el numero', /^[0-9.]+%$/.test(HM.txt), JSON.stringify(HM));
+check('la regla ocupa todo el ancho', HM.ruleW > 300, JSON.stringify(HM));
+await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+await sleep(500);
+const HW = JSON.parse(await head());
+check('web: el detalle del % se muestra', HW.det !== 'none', JSON.stringify(HW));
+check('web: dice cuanto falta por asignar', /short|over|✓/.test(HW.txt), JSON.stringify(HW));
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(400);
 
 await ev("window._budRolloverUI()"); await sleep(300);
 await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
