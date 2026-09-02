@@ -1996,7 +1996,7 @@ window.showMonthClose=function(month){
       +'</div>';
   }
   var ov=document.createElement('div');
-  ov.className='app-modal-overlay open';
+  ov.className='app-modal-overlay mc-ov open';
   ov.id='month-close';
   ov.innerHTML='<div class="app-modal mc-modal">'
     +'<h3>Cierre de '+lbl+'</h3>'

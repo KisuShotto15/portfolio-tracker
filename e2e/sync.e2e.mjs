@@ -576,6 +576,31 @@ check('sin residuo no hay linea de "sin explicar"', !/Sin explicar/.test(mcTxt),
 // Ahorro = 500 - 190 = 310, 62% de los ingresos
 check('muestra el ahorro del mes', /\+\$310/.test(mcTxt) && /62% de tus ingresos/.test(mcTxt), mcTxt.slice(0, 400));
 
+// El modal tiene que caber ENTERO dentro del overlay, franjas del sistema
+// incluidas. En un telefono con viewport-fit=cover la barra de estado y la de
+// gestos se comen alto que 100vh/100dvh igual cuentan, y el titulo y el boton
+// Listo terminaban debajo del sistema, sin forma de cerrar el modal. Aca se
+// simulan esas franjas como padding del overlay.
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 640, deviceScaleFactor: 2, mobile: true });
+await sleep(400);
+const safeOk = await send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 90, bottom: 40 } })
+  .then((r) => !r.error, () => false);
+if (!safeOk) console.warn('  ! sin Emulation.setSafeAreaInsetsOverride en este Chrome: el chequeo de franjas no prueba nada');
+await sleep(300);
+const fit = await ev(`(function(){
+  var o=document.getElementById('month-close');
+  var m=o.querySelector('.mc-modal'), b=o.querySelector('.mc-body');
+  var r=m.getBoundingClientRect();
+  return JSON.stringify({top:Math.round(r.top),bot:Math.round(r.bottom),vh:innerHeight,
+    ok:!!document.getElementById('_mcok'),scroll:b.scrollHeight>b.clientHeight+1});
+})()`);
+const F = JSON.parse(fit);
+check('el modal no se mete bajo la barra de estado', F.top >= 89, fit);
+check('ni bajo la barra de gestos', F.bot <= F.vh - 39, fit);
+check('el cuerpo scrollea cuando no entra', F.scroll, fit);
+if (safeOk) await send('Emulation.setSafeAreaInsetsOverride', { insets: {} }).catch(() => {});
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
+
 await ev("document.getElementById('_mcok').click()"); await sleep(300);
 check('al cerrarlo desaparece', !(await ev("!!document.getElementById('month-close')")));
 check('queda marcado como visto', await ev(`JSON.parse(localStorage.getItem('ft13')||'{}').lastCloseSeen==='${mesAntR}'`));

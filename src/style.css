@@ -1583,7 +1583,13 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 @media(prefers-reduced-motion:reduce){.kb-hint{transition:none}}
 
 /* ── Cierre de mes ─────────────────────────────────────────────────────── */
-.mc-modal{max-width:520px;display:flex;flex-direction:column;max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px)}
+/* La altura la manda el overlay, no 100vh/100dvh: la app corre con
+   viewport-fit=cover, asi que esas unidades incluyen lo que tapan la barra de
+   estado y la de gestos — el titulo y el boton Listo quedaban DEBAJO del sistema,
+   fuera de alcance. El overlay es position:fixed con inset:0 (= viewport visible
+   exacto) y su padding con env() reserva las dos franjas. */
+.mc-ov{padding:max(12px,env(safe-area-inset-top)) 0 max(12px,env(safe-area-inset-bottom))}
+.mc-modal{max-width:520px;display:flex;flex-direction:column;max-height:100%}
 /* El cuerpo scrollea solo: en mobile el resumen es mas alto que la pantalla y sin
    esto el boton Listo quedaba fuera de vista y el modal no se podia cerrar. */
 .mc-modal>h3,.mc-modal>.modal-actions{flex-shrink:0}
