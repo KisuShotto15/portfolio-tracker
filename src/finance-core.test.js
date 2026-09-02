@@ -4,7 +4,7 @@ import {
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
-  rollOnCore, migrateRolloverCore,
+  rollOnCore, migrateRolloverCore, histAllocPctCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -443,5 +443,36 @@ describe('rollover por mes', () => {
   it('es idempotente sobre la forma nueva', () => {
     const cur = { '2026-07': { Home: true } };
     expect(migrateRolloverCore(cur, ['Home', 'Groceries'], '2026-09')).toBe(cur);
+  });
+});
+
+describe('plan automatico de un mes nuevo', () => {
+  it('reparte el % segun el gasto promedio real', () => {
+    expect(histAllocPctCore({ Home: 200, Groceries: 300 }, 1000))
+      .toEqual({ Home: 20, Groceries: 30 });
+  });
+
+  it('ignora las categorias sin gasto', () => {
+    expect(histAllocPctCore({ Home: 200, Health: 0, Business: undefined }, 1000))
+      .toEqual({ Home: 20 });
+  });
+
+  it('sin historial no inventa un plan', () => {
+    expect(histAllocPctCore({ Home: 0, Groceries: 0 }, 1000)).toBe(null);
+    expect(histAllocPctCore({}, 1000)).toBe(null);
+    expect(histAllocPctCore(undefined, 1000)).toBe(null);
+  });
+
+  it('sin total mensual tampoco', () => {
+    expect(histAllocPctCore({ Home: 200 }, 0)).toBe(null);
+    expect(histAllocPctCore({ Home: 200 }, undefined)).toBe(null);
+  });
+
+  it('redondea a un decimal', () => {
+    expect(histAllocPctCore({ Home: 123.45 }, 1000)).toEqual({ Home: 12.3 });
+  });
+
+  it('gastar mas que el total pasa de 100% (el medidor lo avisa)', () => {
+    expect(histAllocPctCore({ Home: 1200 }, 1000)).toEqual({ Home: 120 });
   });
 });

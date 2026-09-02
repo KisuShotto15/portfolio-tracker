@@ -3,7 +3,7 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, m
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
-  rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore,
+  rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -2898,10 +2898,11 @@ window.saveCategoryPct=function(cat,val){
   }
   save(); renderBudget(); bdgRestoreFocus(cat);
 };
-// Promedio de gasto por categoria en los 3 meses previos completos (meses sin
-// gasto no bajan el promedio).
-function _budHistAvg(){
-  var now=new Date(), months=[];
+// Promedio de gasto por categoria en los 3 meses previos a `anchor` (meses sin
+// gasto no bajan el promedio). Anclado al mes que se esta mirando y no a hoy:
+// si no, el plan de un mes cambiaria segun cuando lo abras.
+function _budHistAvg(anchor){
+  var now=anchor?new Date(anchor+'-01T00:00:00'):new Date(), months=[];
   for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
   var avg={};
   BUDGET_CATS.forEach(function(c){
@@ -2914,10 +2915,9 @@ function _budHistAvg(){
 // esenciales / 30% estilo de vida / 10% business (10% libre como colchon),
 // repartido dentro de cada grupo proporcional al historial (equitativo sin datos).
 window.applyBudgetRec=function(kind){
-  var avg=_budHistAvg(), pcts={};
+  var avg=_budHistAvg(_budMonth), pcts={};
   if(kind==='hist'){
-    var tot=budgetTotalFor(_budMonth)||0; if(tot<=0) return;
-    BUDGET_CATS.forEach(function(c){ if(avg[c]>0) pcts[c]=parseFloat((avg[c]/tot*100).toFixed(1)); });
+    pcts=histAllocPctCore(avg,budgetTotalFor(_budMonth))||{};
   } else {
     [[GROUP_ESSENTIAL,50],[GROUP_LIFESTYLE,30],[GROUP_BUSINESS,10]].forEach(function(g){
       var cats=g[0], share=g[1];
@@ -2951,11 +2951,29 @@ function budgetMonths(){
     .forEach(function(m){ if(!seen[m]){ seen[m]=1; out.push(m); } });
   return out.sort().reverse();
 }
+// Un mes sin plan propio se reparte solo, segun tu gasto real de los 3 meses
+// anteriores. Antes caia al % global — que ya no lo escribe nadie desde la UI —
+// asi que cada mes nuevo arrancaba practicamente vacio.
+// Solo el mes en curso y los siguientes: un mes ya cerrado sin plan se quedo sin
+// plan, y rellenarlo despues falsearia su cierre. Corre una sola vez por mes: al
+// escribirlo el mes pasa a tener overrides propios y el guard de arriba lo saltea.
+function seedMonthPlan(month){
+  if(!month||month<monthKey(new Date())) return;
+  var o=(S.categoryBudgetPctsByMonth||{})[month];
+  if(o&&Object.keys(o).length) return;
+  var pcts=histAllocPctCore(_budHistAvg(month),budgetTotalFor(month));
+  if(!pcts) return;
+  if(!S.categoryBudgetPctsByMonth) S.categoryBudgetPctsByMonth={};
+  S.categoryBudgetPctsByMonth[month]=pcts;
+  S.categoryBudgetPctsByMonthUpdatedAt=stamp();
+  save();
+}
 function renderBudget(){
   var months=budgetMonths();
   // Default: el mes en curso, no months[0] (que ahora es el mes SIGUIENTE).
   var curKey=monthKey(new Date());
   if(!_budMonth||months.indexOf(_budMonth)<0) _budMonth=months.indexOf(curKey)>=0?curKey:(months[0]||'');
+  seedMonthPlan(_budMonth);
   var month=_budMonth;
   var budTotal=budgetTotalFor(month);
   var income=monthIncome(month);

@@ -220,6 +220,21 @@ export function migrateRolloverCore(cur, cats, month) {
   return out;
 }
 
+// Reparte el presupuesto de un mes segun el gasto promedio real por categoria.
+// null cuando no hay con que: sin historial (o sin total) no hay recomendacion
+// que dar, y es preferible dejar el mes en blanco a inventarle un plan.
+export function histAllocPctCore(avgByCat, total) {
+  if (!(total > 0)) return null;
+  var out = {}, any = false;
+  Object.keys(avgByCat || {}).forEach(function (c) {
+    var v = avgByCat[c];
+    if (!(v > 0)) return;
+    var p = parseFloat((v / total * 100).toFixed(1));
+    if (p > 0) { out[c] = p; any = true; }
+  });
+  return any ? out : null;
+}
+
 export function catLimitWithCarryCore(baseLimit, carry, on) {
   if (!on || !(baseLimit > 0)) return parseFloat((baseLimit || 0).toFixed(2));
   return parseFloat(Math.max(0, baseLimit + carry).toFixed(2));

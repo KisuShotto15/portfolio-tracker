@@ -510,7 +510,7 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   { manualWallets: [], rolloverCats: {}, rolloverCatsUpdatedAt: Date.now(),
     budgetTotal: 1000, budgetTotalUpdatedAt: Date.now(), budgetTotalByMonth: {},
     categoryBudgetPcts: { Groceries: 10, Transport: 10 }, categoryBudgetPctsUpdatedAt: Date.now(),
-    categoryBudgetPctsByMonth: {},
+    categoryBudgetPctsByMonth: { '${mesActR}': { Groceries: 10, Transport: 10 } },
     transactions: [
       { id: 901, createdAt: 901, seq: 0, date: '${dAntR}', desc: 'prev groceries', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 60, originalCurrency: 'USD', imported: false, updatedAt: 901 },
       { id: 902, createdAt: 902, seq: 1, date: '${dAntR}', desc: 'prev transport', wallet: '', type: 'Debit', category: 'Transport', amountUSD: 130, originalCurrency: 'USD', imported: false, updatedAt: 902 },
@@ -699,7 +699,52 @@ if (process.env.SHOT2) {
   console.log('  · captura en ' + process.env.SHOT2);
 }
 
-// ── 14 · sello de build ─────────────────────────────────────────────────────
+// ── 14 · plan automatico de un mes nuevo ────────────────────────────────────
+// Un mes sin plan propio se reparte segun el gasto real de los 3 meses previos.
+console.log('E2E plan automatico');
+cloudDoc = {};
+const hoyP = new Date();
+const mesActP = `${hoyP.getFullYear()}-${String(hoyP.getMonth() + 1).padStart(2, '0')}`;
+const mesP = (n) => { const d = new Date(hoyP.getFullYear(), hoyP.getMonth() - n, 15);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`; };
+const cerradoP = mesP(1).slice(0, 7);
+// 3 meses previos: Groceries 300/mes y Home 100/mes sobre un total de 1000
+// => 30% y 10%. Health no tiene gasto: no entra en el reparto.
+const txP = [];
+[1, 2, 3].forEach((n, i) => {
+  txP.push(`{ id: ${700 + i * 2}, createdAt: ${700 + i * 2}, seq: ${i * 2}, date: '${mesP(n)}', desc: 'g', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 300, originalCurrency: 'USD', imported: false, updatedAt: ${700 + i * 2} }`);
+  txP.push(`{ id: ${701 + i * 2}, createdAt: ${701 + i * 2}, seq: ${i * 2 + 1}, date: '${mesP(n)}', desc: 'h', wallet: '', type: 'Debit', category: 'Home', amountUSD: 100, originalCurrency: 'USD', imported: false, updatedAt: ${701 + i * 2} }`);
+});
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { manualWallets: [], snapshots: [], rolloverCats: {}, rolloverCatsUpdatedAt: Date.now(),
+    budgetTotal: 1000, budgetTotalUpdatedAt: Date.now(), budgetTotalByMonth: {},
+    categoryBudgetPcts: {}, categoryBudgetPctsUpdatedAt: Date.now(),
+    categoryBudgetPctsByMonth: {}, categoryBudgetPctsByMonthUpdatedAt: Date.now(),
+    lastCloseSeen: '${cerradoP}', lastCloseSeenUpdatedAt: Date.now(),
+    transactions: [${txP.join(',')}],
+    transactionsUpdatedAt: Date.now(), deletedTxIds: [] })))`);
+await boot();
+await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesActP}')`); await sleep(600);
+const planP = async () => JSON.parse(await ev(
+  "JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').categoryBudgetPctsByMonth)||{})"));
+const P1 = await planP();
+check('el mes en curso se reparte solo', !!P1[mesActP], JSON.stringify(P1));
+check('Groceries toma su promedio real: 30%', (P1[mesActP] || {}).Groceries === 30, JSON.stringify(P1[mesActP]));
+check('Home el suyo: 10%', (P1[mesActP] || {}).Home === 10, JSON.stringify(P1[mesActP]));
+check('una categoria sin gasto no entra', !('Health' in (P1[mesActP] || {})), JSON.stringify(P1[mesActP]));
+check('los meses cerrados no se rellenan', !P1[cerradoP], JSON.stringify(P1));
+const cardP = await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent==='Groceries'})[0];return c?(c.querySelector('.bdg-cat-sub')||{}).textContent||'':'sin card';})()`);
+check('y la card ya muestra el limite', cardP.includes('$300.00'), cardP);
+// Editar una categoria no puede re-disparar el reparto sobre las demas.
+await ev("saveCategoryPct('Groceries','25')"); await sleep(400);
+const P2 = await planP();
+check('editar un % no re-reparte el resto', P2[mesActP].Groceries === 25 && P2[mesActP].Home === 10, JSON.stringify(P2[mesActP]));
+await boot(); await ev(`showPage('budget')`); await sleep(500);
+const P3 = await planP();
+check('y el reparto no se rehace en el proximo arranque', P3[mesActP].Groceries === 25, JSON.stringify(P3[mesActP]));
+
+// ── 15 · sello de build ─────────────────────────────────────────────────────
 // Sin esto no hay forma de saber, mirando el telefono, si un deploy llego: el
 // numero de Settings tiene que ser el mismo que el que sello el service worker.
 console.log('E2E sello de build');
