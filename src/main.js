@@ -1939,7 +1939,7 @@ window.showMonthClose=function(month){
     return '<div class="mc-row"><span class="mc-cat"><i class="bdg-dot" style="background:'+(CCOLORS[c]||'#9B70F0')+'"></i>'+c+'</span>'
       +'<span class="mc-num">'+fmtUSD(d.spent[c])+'</span>'
       +'<span class="mc-num mc-dim">'+(d.lim[c]>0?fmtUSD(d.lim[c]):'—')+'</span>'
-      +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?(diff>=0?'+':'')+fmtShortUSD(diff):'—')+'</span></div>';
+      +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?(diff>=0?'+':'-')+fmtShortUSD(Math.abs(diff)):'—')+'</span></div>';
   }).join('');
   var stat=function(l,v,c){ return '<div class="mc-stat"><span class="mc-stat-l">'+l+'</span><span class="mc-stat-v"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
   var totDiff=parseFloat((d.totLim-d.totSpent).toFixed(2));
@@ -4161,6 +4161,12 @@ async function bootAfterAuth(firstLogin){
   if(firstLogin){ _dirty=true; pushToCloud(); }
   runMigrations();
   try{ maybeShowMonthClose(); }catch(e){ console.error('month close:',e); }
+  // Marca observable de "el arranque post-pull ya corrio". El e2e esperaba a que
+  // subiera pullCount, pero ese contador lo incrementa el SERVIDOR al responder el
+  // GET: entre eso y este punto todavia faltan las migraciones, el cierre de mes y
+  // el primer render, asi que un chequeo inmediato despues de boot() podia leer un
+  // DOM viejo. Una linea aca es mas barata que un sleep adivinado en cada test.
+  window.__bootDone=(window.__bootDone||0)+1;
   var hash=(window.location.hash||'').replace('#','');
   // La tab del hash ya se activo en init() (antes del pull). Re-navegarla aqui
   // re-disparaba la animacion de entrada (doble render visible al recargar);

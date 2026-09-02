@@ -123,11 +123,13 @@ await send('Page.enable');
 await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*supabase.co/auth/*' }] });
 
 const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value;
-// Condicion real de "la app ya arranco": el script principal corrio (openTxForm
-// existe, el bundle de vite no deja S como global) Y bootAfterAuth ya hizo su
-// pull inicial contra /api/sync (pullCount subio). Reemplaza el sleep(2500) fijo
-// que seguia a cada Page.navigate.
-const APP_LOADED_EXPR = "typeof window.openTxForm==='function'";
+// Condicion real de "la app ya arranco": bootAfterAuth llego al final (marca
+// __bootDone, que se pone DESPUES de las migraciones y del cierre de mes).
+// Antes se esperaba a que subiera pullCount, pero ese contador lo incrementa este
+// mock al responder el GET — o sea, antes de que la app termine de procesarlo — y
+// un chequeo inmediato tras boot() podia leer el DOM anterior. Reemplaza tambien
+// el sleep(2500) fijo que seguia a cada Page.navigate.
+const APP_LOADED_EXPR = "typeof window.openTxForm==='function' && (window.__bootDone||0)>0";
 let bootN = 0;
 async function boot() {
   const pullsBefore = pullCount;
@@ -136,7 +138,7 @@ async function boot() {
     await waitFor(
       async () => pullCount > pullsBefore && (await ev(APP_LOADED_EXPR)),
       15000, 150,
-      'app arranco tras navigate (bundle cargado + pull inicial a /api/sync)',
+      'app arranco tras navigate (pull inicial + bootAfterAuth completo)',
     );
   } catch (e) {
     console.warn(`  ! ${e.message}`);
