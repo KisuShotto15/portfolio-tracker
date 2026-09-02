@@ -1593,3 +1593,4 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
   .mc-head,.mc-row{grid-template-columns:1fr 62px 62px 56px}
   .mc-num{font-size:11.5px}
 }
+.bdg-close-row{display:flex;justify-content:center;margin:26px 0 8px}

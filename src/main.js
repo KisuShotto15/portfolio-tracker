@@ -2920,7 +2920,6 @@ function renderBudget(){
     +'<select onchange="window._budMonthSel(this.value)">'
     +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+fmtMonthLabel(m)+'</option>'; }).join('')
     +'</select>'
-    +'<button class="bdg-scope-btn" title="Resumen del mes seleccionado" onclick="showMonthClose(\''+month+'\')">Cierre</button>'
     +'</div>';
 
   // Top band — hero + donut
@@ -3081,6 +3080,11 @@ function renderBudget(){
       +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num mvm-pre">'+fmtUSD(t2)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(t1)+'</span><span class="mvm-num">'+fmtUSD(t0)+'</span><span class="mvm-num mvm-delta" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
       +'</div>';
   })();
+
+  // Al pie de la pagina: el resumen del mes se abre solo cuando cambia el mes, y
+  // este es el modo de volver a verlo (o de mirar otro mes). Va ultimo porque es
+  // un cierre, no un control del budget que estas editando arriba.
+  html+='<div class="bdg-close-row"><button class="btn btns" onclick="showMonthClose(\''+month+'\')">Ver cierre de '+fmtMonthLabel(month)+'</button></div>';
 
   // (la config del Monthly Total vive en el hero: 'of $X' tap-to-edit)
 
