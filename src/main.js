@@ -3800,6 +3800,17 @@ function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ _sl
 
 var _pageInTimer=null;
 var _historyCameFrom=null;
+// Atajos del manifest (mantener presionado el icono de la PWA en Android). No son
+// paginas: #add cae en Transactions y ademas abre el formulario. Cualquier otro
+// hash sigue siendo el id de la pagina, como siempre.
+var LAUNCH_ACTIONS={add:'transactions'};
+var _launchAction=null;
+// El formulario se abre DESPUES del pull: antes los selects de wallet estan vacios.
+function runLaunchAction(){
+  if(_launchAction!=='add') return;
+  _launchAction=null;
+  try{ openTxForm(); }catch(e){}
+}
 function showPage(id,btn,arg){
   var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
   if(pages.indexOf(id)<0) id='summary';
@@ -4315,7 +4326,20 @@ async function init(){
   // OJO: no tocar el hash de login (#access_token=...) — showPage lo reescribiria
   // antes de que sbConsumeHashSession lo lea.
   var _h0=(location.hash||'').replace('#','');
-  if(_h0&&_h0.indexOf('access_token')<0) showPage(_h0,null);
+  if(_h0&&_h0.indexOf('access_token')<0){
+    if(LAUNCH_ACTIONS[_h0]) _launchAction=_h0;
+    showPage(LAUNCH_ACTIONS[_h0]||_h0,null);
+  }
+  // La PWA ya abierta no siempre re-navega al tocar un atajo: puede limitarse a
+  // cambiar el hash. Solo reacciona a los atajos — todo lo demas lo maneja el
+  // manejador de history que ya existe.
+  window.addEventListener('hashchange',function(){
+    var h=(location.hash||'').replace('#','');
+    if(!LAUNCH_ACTIONS[h]) return;
+    _launchAction=h;
+    showPage(LAUNCH_ACTIONS[h],null);
+    runLaunchAction();
+  });
   var today=localToday();
   document.getElementById('tx-date').value=today;
   populateTxMonth(); // default: All months (value queda '')
@@ -4359,8 +4383,10 @@ async function bootAfterAuth(firstLogin){
   // La tab del hash ya se activo en init() (antes del pull). Re-navegarla aqui
   // re-disparaba la animacion de entrada (doble render visible al recargar);
   // si ya estamos en ella, solo refrescar su contenido con los datos del pull.
-  if(_activePageId()!==(hash||'summary')) showPage(hash||'summary', null);
+  var _lp=LAUNCH_ACTIONS[hash]||hash||'summary';
+  if(_activePageId()!==_lp) showPage(_lp, null);
   else afterPull();
+  runLaunchAction();
   fetchRate(false);
   fetchUsdtRate();
   migrateExchangeWallets(); stripExchangeSecrets();

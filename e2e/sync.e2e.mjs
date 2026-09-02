@@ -814,6 +814,28 @@ const inpFx = await ev(`(function(){var i=[...document.querySelectorAll('.bdg-ca
 check('enfocarlo no dibuja ningun halo', /^none\|0px\|0px$/.test(inpFx), inpFx);
 await sleep(300);
 
+// ── 14c · atajos de la PWA ──────────────────────────────────────────────────
+// El manifest declara accesos directos (mantener presionado el icono en Android).
+// #add no es una pagina: cae en Transactions y abre el formulario.
+console.log('E2E atajos de la PWA');
+const mf = JSON.parse((await import('node:fs')).readFileSync('dist/manifest.json', 'utf8'));
+const scUrls = (mf.shortcuts || []).map((x) => x.url);
+check('el manifest declara atajos', (mf.shortcuts || []).length >= 1, JSON.stringify(scUrls));
+check('uno de ellos anota una transaccion', scUrls.includes('/#add'), JSON.stringify(scUrls));
+check('todos tienen nombre e icono', (mf.shortcuts || []).every((x) => x.name && (x.icons || []).length), JSON.stringify(mf.shortcuts));
+// Con la app ya abierta el sistema puede limitarse a cambiar el hash.
+await ev("showPage('summary',null); if(typeof closeTxForm==='function') closeTxForm()"); await sleep(400);
+await ev("location.hash='#add'"); await sleep(600);
+check('el atajo abre el formulario', await ev("document.getElementById('tx-form-panel').classList.contains('open')"));
+check('y deja la app en Transactions', (await ev("[...document.querySelectorAll('.page')].filter(function(p){return p.classList.contains('active')}).map(function(p){return p.id})[0]")) === 'page-transactions');
+// Arranque en frio: la app se abre directamente en el atajo.
+await ev("closeTxForm()"); await sleep(300);
+await send('Page.navigate', { url: `${URL_BASE}?e2e=sc#add` });
+await waitFor(async () => await ev(APP_LOADED_EXPR), 15000, 150, 'arranque desde el atajo').catch((e) => console.warn(`  ! ${e.message}`));
+await sleep(500);
+check('arrancar desde el atajo tambien lo abre', await ev("document.getElementById('tx-form-panel').classList.contains('open')"));
+check('y el hash queda en la pagina, no en el atajo', (await ev("location.hash")) !== '#add', await ev("location.hash"));
+
 // ── 15 · sello de build ─────────────────────────────────────────────────────
 // Sin esto no hay forma de saber, mirando el telefono, si un deploy llego: el
 // numero de Settings tiene que ser el mismo que el que sello el service worker.

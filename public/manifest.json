@@ -10,7 +10,58 @@
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
-    { "src": "/icon-192.png?v=5", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png?v=5", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/icon-192.png?v=5",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png?v=5",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nueva transaccion",
+      "short_name": "Anotar",
+      "description": "Anotar un gasto o ingreso",
+      "url": "/#add",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=5",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Budget",
+      "short_name": "Budget",
+      "description": "Como vas contra el plan del mes",
+      "url": "/#budget",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=5",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Wallets",
+      "short_name": "Wallets",
+      "description": "Saldos, trackers y deudas",
+      "url": "/#wallets",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=5",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }
