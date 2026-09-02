@@ -561,10 +561,10 @@ await boot();
 await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesActR}')`); await sleep(600);
 
 // limite y nota al pie de una card, por nombre de categoria
-const card = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];if(!c)return 'sin card';return (c.querySelector('.bdg-cat-sub')||{}).textContent||'';})()`);
+const card = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];if(!c)return 'sin card';var i=c.querySelector('.bdg-amt-inp');return ((c.querySelector('.bdg-cat-sub')||{}).textContent||'')+' [base='+(i?i.value:'-')+']';})()`);
 
 // Arranca apagado: el rollover se enciende mes por mes, no viene puesto.
-check('sin encender no hay arrastre', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+check('sin encender no hay arrastre', (await card('Groceries')).includes('base=100'), await card('Groceries'));
 
 // Cabecera de Categories: titulo, % y chips en UNA linea; la regla debajo.
 const head = async () => await ev(`(function(){
@@ -579,7 +579,6 @@ const head = async () => await ev(`(function(){
     det:getComputedStyle(det).display, ruleW:Math.round(rule.getBoundingClientRect().width),
     txt:(a.innerText||'').trim()});
 })()`);
-if (process.env.SHOT4) { await ev("var _m=document.getElementById('month-close');_m&&_m.remove();window.scrollTo(0,document.querySelector('#page-budget .bdg-cat-head').offsetTop-150)"); await send('Emulation.setDeviceMetricsOverride',{width:412,height:900,deviceScaleFactor:2,mobile:true}); await sleep(500); const s4=await send('Page.captureScreenshot',{format:'png'}); (await import('node:fs')).writeFileSync(process.env.SHOT4, Buffer.from(s4.result.data,'base64')); await send('Emulation.clearDeviceMetricsOverride'); await sleep(300); }
 await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
 await sleep(500);
 const HM = JSON.parse(await head());
@@ -599,10 +598,10 @@ await send('Emulation.clearDeviceMetricsOverride'); await sleep(400);
 await ev("window._budRolloverUI()"); await sleep(300);
 await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
 // Groceries: limite 100, gasto previo 60 -> sobran 40 -> 140
-check('Todas enciende de una', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
+check('Todas enciende de una', (await card('Groceries')).includes('· $140.00'), await card('Groceries'));
 check('la card dice de donde sale', /\+\$40.*del mes pasado/.test(await card('Groceries')), await card('Groceries'));
 // Transport: limite 100, gasto previo 130 -> exceso 30 -> 70
-check('lo que te pasaste baja el limite', (await card('Transport')).includes('of $70.00'), await card('Transport'));
+check('lo que te pasaste baja el limite', (await card('Transport')).includes('· $70.00'), await card('Transport'));
 check('el exceso se muestra en negativo', /-\$30.*del mes pasado/.test(await card('Transport')), await card('Transport'));
 
 // El rollover reparte distinto, no crea presupuesto: el total del mes no se mueve.
@@ -615,15 +614,15 @@ check('queda guardado bajo el mes visible', JSON.parse(await rollLS())[mesActR].
 check('el mes anterior sigue apagado', JSON.parse(await rollLS())[mesAntR] === undefined, await rollLS());
 
 await ev(`toggleRolloverCat('Groceries','${mesActR}')`); await sleep(400);
-check('apagar una vuelve al limite asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
-check('y no toca a las demas', (await card('Transport')).includes('of $70.00'), await card('Transport'));
-check('sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('of $70.00'); })(), await card('Transport'));
+check('apagar una vuelve al limite asignado', (await card('Groceries')).includes('base=100')&&!(await card('Groceries')).includes('del mes pasado'), await card('Groceries'));
+check('y no toca a las demas', (await card('Transport')).includes('· $70.00'), await card('Transport'));
+check('sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('· $70.00'); })(), await card('Transport'));
 
 await ev("window._budRolloverUI()"); await sleep(300);
 await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
-check('Todas con una apagada las enciende todas', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
+check('Todas con una apagada las enciende todas', (await card('Groceries')).includes('· $140.00'), await card('Groceries'));
 await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
-check('Ninguna las apaga todas', (await card('Groceries')).includes('of $100.00') && (await card('Transport')).includes('of $100.00'), await card('Transport'));
+check('Ninguna las apaga todas', (await card('Groceries')).includes('base=100') && (await card('Transport')).includes('base=100'), await card('Transport'));
 check('y borra el mes del mapa', JSON.parse(await rollLS())[mesActR] === undefined, await rollLS());
 
 // ── 12 · cierre de mes ────────────────────────────────────────────────────
@@ -768,8 +767,8 @@ check('Groceries toma su promedio real: 30%', (P1[mesActP] || {}).Groceries === 
 check('Home el suyo: 10%', (P1[mesActP] || {}).Home === 10, JSON.stringify(P1[mesActP]));
 check('una categoria sin gasto no entra', !('Health' in (P1[mesActP] || {})), JSON.stringify(P1[mesActP]));
 check('los meses cerrados no se rellenan', !P1[cerradoP], JSON.stringify(P1));
-const cardP = await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent==='Groceries'})[0];return c?(c.querySelector('.bdg-cat-sub')||{}).textContent||'':'sin card';})()`);
-check('y la card ya muestra el limite', cardP.includes('$300.00'), cardP);
+const cardP = await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent==='Groceries'})[0];if(!c)return 'sin card';var i=c.querySelector('.bdg-amt-inp');return 'base='+(i?i.value:'-');})()`);
+check('y la card ya muestra el limite', cardP.includes('base=300'), cardP);
 // Editar una categoria no puede re-disparar el reparto sobre las demas.
 await ev("saveCategoryPct('Groceries','25')"); await sleep(400);
 const P2 = await planP();
@@ -777,6 +776,32 @@ check('editar un % no re-reparte el resto', P2[mesActP].Groceries === 25 && P2[m
 await boot(); await ev(`showPage('budget')`); await sleep(500);
 const P3 = await planP();
 check('y el reparto no se rehace en el proximo arranque', P3[mesActP].Groceries === 25, JSON.stringify(P3[mesActP]));
+
+// ── 14b · limite en USD ─────────────────────────────────────────────────────
+// El pie de la card se edita en USD y manda sobre el %: un monto fijo no se
+// mueve cuando cambia el total del mes, que es justamente para lo que existe.
+console.log('E2E limite en USD');
+const subP = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];if(!c)return 'sin card';var i=c.querySelector('.bdg-amt-inp');return (c.querySelector('.bdg-cat-sub').innerText||'').replace(/\\s+/g,' ').trim()+' [inp='+(i?i.value:'-')+']';})()`);
+const pctP = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];var i=c&&c.querySelector('.bdg-lim-inp');return i?i.value:'sin card';})()`);
+// Groceries venia en 25% de 1000 = $250 (lo dejo el escenario anterior).
+check('el pie trae el limite del %', (await subP('Groceries')).includes('inp=250'), await subP('Groceries'));
+await ev("saveCategoryAmt('Groceries','120')"); await sleep(400);
+check('escribir USD fija el limite', (await subP('Groceries')).includes('inp=120'), await subP('Groceries'));
+check('y la pastilla muestra el % equivalente', (await pctP('Groceries')) === '12', await pctP('Groceries'));
+// El monto fijo no se mueve al cambiar el total del mes; el % derivado si.
+await ev("document.getElementById('bud-total').value='2000';saveBudget()"); await sleep(400);
+check('cambiar el total no mueve el monto fijo', (await subP('Groceries')).includes('inp=120'), await subP('Groceries'));
+check('el % derivado se recalcula', (await pctP('Groceries')) === '6', await pctP('Groceries'));
+check('una categoria por % si se reescala', (await subP('Home')).includes('inp=200'), await subP('Home'));
+// Volver al % borra el monto fijo.
+await ev("saveCategoryPct('Groceries','25')"); await sleep(400);
+check('editar el % devuelve la categoria al %', (await subP('Groceries')).includes('inp=500'), await subP('Groceries'));
+check('y borra el monto fijo guardado', await ev("!((JSON.parse(localStorage.getItem('ft13')||'{}').categoryBudgetAmtsByMonth||{})['" + mesActP + "']||{}).Groceries"));
+// Vaciar el campo tambien lo devuelve al %.
+await ev("saveCategoryAmt('Groceries','300')"); await sleep(300);
+await ev("saveCategoryAmt('Groceries','')"); await sleep(400);
+check('vaciarlo lo devuelve al %', (await subP('Groceries')).includes('inp=500'), await subP('Groceries'));
+await ev("document.getElementById('bud-total').value='1000';saveBudget()"); await sleep(400);
 
 // ── 15 · sello de build ─────────────────────────────────────────────────────
 // Sin esto no hay forma de saber, mirando el telefono, si un deploy llego: el

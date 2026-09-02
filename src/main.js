@@ -111,6 +111,10 @@ var S = {
   // ({Groceries:false}), asi una categoria nueva arranca con rollover sin que haya
   // que acordarse de prenderla. Sincroniza solo por el LWW generico.
   rolloverCats:{}, rolloverCatsUpdatedAt:null,
+  // Limite en USD fijo por mes y categoria. Manda sobre el %: existe justamente
+  // para las categorias de monto fijo (suscripciones, alquiler), que no tienen
+  // por que moverse cuando cambia el total del mes.
+  categoryBudgetAmtsByMonth:{}, categoryBudgetAmtsByMonthUpdatedAt:null,
   // Ultimo mes cuyo cierre ya viste. Evita que el resumen vuelva a aparecer en cada
   // arranque (y que reaparezca en el otro dispositivo, via LWW).
   lastCloseSeen:null, lastCloseSeenUpdatedAt:null
@@ -1905,8 +1909,7 @@ function monthCloseData(month){
   var lim={}, spent={}, carry={}, prev={}, totLim=0, totSpent=0;
   var bt=budgetTotalFor(month), pm=prevMonth(month);
   BUDGET_CATS.forEach(function(cat){
-    var pcta=catBudgetPct(cat,month);
-    var base=pcta>0?parseFloat((pcta/100*bt).toFixed(2)):0;
+    var base=catBaseLimit(cat,month);
     var cy=catCarry(cat,month);
     var l=catLimitWithCarryCore(base,cy,rollOn(cat,month));
     var sp=catNetSpend(month,[cat]);
@@ -2064,11 +2067,8 @@ function getActiveAlerts(){
   // 2. Ritmo por categoria: al ritmo de lo que va del mes, termina pasandose. Va
   // antes de que se pase — despues el aviso no sirve, la card ya lo dice en rojo.
   var _dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  var _bt=budgetTotalFor(curMonth);
   BUDGET_CATS.forEach(function(cat){
-    var pcta=catBudgetPct(cat,curMonth);
-    var base=pcta>0?parseFloat((pcta/100*_bt).toFixed(2)):0;
-    var lim=catLimitWithCarryCore(base,catCarry(cat,curMonth),rollOn(cat,curMonth));
+    var lim=catLimitWithCarryCore(catBaseLimit(cat,curMonth),catCarry(cat,curMonth),rollOn(cat,curMonth));
     var pace=catPaceAlertCore(catNetSpend(curMonth,[cat]),lim,now.getDate(),_dim);
     if(!pace) return;
     alerts.push({
@@ -2777,14 +2777,34 @@ function saveBudget(){
 function budgetTotalFor(month){ return budgetTotalForCore(S.budgetTotal, S.budgetTotalByMonth, month); }
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
+// Monto fijo del mes, si lo hay. null = la categoria se rige por %.
+function catFixedAmt(cat,month){
+  var o=(S.categoryBudgetAmtsByMonth||{})[month], v=o?o[cat]:null;
+  return v>0?v:null;
+}
+// Limite base en USD, antes del arrastre. Un monto fijo gana sobre el %.
+function catBaseLimit(cat,month){
+  var f=catFixedAmt(cat,month);
+  if(f!=null) return f;
+  var p=catBudgetPct(cat,month);
+  return p>0?parseFloat((p/100*budgetTotalFor(month)).toFixed(2)):0;
+}
+// % que ese limite representa del total: lo que muestra la pastilla y lo que suma
+// el medidor de asignacion. Con monto fijo es derivado, no un valor guardado.
+function catPctShown(cat,month){
+  var f=catFixedAmt(cat,month);
+  if(f==null) return catBudgetPct(cat,month);
+  var t=budgetTotalFor(month);
+  return t>0?parseFloat((f/t*100).toFixed(1)):0;
+}
 // Arrastre del mes anterior para una categoria: solo si ese MES tiene el rollover
 // encendido para ella. Ausente = apagado; se enciende mes por mes a proposito.
 function rollOn(cat,month){ return rollOnCore(S.rolloverCats,cat,month); }
 function catCarry(cat,month){
   if(!rollOn(cat,month)) return 0;
-  var pm=prevMonth(month), pPct=catBudgetPct(cat,pm);
-  var pLim=pPct>0?parseFloat((pPct/100*budgetTotalFor(pm)).toFixed(2)):0;
-  return rolloverCarryCore(pLim, catNetSpend(pm,[cat]));
+  // Un monto fijo es "esto y punto": arrastrarle el sobrante lo contradice.
+  if(catFixedAmt(cat,month)!=null) return 0;
+  return rolloverCarryCore(catBaseLimit(cat,prevMonth(month)), catNetSpend(prevMonth(month),[cat]));
 }
 var _rolloverUI=false;
 window._budRolloverUI=function(){ _rolloverUI=!_rolloverUI; renderBudget(); };
@@ -2899,9 +2919,32 @@ window.bdgPctCommit=function(el,cat){
 // Vaciar el campo guarda 0 para ESE mes (no hay presupuesto para esa categoria
 // este mes), no un hueco que vuelva a heredar el default: para volver al default
 // esta el chip "Reset <mes>".
+// Editar el % vuelve a poner la categoria bajo el %: si tenia un monto fijo se
+// borra, porque si no el monto seguiria mandando y el % que acabas de escribir no
+// haria nada visible.
+function clearFixedAmt(cat,month){
+  var o=(S.categoryBudgetAmtsByMonth||{})[month];
+  if(!o||o[cat]==null) return;
+  delete o[cat];
+  if(!Object.keys(o).length) delete S.categoryBudgetAmtsByMonth[month];
+  S.categoryBudgetAmtsByMonthUpdatedAt=stamp();
+}
+// Limite en USD de una categoria para el mes visible. Vacio o 0 la devuelve al %.
+window.saveCategoryAmt=function(cat,val){
+  var v=parseFloat(val);
+  if(!S.categoryBudgetAmtsByMonth) S.categoryBudgetAmtsByMonth={};
+  if(isFinite(v)&&v>0){
+    var o=S.categoryBudgetAmtsByMonth[_budMonth]||(S.categoryBudgetAmtsByMonth[_budMonth]={});
+    o[cat]=parseFloat(v.toFixed(2));
+    S.categoryBudgetAmtsByMonthUpdatedAt=stamp();
+  } else clearFixedAmt(cat,_budMonth);
+  save(); renderBudget();
+};
+window.bdgAmtCommit=function(el,cat){ var v=el.value; setTimeout(function(){ saveCategoryAmt(cat,v); },0); };
 window.saveCategoryPct=function(cat,val){
   var v=parseFloat(val);
   if(!isFinite(v)||v<0) v=0;
+  clearFixedAmt(cat,_budMonth);
   if(_budMonth){
     if(!S.categoryBudgetPctsByMonth) S.categoryBudgetPctsByMonth={};
     var o=S.categoryBudgetPctsByMonth[_budMonth]||(S.categoryBudgetPctsByMonth[_budMonth]={});
@@ -3061,7 +3104,7 @@ function renderBudget(){
   var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length)||totOvr;
   // Medidor de asignacion total: cuanto % del presupuesto esta repartido entre
   // las categorias (con overrides del mes visible) y cuanto falta/sobra para 100%.
-  var sumPctHead=BUDGET_CATS.reduce(function(s,c){ return s+catBudgetPct(c,month); },0);
+  var sumPctHead=BUDGET_CATS.reduce(function(s,c){ return s+catPctShown(c,month); },0);
   var allocDiff=Math.round((100-sumPctHead)*10)/10;
   var allocCol=Math.abs(allocDiff)<0.5?'#1D9E75':allocDiff>0?'#EF9F27':'#E24B4A';
   // El % va pegado al titulo y el detalle ("· 20% short") aparte, porque en mobile
@@ -3107,15 +3150,26 @@ function renderBudget(){
   var insMonth=prevMonth(month);
   var catInfo=BUDGET_CATS.map(function(cat){
     var s=catNetSpend(month,[cat]);
-    var pcta=catBudgetPct(cat,month);
-    var base=pcta>0?parseFloat((pcta/100*budTotal).toFixed(2)):0;
+    var pcta=catPctShown(cat,month);
+    var base=catBaseLimit(cat,month);
+    var fixed=catFixedAmt(cat,month)!=null;
     // El arrastre mueve SOLO el limite de la categoria. El total del mes, el
     // "Remaining" del hero y el medidor de % siguen siendo los asignados: el
     // rollover reparte distinto, no crea presupuesto.
     var on=rollOn(cat,month), carry=on?catCarry(cat,month):0;
-    return {cat:cat,s:s,pct:pcta,lim:catLimitWithCarryCore(base,carry,on),carry:on?carry:0,
+    return {cat:cat,s:s,pct:pcta,base:base,fixed:fixed,lim:catLimitWithCarryCore(base,carry,on),carry:on?carry:0,
       ovr:!!(monthOvr&&monthOvr[cat]!=null)};
   });
+  // El input se dimensiona con el largo del numero para que se lea como texto y
+  // no como un campo: es el mismo gesto que la pastilla del %.
+  function amtInp(cat,ci){
+    var v=ci.base>0?parseFloat(ci.base.toFixed(2)):'';
+    var w=Math.max(2,String(v||0).length+1);
+    return '<span class="bdg-amt-wrap'+(ci.fixed?' is-fixed':'')+'" title="'+(ci.fixed?'Monto fijo del mes':'Limite del mes — escribilo en USD y queda fijo')+'">$'
+      +'<input type="number" class="bdg-amt-inp" style="width:'+w+'ch" value="'+v+'" placeholder="0" step="1" min="0" inputmode="decimal"'
+      +' onclick="event.stopPropagation()" onblur="bdgAmtCommit(this,\''+cat+'\')"'
+      +' onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=this.defaultValue;this.blur();}"></span>';
+  }
   catInfo.forEach(function(ci){
     var cat=ci.cat, s=ci.s, catLim=ci.lim;
     var limBase=catLim>0?catLim:budTotal;
@@ -3146,8 +3200,10 @@ function renderBudget(){
       +'</div>'
       +'<div class="bdg-cat-hero'+heroCls+'"><span class="bdg-cat-amt">'+hero+'</span>'+(heroLbl?'<span class="bdg-cat-lbl">'+heroLbl+'</span>':'')+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-sub">'+(catLim>0?fmtUSD(s)+' of '+fmtUSD(catLim):'$0 planned')
-        +(ci.carry?'<span class="bdg-carry'+(ci.carry<0?' is-neg':'')+'">'+(ci.carry>0?'+':'-')+fmtShortUSD(Math.abs(ci.carry))+' del mes pasado</span>':'')
+      // El limite del pie se edita en USD igual que el % de arriba: para una
+      // categoria de monto fijo (una suscripcion) pensar en % es la cuenta al reves.
+      +'<div class="bdg-cat-sub">'+(catLim>0?fmtUSD(s)+' of '+amtInp(cat,ci):amtInp(cat,ci)+' planned')
+        +(ci.carry?'<span class="bdg-carry'+(ci.carry<0?' is-neg':'')+'">'+(ci.carry>0?'+':'-')+fmtShortUSD(Math.abs(ci.carry))+' del mes pasado · '+fmtUSD(catLim)+'</span>':'')
       +'</div>'
       +'</div>';
   });
