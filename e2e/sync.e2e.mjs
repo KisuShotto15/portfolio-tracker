@@ -364,6 +364,7 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   JSON.parse(localStorage.getItem('ft13')||'{}'),
   { transactions: [], deletedTxIds: [], schemaVersion: 3, manualWallets: [
       { id: 33, name: 'Emily', trackerOnly: true, balance: 200 },
+      { id: 44, name: 'Fam', trackerOnly: true, balance: 80, debt: 'in', cycle: true },
       { id: 11, name: 'Roi', trackerOnly: true, balance: 1700, debt: 'in' },
       { id: 22, name: 'Ana', trackerOnly: true, balance: 300, owed: true } ],
     manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
@@ -380,12 +381,26 @@ const anaDebt = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manual
 check('migra owed:true a debt:out', anaDebt === 'out/false', `Ana=${anaDebt}`);
 
 const nw0 = await heroTotal();
-check('la deuda resta del total de wallets', nw0 === 200 + 1700 - 300, `total=${nw0} (esperado 1600)`);
+check('la deuda resta del total de wallets', nw0 === 200 + 80 + 1700 - 300, `total=${nw0} (esperado 1680)`);
 
 // Un tracker sin marcar NO es una deuda: sigue en su grupo y con su etiqueta.
 const grupos = await ev("[...document.querySelectorAll('#page-wallets .wm-group')].map(function(g){var t=g.querySelector('.wm-group-title');return (t?t.textContent:'')+':'+[...g.querySelectorAll('.wm-row')].map(function(r){return r.querySelector('.wm-name').textContent+'|'+(r.querySelector('.wm-badge')||{}).textContent}).join(',')}).join(' ~ ')");
 check('Emily queda como tracker comun', /Trackers:Emily\|tracker/.test(grupos), grupos);
-check('las dos direcciones van juntas en Debts', /Debts:Roi\|me deben,Ana\|debo/.test(grupos), grupos);
+check('las dos direcciones van juntas en Debts', /Debts:Roi\|me deben,Fam\|me deben,Ana\|debo/.test(grupos), grupos);
+
+// El boton de sumar es opt-in por wallet (la casilla "ciclo"), no sale en todas.
+const botones = (n) => ev(`[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(r){return r.querySelector('.wm-name').textContent===${JSON.stringify(n)}}).map(function(r){return [...r.querySelectorAll('.wsettle')].map(function(b){return b.textContent}).join('+')})[0]`);
+check('la wallet de ciclo ofrece las dos direcciones', (await botones('Fam')) === 'Prestar+Cobrar', await botones('Fam'));
+check('una deuda de una sola vez solo ofrece saldar', (await botones('Roi')) === 'Cobrar', await botones('Roi'));
+check('una deuda en contra dice Pagar', (await botones('Ana')) === 'Pagar', await botones('Ana'));
+
+// Prestar de nuevo SUBE lo que te deben: es un Credit, la unica tx que no es Debit.
+const antesFam = await heroTotal();
+await ev('settleTracker(44,1)'); await sleep(350);
+await ev("document.getElementById('_ami').value='20';document.getElementById('_amo').click()"); await sleep(400);
+check('prestar sube lo que te deben', (await heroTotal()) === antesFam + 20, `antes=${antesFam} despues=${await heroTotal()}`);
+const txFam = JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).filter(function(t){return t.wallet==='Fam'}))"));
+check('el prestamo se anota como Credit/Savings', txFam.length === 1 && txFam[0].type === 'Credit' && txFam[0].category === 'Savings', JSON.stringify(txFam));
 
 await ev("showPage('summary')"); await sleep(400);
 const sub = await liqSub();
@@ -394,16 +409,17 @@ check('el KPI Liquid muestra lo que debes', sub.includes('owed'), sub);
 
 // Cobrar 150 de Roi y pagar 150 a Ana, por los botones de la fila.
 await ev("showPage('wallets')"); await sleep(400);
+const base = await heroTotal();
 const settle = async (id, monto) => {
   await ev(`settleTracker(${id})`); await sleep(350);
   await ev(`document.getElementById('_ami').value='${monto}';document.getElementById('_amo').click()`);
   await sleep(400);
 };
 await settle(11, 150);
-check('cobrar baja lo que te deben', (await heroTotal()) === nw0 - 150, `total=${await heroTotal()}`);
+check('cobrar baja lo que te deben', (await heroTotal()) === base - 150, `total=${await heroTotal()}`);
 check('un tracker comun no ofrece Cobrar/Pagar', (await ev("[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(r){return r.querySelector('.wm-name').textContent==='Emily'}).map(function(r){return !!r.querySelector('.wsettle')})[0]")) === false);
 await settle(22, 150);
-check('pagar con esa plata deja el patrimonio igual', (await heroTotal()) === nw0, `antes=${nw0} despues=${await heroTotal()}`);
+check('pagar con esa plata deja el patrimonio igual', (await heroTotal()) === base, `antes=${base} despues=${await heroTotal()}`);
 
 // Las dos txs salieron iguales: mismo tipo, misma categoria neutra. Se filtran por
 // wallet porque el pull inicial trae las txs de los escenarios anteriores.

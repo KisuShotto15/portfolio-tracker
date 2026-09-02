@@ -1276,6 +1276,7 @@ function closeWalletForm(fromPop){
   document.getElementById('wm-name').value='';
   document.getElementById('wm-bal').value='';
   document.getElementById('wm-type').value='tracker';
+  var _cy=document.getElementById('wm-cycle'); if(_cy) _cy.checked=false;
   var _wc=document.getElementById('wm-cur'); if(_wc) _wc.value='USD';
   toggleWmBalField();
   if(fromPop!==true) _sheetPop();
@@ -1289,6 +1290,11 @@ function toggleWmBalField(){
   if(cf) cf.style.display=isNormal?'flex':'none';
   var lbl=document.getElementById('wm-bal-lbl'), cur=document.getElementById('wm-cur');
   if(lbl&&cur) lbl.textContent=cur.value==='VES'?'Balance in Bs':'Balance USD';
+  // El ciclo solo tiene sentido en una deuda: es la que sube y baja. Un tracker
+  // comun no tiene "sumar" ni "saldar", solo sus txs.
+  var t=document.getElementById('wm-type').value;
+  var cy=document.getElementById('wm-cycle-field');
+  if(cy) cy.style.display=(t==='lent'||t==='debt')?'flex':'none';
 }
 function openExchangeForm(){
   _lockScroll(true);
@@ -1359,11 +1365,14 @@ async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ 
 // entre cosas que la app ya cuenta, no un gasto ni un ingreso — no toca budget ni P&L.
 // Escribe UNA sola tx, la de la deuda. El otro lado (la plata que entro o salio de
 // verdad) ya lo ve la app sola: por el fetch del exchange, o editando el wallet manual.
-async function settleTracker(id){
+// sube=1 agranda la deuda (le prestaste de nuevo / pediste mas), sin sube la salda.
+// Es la misma tx en las dos direcciones; lo unico que cambia es Credit vs Debit.
+async function settleTracker(id,sube){
   var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return;
   var falta=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name);
   var esDeuda=w.debt==='out';
-  var r=await appPrompt(esDeuda?'Pagar deuda':'Cobrar',
+  var titulo=sube?(esDeuda?'Pedir prestado':'Prestar'):(esDeuda?'Pagar deuda':'Cobrar');
+  var r=await appPrompt(titulo,
     escHtml(w.name)+' · '+(esDeuda?'debes ':'te deben ')+fmtUSD(falta)+' · acepta sumas (50+100)',
     '',{math:true});
   if(!r) return;
@@ -1373,7 +1382,8 @@ async function settleTracker(id){
   snapshot();
   var _now=Date.now(), _ut=stamp();
   S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:localToday(),
-    desc:(esDeuda?'Pago ':'Cobro ')+w.name,wallet:w.name,type:'Debit',category:'Savings',
+    desc:(sube?(esDeuda?'Deuda con ':'Prestamo a '):(esDeuda?'Pago ':'Cobro '))+w.name,
+    wallet:w.name,type:sube?'Credit':'Debit',category:'Savings',
     amountUSD:parseFloat(v.toFixed(2)),amountVES:null,originalCurrency:'USD',rateUsed:null,
     imported:false,receiptUrl:null,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
@@ -2946,8 +2956,13 @@ function saveManualWallet(){
   // que cambia es debt, que decide con que signo entra al patrimonio y en que
   // grupo se lista. null explicito y no ausente: convertir una deuda de vuelta en
   // tracker comun con el mismo nombre tiene que apagar la marca de verdad.
+  var cyEl=document.getElementById('wm-cycle');
   var obj={id:Date.now(),name:name,balance:bal,trackerOnly:type!=='normal',
     debt:type==='lent'?'in':type==='debt'?'out':null,
+    // cycle: la deuda va y viene (le prestas de nuevo antes de que termine de
+    // pagarte). Solo decide si la fila ofrece el boton de SUMAR ademas del de
+    // saldar; no toca ningun numero.
+    cycle:!!(cyEl&&cyEl.checked&&(type==='lent'||type==='debt')),
     currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
   // Conversion Manual → Tracker (re-agregar con el mismo nombre): conservar el
   // balance mostrado. El tracker suma sus txs, asi que la base se rebasa
@@ -3270,6 +3285,9 @@ function renderWallets(){
     var right='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
     var acts='';
     if(mw){
+      // El boton de sumar solo aparece si el wallet se marco como ciclo: en una
+      // deuda de una sola vez seria un boton que no se usa nunca.
+      if(kind&&mw.cycle) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+',1)">'+(isDebt?'Pedir':'Prestar')+'</button>';
       if(kind&&total>0) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pagar':'Cobrar')+'</button>';
       acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
