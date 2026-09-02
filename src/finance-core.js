@@ -183,3 +183,22 @@ export function debtSplitCore(manualWallets, balances) {
   });
   return { receivable: parseFloat(receivable.toFixed(2)), owed: parseFloat(owed.toFixed(2)) };
 }
+
+// Rollover: lo que sobro (o falto) en una categoria el mes pasado se arrastra al
+// limite de este. Sobrante suma, exceso resta — un sobre de verdad, no un reset
+// mensual. Sin limite el mes anterior no hay nada que arrastrar: el mes recien
+// asignado arranca limpio en vez de heredar un "sobrante" igual a todo su gasto.
+// Arrastra UN mes, no encadena: el limite de marzo mira el sobrante de febrero,
+// no el de enero acumulado.
+export function rolloverCarryCore(prevLimit, prevSpent) {
+  if (!(prevLimit > 0)) return 0;
+  return parseFloat((prevLimit - (prevSpent || 0)).toFixed(2));
+}
+
+// Limite efectivo del mes: el asignado por % mas el arrastre. Nunca baja de 0 —
+// un exceso mayor al limite dejaria la categoria en negativo, que no se puede
+// gastar ni dibujar en una barra.
+export function catLimitWithCarryCore(baseLimit, carry, on) {
+  if (!on || !(baseLimit > 0)) return parseFloat((baseLimit || 0).toFixed(2));
+  return parseFloat(Math.max(0, baseLimit + carry).toFixed(2));
+}

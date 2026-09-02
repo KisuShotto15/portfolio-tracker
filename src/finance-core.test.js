@@ -3,6 +3,7 @@ import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
+  rolloverCarryCore, catLimitWithCarryCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -303,5 +304,34 @@ describe('debtSplitCore', () => {
     expect(d).toEqual({ receivable: 1600, owed: 150 });
     // te pagaron 150 y con eso pagaste 150: el patrimonio no se movio
     expect(d.receivable - d.owed).toBe(1750 - 300);
+  });
+});
+
+describe('rollover de categoria', () => {
+  it('lo que sobro suma al mes siguiente', () => {
+    expect(rolloverCarryCore(450, 400)).toBe(50);
+    expect(catLimitWithCarryCore(450, 50, true)).toBe(500);
+  });
+
+  it('lo que te pasaste resta', () => {
+    expect(rolloverCarryCore(75, 92.4)).toBe(-17.4);
+    expect(catLimitWithCarryCore(75, -17.4, true)).toBe(57.6);
+  });
+
+  it('sin limite el mes pasado no arrastra nada', () => {
+    expect(rolloverCarryCore(0, 300)).toBe(0);
+    expect(rolloverCarryCore(undefined, 300)).toBe(0);
+  });
+
+  it('un exceso mayor al limite deja la categoria en 0, no en negativo', () => {
+    expect(catLimitWithCarryCore(50, -120, true)).toBe(0);
+  });
+
+  it('apagado, el limite es el asignado y nada mas', () => {
+    expect(catLimitWithCarryCore(450, 50, false)).toBe(450);
+  });
+
+  it('una categoria sin % no inventa limite por arrastre', () => {
+    expect(catLimitWithCarryCore(0, 50, true)).toBe(0);
   });
 });

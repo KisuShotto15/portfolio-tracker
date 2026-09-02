@@ -3,6 +3,7 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, m
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
+  rolloverCarryCore, catLimitWithCarryCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -104,7 +105,10 @@ var S = {
   bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
   recurringLog:[], recurringLogUpdatedAt:null,
-  toolFees:{bpay:4.1, wally:3.745, zinli:3.75, emily:10}, toolFeesUpdatedAt:null
+  toolFees:{bpay:4.1, wally:3.745, zinli:3.75, emily:10}, toolFeesUpdatedAt:null,
+  // Categorias con rollover: {Groceries:true}. Lo que sobra (o falta) en el mes se
+  // arrastra al limite del siguiente. Sincroniza solo por el LWW generico.
+  rolloverCats:{}, rolloverCatsUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 
@@ -2599,6 +2603,21 @@ function saveBudget(){
 function budgetTotalFor(month){ return budgetTotalForCore(S.budgetTotal, S.budgetTotalByMonth, month); }
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
+// Arrastre del mes anterior para una categoria: solo si tiene rollover encendido.
+function catCarry(cat,month){
+  if(!(S.rolloverCats||{})[cat]) return 0;
+  var pm=prevMonth(month), pPct=catBudgetPct(cat,pm);
+  var pLim=pPct>0?parseFloat((pPct/100*budgetTotalFor(pm)).toFixed(2)):0;
+  return rolloverCarryCore(pLim, catNetSpend(pm,[cat]));
+}
+var _rolloverUI=false;
+window._budRolloverUI=function(){ _rolloverUI=!_rolloverUI; renderBudget(); };
+window.toggleRolloverCat=function(cat){
+  if(!S.rolloverCats) S.rolloverCats={};
+  if(S.rolloverCats[cat]) delete S.rolloverCats[cat]; else S.rolloverCats[cat]=true;
+  S.rolloverCatsUpdatedAt=stamp();
+  save(); renderBudget();
+};
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
 // del mes visible. Solo afecta la edicion; la vista siempre muestra el efectivo.
 // Fila de scope + presets del Budget (Default / <mes> only / 3-mo avg / 50-30-20).
@@ -2843,6 +2862,7 @@ function renderBudget(){
   var allocTxt=Math.abs(allocDiff)<0.5?sumPctHead.toFixed(1)+'% ✓'
     :allocDiff>0?sumPctHead.toFixed(1)+'% · '+allocDiff+'% short'
     :sumPctHead.toFixed(1)+'% · '+Math.abs(allocDiff)+'% over';
+  var rollN=BUDGET_CATS.filter(function(c){ return (S.rolloverCats||{})[c]; }).length;
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
     +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Sum of allocated % (target: 100%)">'
     +'<i class="bdg-alloc-mini"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></i>'+allocTxt+'</span>'
@@ -2858,14 +2878,31 @@ function renderBudget(){
       // guardados de antes: sin el, ese override seguiria pisando en silencio el
       // % que edites y no quedaria ninguna via para quitarlo.
       :(hasOvr?'<span class="bdg-scope"><button class="bdg-scope-btn reset" title="Back to the default budget for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button></span>':''))
+    // Fuera del ternario: la fila de scope hoy esta apagada (BUDGET_SCOPE_UI) y el
+    // rollover tiene que verse igual.
+    +'<span class="bdg-scope"><button class="bdg-scope-btn'+(_rolloverUI||rollN?' on':'')+'" title="Arrastrar al mes siguiente lo que sobra (o falta) en cada categoria" onclick="window._budRolloverUI()">Rollover'+(rollN?' · '+rollN:'')+'</button></span>'
     +'</div>';
+  // Elegir a que categorias se les arrastra el sobrante. Se despliega desde el
+  // boton para no ocupar una fila permanente por una opcion que se toca una vez.
+  if(_rolloverUI){
+    html+='<div class="bdg-roll-row">'
+      +'<span class="bdg-roll-hint">Lo que sobra se suma al limite del mes siguiente; lo que te pasas se resta.</span>'
+      +'<span class="bdg-scope">'+BUDGET_CATS.map(function(c){
+        return '<button class="bdg-scope-btn'+((S.rolloverCats||{})[c]?' on':'')+'" onclick="toggleRolloverCat(\''+c+'\')">'+c+'</button>';
+      }).join('')+'</span></div>';
+  }
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
   var catInfo=BUDGET_CATS.map(function(cat){
     var s=catNetSpend(month,[cat]);
     var pcta=catBudgetPct(cat,month);
-    var lim=pcta>0?parseFloat((pcta/100*budTotal).toFixed(2)):0;
-    return {cat:cat,s:s,pct:pcta,lim:lim,ovr:!!(monthOvr&&monthOvr[cat]!=null)};
+    var base=pcta>0?parseFloat((pcta/100*budTotal).toFixed(2)):0;
+    // El arrastre mueve SOLO el limite de la categoria. El total del mes, el
+    // "Remaining" del hero y el medidor de % siguen siendo los asignados: el
+    // rollover reparte distinto, no crea presupuesto.
+    var on=!!(S.rolloverCats||{})[cat], carry=on?catCarry(cat,month):0;
+    return {cat:cat,s:s,pct:pcta,lim:catLimitWithCarryCore(base,carry,on),carry:on?carry:0,
+      ovr:!!(monthOvr&&monthOvr[cat]!=null)};
   });
   catInfo.forEach(function(ci){
     var cat=ci.cat, s=ci.s, catLim=ci.lim;
@@ -2897,7 +2934,9 @@ function renderBudget(){
       +'</div>'
       +'<div class="bdg-cat-hero'+heroCls+'"><span class="bdg-cat-amt">'+hero+'</span>'+(heroLbl?'<span class="bdg-cat-lbl">'+heroLbl+'</span>':'')+'</div>'
       +'<div class="bdg-pb sm"><div class="bdg-pf" style="width:'+cp+'%;background:'+barC+'"></div></div>'
-      +'<div class="bdg-cat-sub">'+(catLim>0?fmtUSD(s)+' of '+fmtUSD(catLim):'$0 planned')+'</div>'
+      +'<div class="bdg-cat-sub">'+(catLim>0?fmtUSD(s)+' of '+fmtUSD(catLim):'$0 planned')
+        +(ci.carry?'<span class="bdg-carry'+(ci.carry<0?' is-neg':'')+'">'+(ci.carry>0?'+':'-')+fmtShortUSD(Math.abs(ci.carry))+' del mes pasado</span>':'')
+      +'</div>'
       +'</div>';
   });
   html+='</div>';

@@ -439,6 +439,62 @@ if (process.env.SHOT) {
   console.log('  · captura en ' + process.env.SHOT);
 }
 
+// ── 11 · rollover de categoria ────────────────────────────────────────────
+// El sobrante del mes pasado sube el limite de este; el exceso lo baja. Se prueba
+// contra la card real, que es donde el numero importa.
+console.log('E2E rollover');
+cloudDoc = {};
+const hoyR = new Date();
+const mesActR = `${hoyR.getFullYear()}-${String(hoyR.getMonth() + 1).padStart(2, '0')}`;
+const antesR = new Date(hoyR.getFullYear(), hoyR.getMonth() - 1, 15);
+const mesAntR = `${antesR.getFullYear()}-${String(antesR.getMonth() + 1).padStart(2, '0')}`;
+const dAntR = `${mesAntR}-15`;
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { manualWallets: [], rolloverCats: {}, rolloverCatsUpdatedAt: Date.now(),
+    budgetTotal: 1000, budgetTotalUpdatedAt: Date.now(), budgetTotalByMonth: {},
+    categoryBudgetPcts: { Groceries: 10, Transport: 10 }, categoryBudgetPctsUpdatedAt: Date.now(),
+    categoryBudgetPctsByMonth: {},
+    transactions: [
+      { id: 901, createdAt: 901, seq: 0, date: '${dAntR}', desc: 'prev groceries', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 60, originalCurrency: 'USD', imported: false, updatedAt: 901 },
+      { id: 902, createdAt: 902, seq: 1, date: '${dAntR}', desc: 'prev transport', wallet: '', type: 'Debit', category: 'Transport', amountUSD: 130, originalCurrency: 'USD', imported: false, updatedAt: 902 } ],
+    transactionsUpdatedAt: Date.now(), deletedTxIds: [] })))`);
+await boot();
+await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesActR}')`); await sleep(600);
+
+// limite y nota al pie de una card, por nombre de categoria
+const card = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];if(!c)return 'sin card';return (c.querySelector('.bdg-cat-sub')||{}).textContent||'';})()`);
+
+check('sin rollover el limite es el asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+
+await ev("window._budRolloverUI()"); await sleep(300);
+await ev("toggleRolloverCat('Groceries');toggleRolloverCat('Transport')"); await sleep(500);
+
+// Groceries: limite 100, gasto previo 60 -> sobran 40 -> 140
+check('lo que sobro sube el limite', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
+check('la card dice de donde sale', /\+\$40.*del mes pasado/.test(await card('Groceries')), await card('Groceries'));
+// Transport: limite 100, gasto previo 130 -> exceso 30 -> 70
+check('lo que te pasaste baja el limite', (await card('Transport')).includes('of $70.00'), await card('Transport'));
+check('el exceso se muestra en negativo', /-\$30.*del mes pasado/.test(await card('Transport')), await card('Transport'));
+
+// El rollover reparte distinto, no crea presupuesto: el total del mes no se mueve.
+const heroTot = await ev("(document.querySelector('.bdg-hero-sub')||{}).textContent||''");
+check('el total del mes no se mueve', heroTot.includes('$1,000.00'), heroTot);
+
+await ev("toggleRolloverCat('Groceries')"); await sleep(400);
+check('apagarlo vuelve al limite asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+check('y sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('of $70.00'); })(), await card('Transport'));
+
+if (process.env.SHOT2) {
+  await ev("window._budRolloverUI()"); await sleep(300);
+  await ev("document.querySelectorAll('[class*=form-panel],[class*=overlay],.action-toast').forEach(function(e){e.style.display='none'});showPage('budget')"); await sleep(600);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false });
+  await sleep(400);
+  const s2 = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  (await import('node:fs')).writeFileSync(process.env.SHOT2, Buffer.from(s2.result.data, 'base64'));
+  console.log('  · captura en ' + process.env.SHOT2);
+}
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
