@@ -569,6 +569,9 @@ input,select,textarea,button{font-family:inherit}
 .bdg-alloc{font-family:var(--font-num);font-size:12px;font-weight:600;color:var(--ac);white-space:nowrap}
 .bdg-alloc b,.bdg-alloc i{font-weight:inherit;font-style:normal}
 .bdg-acts{display:flex;gap:6px;align-items:center;margin-left:auto}
+/* El chip de la cabecera es un interruptor secundario, no una accion: mas chico
+   que los del panel para que el titulo mande. */
+.bdg-acts .bdg-scope-btn{font-size:10px;padding:2px 9px}
 /* El medidor deja de ser una pastilla y pasa a ser la regla que separa la
    cabecera de las cards: a 100% se lee de punta a punta. */
 .bdg-alloc-rule{height:3px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-bottom:18px}

@@ -3042,17 +3042,17 @@ function renderBudget(){
     // y cada boton caia en su propia linea.
     +'<span class="bdg-acts">'
     // La fila de scope hoy esta apagada (BUDGET_SCOPE_UI) pero el rollover se ve igual.
-    +'<button class="bdg-scope-btn'+(_rolloverUI?' on':'')+'" title="Arrastrar a '+mShort+' lo que sobro (o falto) el mes anterior. Se elige mes por mes." onclick="window._budRolloverUI()">Rollover '+mShort+' · '+rollN+'/'+BUDGET_CATS.length+'</button>'
+    +'<button class="bdg-scope-btn roll-tgl'+(_rolloverUI?' on':'')+'" title="Arrastrar a '+mShort+' lo que sobro (o falto) el mes anterior. Hoy: '+rollN+' de '+BUDGET_CATS.length+' categorias. Se elige mes por mes." onclick="window._budRolloverUI()">Rollover</button>'
     +(BUDGET_SCOPE_UI
       ?'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
         +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
         +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
         +'<button class="bdg-scope-btn" title="Allocate % from your 3-month average spend" onclick="applyBudgetRec(\'hist\')">3-mo avg</button>'
         +'<button class="bdg-scope-btn" title="50% essentials / 30% lifestyle / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
-      // Con la fila oculta sobrevive UN boton, y solo si hay overrides de mes
-      // guardados de antes: sin el, ese override seguiria pisando en silencio el
-      // % que edites y no quedaria ninguna via para quitarlo.
-      :(hasOvr?'<button class="bdg-scope-btn reset" title="Back to the default budget for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button>':''))
+      // Con la fila oculta no queda ningun boton: el Reset se saco de la cabecera
+      // a pedido. window._budResetMonth() sigue existiendo para quitar a mano un
+      // override de mes viejo (hoy no hay forma de crear uno nuevo desde la UI).
+      :'')
     +'</span></div>'
     // La barra pasa a ser una regla de ancho completo bajo el titulo: separa la
     // cabecera de las cards y a 100% se lee de punta a punta.
