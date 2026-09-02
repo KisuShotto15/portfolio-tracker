@@ -483,7 +483,31 @@ check('apagarlo vuelve al limite asignado', (await card('Groceries')).includes('
 check('la excepcion queda guardada como false', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').rolloverCats.Groceries===false"));
 check('y sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('of $70.00'); })(), await card('Transport'));
 
+// ── 12 · cierre de mes ────────────────────────────────────────────────────
+// El escenario anterior dejo gasto en el mes pasado y ninguno en este, asi que el
+// cierre tiene algo real que contar.
+console.log('E2E cierre de mes');
+check('el cierre se abre solo con el mes ya cambiado', await ev("!!document.getElementById('month-close')"));
+const mcTxt = await ev("(document.getElementById('month-close')||{}).textContent||''");
+check('titula el mes cerrado', mcTxt.includes('Cierre de'), mcTxt.slice(0, 80));
+// Transport: plan 100, gasto 130 -> se paso por 30. Groceries: plan 100, gasto 60.
+check('muestra plan vs real por categoria', /Transport/.test(mcTxt) && /\$130\.00/.test(mcTxt) && /Groceries/.test(mcTxt), mcTxt.slice(0, 400));
+check('dice el movimiento mas grande', /Movimiento mas grande/.test(mcTxt) && /prev transport/.test(mcTxt), mcTxt.slice(0, 400));
+check('suma el gasto del mes', /\$190\.00/.test(mcTxt), mcTxt.slice(0, 400));
+
+await ev("document.getElementById('_mcok').click()"); await sleep(300);
+check('al cerrarlo desaparece', !(await ev("!!document.getElementById('month-close')")));
+check('queda marcado como visto', await ev(`JSON.parse(localStorage.getItem('ft13')||'{}').lastCloseSeen==='${mesAntR}'`));
+await boot();
+check('no vuelve a aparecer en el proximo arranque', !(await ev("!!document.getElementById('month-close')")));
+// Pero se puede volver a ver a mano desde Budget.
+await ev(`showPage('budget'); showMonthClose('${mesAntR}')`); await sleep(400);
+check('se puede reabrir a mano', await ev("!!document.getElementById('month-close')"));
+
 if (process.env.SHOT2) {
+  const s3 = await send('Page.captureScreenshot', { format: 'png' });
+  (await import('node:fs')).writeFileSync(process.env.SHOT2.replace('.png', '-cierre.png'), Buffer.from(s3.result.data, 'base64'));
+  await ev("document.getElementById('_mcok').click()"); await sleep(200);
   await ev("window._budRolloverUI()"); await sleep(300);
   await ev("document.querySelectorAll('[class*=form-panel],[class*=overlay],.action-toast').forEach(function(e){e.style.display='none'});showPage('budget')"); await sleep(600);
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false });

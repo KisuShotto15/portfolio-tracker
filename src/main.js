@@ -109,7 +109,10 @@ var S = {
   // Rollover: encendido para todas por defecto. El mapa guarda solo las EXCEPCIONES
   // ({Groceries:false}), asi una categoria nueva arranca con rollover sin que haya
   // que acordarse de prenderla. Sincroniza solo por el LWW generico.
-  rolloverCats:{}, rolloverCatsUpdatedAt:null
+  rolloverCats:{}, rolloverCatsUpdatedAt:null,
+  // Ultimo mes cuyo cierre ya viste. Evita que el resumen vuelva a aparecer en cada
+  // arranque (y que reaparezca en el otro dispositivo, via LWW).
+  lastCloseSeen:null, lastCloseSeenUpdatedAt:null
 };
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 
@@ -1892,6 +1895,87 @@ window.toggleHealthDrop=function(){ _hbmToggle('health'); };
 window.toggleAlertsDrop=function(){ _hbmToggle('alerts'); };
 
 // ── Alerts ─────────────────────────────────────────────────────────────────
+// ── Cierre de mes ─────────────────────────────────────────────────────────
+// Las piezas ya existian sueltas (snapshots, monthIncome, gasto por categoria);
+// lo que faltaba era un momento donde la app te cuente que paso. Se arma para un
+// mes cerrado y se abre solo la primera vez que entras con el mes ya cambiado.
+function monthCloseData(month){
+  var lim={}, spent={}, totLim=0, totSpent=0;
+  var bt=budgetTotalFor(month);
+  BUDGET_CATS.forEach(function(cat){
+    var pcta=catBudgetPct(cat,month);
+    var base=pcta>0?parseFloat((pcta/100*bt).toFixed(2)):0;
+    var l=catLimitWithCarryCore(base,catCarry(cat,month),rollOn(cat));
+    var sp=catNetSpend(month,[cat]);
+    if(l<=0&&sp<=0) return;
+    lim[cat]=l; spent[cat]=sp; totLim+=l; totSpent+=sp;
+  });
+  // Snapshot vigente al cierre de un mes: el ultimo tomado en ese mes o antes. Sin
+  // uno de cada lado no se puede hablar de variacion y la linea no se dibuja.
+  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var snapUpTo=function(m){
+    var out=null;
+    snaps.forEach(function(s){ if(s.date.slice(0,7)<=m) out=s; });
+    return out;
+  };
+  var sNow=snapUpTo(month), sPrev=snapUpTo(prevMonth(month));
+  var nwDelta=(sNow&&sPrev&&sNow!==sPrev)?parseFloat((sNow.total-sPrev.total).toFixed(2)):null;
+  var big=null;
+  S.transactions.forEach(function(t){
+    if(t.date.slice(0,7)!==month) return;
+    if(EXPENSE_CATS_DASH.indexOf(t.category)<0) return;
+    if(!big||t.amountUSD>big.amountUSD) big=t;
+  });
+  return {month:month,lim:lim,spent:spent,totLim:parseFloat(totLim.toFixed(2)),
+    totSpent:parseFloat(totSpent.toFixed(2)),income:monthIncome(month),nwDelta:nwDelta,big:big};
+}
+window.showMonthClose=function(month){
+  var d=monthCloseData(month);
+  var lbl=fmtMonthLabel(month);
+  var cats=Object.keys(d.lim).sort(function(a,b){ return d.spent[b]-d.spent[a]; });
+  var rows=cats.map(function(c){
+    var diff=parseFloat((d.lim[c]-d.spent[c]).toFixed(2));
+    var col=d.lim[c]<=0?'var(--txt3)':diff<0?'#E24B4A':'#4ED9A4';
+    return '<div class="mc-row"><span class="mc-cat"><i class="bdg-dot" style="background:'+(CCOLORS[c]||'#9B70F0')+'"></i>'+c+'</span>'
+      +'<span class="mc-num">'+fmtUSD(d.spent[c])+'</span>'
+      +'<span class="mc-num mc-dim">'+(d.lim[c]>0?fmtUSD(d.lim[c]):'—')+'</span>'
+      +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?(diff>=0?'+':'')+fmtShortUSD(diff):'—')+'</span></div>';
+  }).join('');
+  var stat=function(l,v,c){ return '<div class="mc-stat"><span class="mc-stat-l">'+l+'</span><span class="mc-stat-v"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
+  var totDiff=parseFloat((d.totLim-d.totSpent).toFixed(2));
+  var ov=document.createElement('div');
+  ov.className='app-modal-overlay open';
+  ov.id='month-close';
+  ov.innerHTML='<div class="app-modal mc-modal">'
+    +'<h3>Cierre de '+lbl+'</h3>'
+    +'<div class="mc-stats">'
+      +stat('Ingresos',fmtUSD(d.income),'#5DCAA5')
+      +stat('Gasto',fmtUSD(d.totSpent),'')
+      +stat(totDiff>=0?'Bajo el plan':'Sobre el plan',fmtShortUSD(Math.abs(totDiff)),totDiff>=0?'#4ED9A4':'#E24B4A')
+      +(d.nwDelta!=null?stat('Patrimonio',(d.nwDelta>=0?'+':'-')+fmtShortUSD(Math.abs(d.nwDelta)),d.nwDelta>=0?'#4ED9A4':'#E24B4A'):'')
+    +'</div>'
+    +(d.big?'<div class="mc-big">Movimiento mas grande · <b>'+escHtml(d.big.desc)+'</b> '+fmtUSD(d.big.amountUSD)+' en '+d.big.category+'</div>':'')
+    +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span></div><div class="mc-rows">'+rows+'</div>'
+          :'<div class="mc-big">Sin gasto registrado en '+lbl+'.</div>')
+    +'<div class="modal-actions"><button class="btn btnp" id="_mcok">Listo</button></div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  var close=function(){
+    ov.remove();
+    if(S.lastCloseSeen!==month){ S.lastCloseSeen=month; S.lastCloseSeenUpdatedAt=stamp(); save(); }
+  };
+  ov.querySelector('#_mcok').onclick=close;
+  ov.onclick=function(e){ if(e.target===ov) close(); };
+};
+// Se abre solo cuando el mes YA cambio y todavia no viste ese cierre. Sin txs en
+// el mes cerrado no hay nada que contar, y se sale SIN marcarlo visto: si mas
+// tarde cargas las txs de ese mes, el cierre todavia te espera.
+function maybeShowMonthClose(){
+  var closed=prevMonth(monthKey(new Date()));
+  if(S.lastCloseSeen===closed) return;
+  if(!S.transactions.some(function(t){ return t.date.slice(0,7)===closed; })) return;
+  window.showMonthClose(closed);
+}
 function getActiveAlerts(){
   var alerts=[];
   var now=new Date();
@@ -2836,6 +2920,7 @@ function renderBudget(){
     +'<select onchange="window._budMonthSel(this.value)">'
     +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+fmtMonthLabel(m)+'</option>'; }).join('')
     +'</select>'
+    +'<button class="bdg-scope-btn" title="Resumen del mes seleccionado" onclick="showMonthClose(\''+month+'\')">Cierre</button>'
     +'</div>';
 
   // Top band — hero + donut
@@ -4071,6 +4156,7 @@ async function bootAfterAuth(firstLogin){
   // row de tu usuario). El merge del servidor evita cualquier clobber.
   if(firstLogin){ _dirty=true; pushToCloud(); }
   runMigrations();
+  try{ maybeShowMonthClose(); }catch(e){ console.error('month close:',e); }
   var hash=(window.location.hash||'').replace('#','');
   // La tab del hash ya se activo en init() (antes del pull). Re-navegarla aqui
   // re-disparaba la animacion de entrada (doble render visible al recargar);
