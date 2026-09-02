@@ -465,11 +465,7 @@ await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesA
 // limite y nota al pie de una card, por nombre de categoria
 const card = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];if(!c)return 'sin card';return (c.querySelector('.bdg-cat-sub')||{}).textContent||'';})()`);
 
-check('sin rollover el limite es el asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
-
-await ev("window._budRolloverUI()"); await sleep(300);
-await ev("toggleRolloverCat('Groceries');toggleRolloverCat('Transport')"); await sleep(500);
-
+// Viene encendido para todas: el mapa guarda solo las excepciones.
 // Groceries: limite 100, gasto previo 60 -> sobran 40 -> 140
 check('lo que sobro sube el limite', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
 check('la card dice de donde sale', /\+\$40.*del mes pasado/.test(await card('Groceries')), await card('Groceries'));
@@ -481,8 +477,10 @@ check('el exceso se muestra en negativo', /-\$30.*del mes pasado/.test(await car
 const heroTot = await ev("(document.querySelector('.bdg-hero-sub')||{}).textContent||''");
 check('el total del mes no se mueve', heroTot.includes('$1,000.00'), heroTot);
 
+await ev("window._budRolloverUI()"); await sleep(300);
 await ev("toggleRolloverCat('Groceries')"); await sleep(400);
 check('apagarlo vuelve al limite asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+check('la excepcion queda guardada como false', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').rolloverCats.Groceries===false"));
 check('y sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('of $70.00'); })(), await card('Transport'));
 
 if (process.env.SHOT2) {

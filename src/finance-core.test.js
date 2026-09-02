@@ -3,7 +3,7 @@ import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
-  rolloverCarryCore, catLimitWithCarryCore,
+  rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -333,5 +333,48 @@ describe('rollover de categoria', () => {
 
   it('una categoria sin % no inventa limite por arrastre', () => {
     expect(catLimitWithCarryCore(0, 50, true)).toBe(0);
+  });
+});
+
+describe('ritmo por categoria', () => {
+  // $30 en 10 dias de un mes de 30 -> termina en $90
+  it('proyecta al ritmo de lo que va del mes', () => {
+    expect(catPaceCore(30, 75, 10, 30)).toEqual({ projected: 90, over: 15 });
+  });
+
+  it('sin limite no hay nada que proyectar', () => {
+    expect(catPaceCore(30, 0, 10, 30)).toBeNull();
+  });
+
+  it('el dia 0 no define ningun ritmo', () => {
+    expect(catPaceCore(30, 75, 0, 30)).toBeNull();
+  });
+
+  it('avisa antes de pasarte, no despues', () => {
+    var a = catPaceAlertCore(30, 75, 10, 30);
+    expect(a.projected).toBe(90);
+    expect(a.sev).toBe('warn');
+  });
+
+  it('no avisa si ya te pasaste: el aviso llega tarde', () => {
+    expect(catPaceAlertCore(80, 75, 10, 30)).toBeNull();
+  });
+
+  it('no avisa en los primeros dias: un gasto suelto no es un ritmo', () => {
+    expect(catPaceAlertCore(20, 75, 3, 30)).toBeNull();
+  });
+
+  it('no avisa por un exceso de redondeo', () => {
+    // 25.5 en 10 de 30 -> 76.5, apenas 2% sobre 75
+    expect(catPaceAlertCore(25.5, 75, 10, 30)).toBeNull();
+  });
+
+  it('marca critico cuando el ritmo se dispara', () => {
+    // 40 en 10 de 30 -> 120, 60% sobre 75
+    expect(catPaceAlertCore(40, 75, 10, 30).sev).toBe('crit');
+  });
+
+  it('sin gasto no hay ritmo que proyectar', () => {
+    expect(catPaceAlertCore(0, 75, 15, 30)).toBeNull();
   });
 });

@@ -202,3 +202,25 @@ export function catLimitWithCarryCore(baseLimit, carry, on) {
   if (!on || !(baseLimit > 0)) return parseFloat((baseLimit || 0).toFixed(2));
   return parseFloat(Math.max(0, baseLimit + carry).toFixed(2));
 }
+
+// Proyeccion de fin de mes de una categoria: al ritmo de lo que va del mes, cuanto
+// vas a terminar gastando. Devuelve null cuando la pregunta no tiene sentido (sin
+// limite asignado, o sin dias transcurridos que definan un ritmo).
+export function catPaceCore(spent, limit, dayOfMonth, daysInMonth) {
+  if (!(limit > 0) || !(dayOfMonth > 0) || !(daysInMonth > 0)) return null;
+  var projected = parseFloat(((spent || 0) / dayOfMonth * daysInMonth).toFixed(2));
+  return { projected: projected, over: parseFloat((projected - limit).toFixed(2)) };
+}
+
+// Vale la pena avisar? Solo si el aviso todavia sirve para algo: la categoria aun
+// NO se paso (si ya se paso, la card lo grita y el aviso llega tarde), el mes lleva
+// dias suficientes como para que el ritmo no sea ruido, y la proyeccion supera el
+// limite por un margen que no sea redondeo.
+export function catPaceAlertCore(spent, limit, dayOfMonth, daysInMonth) {
+  var p = catPaceCore(spent, limit, dayOfMonth, daysInMonth);
+  if (!p) return null;
+  if (dayOfMonth < 8) return null;
+  if (!(spent > 0) || spent >= limit) return null;
+  if (p.projected <= limit * 1.05) return null;
+  return { projected: p.projected, over: p.over, sev: p.projected > limit * 1.3 ? 'crit' : 'warn' };
+}
