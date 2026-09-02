@@ -1971,7 +1971,7 @@ window.showMonthClose=function(month){
       // El plan viene de dos partes: el % asignado y el arrastre del mes anterior.
       // La segunda va debajo, chica, porque explica por que el numero no es redondo.
       +'<span class="mc-num mc-dim mc-plan">'+(d.lim[c]>0?fmtUSD(d.lim[c]):'—')
-        +(d.carry[c]?'<i>'+sgn(d.carry[c])+' arrastre</i>':'')+'</span>'
+        +(d.carry[c]?'<i>'+sgn(d.carry[c])+' <b>arrastre</b><u>arr</u></i>':'')+'</span>'
       +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?sgn(diff):'—')+'</span>'
       +'<span class="mc-num" style="color:'+dpCol+'">'+dpTxt+'</span></div>';
   }).join('');
@@ -2000,6 +2000,7 @@ window.showMonthClose=function(month){
   ov.id='month-close';
   ov.innerHTML='<div class="app-modal mc-modal">'
     +'<h3>Cierre de '+lbl+'</h3>'
+    +'<div class="mc-body">'
     +'<div class="mc-stats">'
       +stat('Ingresos',fmtUSD(d.income),'#5DCAA5',incSub)
       +stat('Gasto',fmtUSD(d.totSpent),'',d.nTx+' movimiento'+(d.nTx===1?'':'s'))
@@ -2011,6 +2012,7 @@ window.showMonthClose=function(month){
     +(d.big?'<div class="mc-big">Movimiento mas grande · <b>'+escHtml(d.big.desc)+'</b> '+fmtUSD(d.big.amountUSD)+' en '+d.big.category+'</div>':'')
     +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span><span class="mc-num">vs '+fmtMonthLabel(prevMonth(month)).slice(0,3)+'</span></div><div class="mc-rows">'+rows+'</div>'
           :'<div class="mc-big">Sin gasto registrado en '+lbl+'.</div>')
+    +'</div>'
     +'<div class="modal-actions"><button class="btn btnp" id="_mcok">Listo</button></div>'
     +'</div>';
   document.body.appendChild(ov);

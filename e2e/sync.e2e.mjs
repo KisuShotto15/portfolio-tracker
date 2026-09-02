@@ -91,6 +91,21 @@ try {
   process.exit(1);
 }
 
+// Chrome levanta su CDP antes que vite preview termine de escuchar. Sin esperar
+// al server, el PRIMER Page.navigate caia en chrome-error://chromewebdata y esa
+// pestaña no reintenta sola: el escenario 1 fallaba entero y los siguientes
+// pasaban (para entonces el server ya estaba arriba).
+try {
+  await waitFor(
+    async () => (await fetch(URL_BASE)).ok,
+    20000, 200,
+    `vite preview no respondio en ${URL_BASE}`,
+  );
+} catch (e) {
+  console.error(`ERROR: ${e.message}`);
+  process.exit(1);
+}
+
 const targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json`)).json();
 const page = targets.find((t) => t.type === 'page');
 const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -141,6 +156,13 @@ async function boot() {
       'app arranco tras navigate (pull inicial + bootAfterAuth completo)',
     );
   } catch (e) {
+    // Red-net: si la navegacion murio en chrome-error (server aun no listo), la
+    // pestaña se queda ahi para siempre. Un solo reintento la saca.
+    if (String(await ev('location.href') || '').startsWith('chrome-error')) {
+      await send('Page.navigate', { url: `${URL_BASE}?e2e=${++bootN}#access_token=fake&refresh_token=fake` });
+      try { await waitFor(async () => await ev(APP_LOADED_EXPR), 15000, 150, 'app arranco tras reintento de navigate'); return; }
+      catch (e2) { console.warn(`  ! ${e2.message}`); return; }
+    }
     console.warn(`  ! ${e.message}`);
   }
 }
