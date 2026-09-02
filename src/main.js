@@ -4284,6 +4284,9 @@ async function bootAfterAuth(firstLogin){
 // Va ANTES de init() a proposito — un error dentro de init() es un bug de la app,
 // no un problema de cache, y no debe disparar el borrado de caches + reload.
 window.__appBooted = 1;
+var BUILD_ID=__BUILD_ID__;
+var _bid=document.getElementById('build-id');
+if(_bid) _bid.textContent='Build '+BUILD_ID;
 init();
 
 if('serviceWorker' in navigator){
@@ -4300,7 +4303,13 @@ if('serviceWorker' in navigator){
       reg.addEventListener('updatefound', function(){
         var nw=reg.installing; if(!nw) return;
         nw.addEventListener('statechange', function(){
-          if(nw.state==='activated'&&navigator.serviceWorker.controller) showUpdateToast();
+          if(nw.state!=='activated'||!navigator.serviceWorker.controller) return;
+          // El SW nuevo ya controla la pestana, pero el DOM sigue corriendo el
+          // bundle viejo hasta un reload. Si no hay nada que perder recargamos
+          // solos: en la PWA "reiniciar la app" suele restaurar el documento sin
+          // navegar, asi que esperar a que alguien toque el toast dejaba el
+          // dispositivo en la version vieja indefinidamente.
+          if(canAutoReload()) location.reload(); else showUpdateToast();
         });
       });
       // PWA abierta dias: el navegador solo chequea el SW al navegar. Chequeo cada
@@ -4311,6 +4320,26 @@ if('serviceWorker' in navigator){
     }).catch(function(){});
   }
 }
+// Recargar solo es seguro si no hay edicion a medio hacer ni push pendiente.
+function canAutoReload(){
+  if(_dirty||_pendingCount>0) return false;
+  if(document.querySelector('.app-modal-overlay.open')) return false;
+  var a=document.activeElement;
+  if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+  return true;
+}
+// Escotilla manual: borra caches, desregistra el SW y recarga. Es lo mismo que
+// hace heal() ante un bundle roto, pero a pedido — para cuando un deploy no
+// termina de bajar a un dispositivo.
+window.forceUpdate=function(){
+  var st=document.getElementById('build-status');
+  if(st) st.textContent='Limpiando cache...';
+  var jobs=[];
+  if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }));
+  if(navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }));
+  var go=function(){ location.reload(); };
+  Promise.all(jobs).then(go, go);
+};
 function showUpdateToast(){
   if(document.getElementById('sw-toast')) return;
   var b=document.createElement('div'); b.id='sw-toast'; b.className='sync-banner show';

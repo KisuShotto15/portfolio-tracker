@@ -635,6 +635,16 @@ if (process.env.SHOT2) {
   console.log('  · captura en ' + process.env.SHOT2);
 }
 
+// ── 14 · sello de build ─────────────────────────────────────────────────────
+// Sin esto no hay forma de saber, mirando el telefono, si un deploy llego: el
+// numero de Settings tiene que ser el mismo que el que sello el service worker.
+console.log('E2E sello de build');
+const swBuild = (((await import('node:fs')).readFileSync('dist/sw.js', 'utf8')).match(/const BUILD = '([^']+)'/) || [])[1];
+const uiBuild = (await ev("(document.getElementById('build-id')||{}).textContent||''")).replace('Build ', '');
+check('Settings muestra el build', /^[a-z0-9]{6,}$/.test(uiBuild), `ui=${uiBuild}`);
+check('y coincide con el del service worker', uiBuild === swBuild, `ui=${uiBuild} sw=${swBuild}`);
+check('el boton de forzar existe', await ev("typeof window.forceUpdate==='function'"));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
