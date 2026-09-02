@@ -365,7 +365,7 @@ cloudDoc = {};
 await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   JSON.parse(localStorage.getItem('ft13')||'{}'),
   { transactions: [], deletedTxIds: [], schemaVersion: 3, manualWallets: [
-      { id: 33, name: 'Emily', trackerOnly: true, balance: 200 },
+      { id: 33, name: 'Mercantil Panama', trackerOnly: true, balance: 200 },
       { id: 44, name: 'Fam', trackerOnly: true, balance: 80, debt: 'in', cycle: true },
       { id: 11, name: 'Roi', trackerOnly: true, balance: 1700, debt: 'in' },
       { id: 22, name: 'Ana', trackerOnly: true, balance: 300, owed: true } ],
@@ -387,7 +387,18 @@ check('la deuda resta del total de wallets', nw0 === 200 + 80 + 1700 - 300, `tot
 
 // Un tracker sin marcar NO es una deuda: sigue en su grupo y con su etiqueta.
 const grupos = await ev("[...document.querySelectorAll('#page-wallets .wm-group')].map(function(g){var t=g.querySelector('.wm-group-title');return (t?t.textContent:'')+':'+[...g.querySelectorAll('.wm-row')].map(function(r){return r.querySelector('.wm-name').textContent+'|'+(r.querySelector('.wm-badge')||{}).textContent}).join(',')}).join(' ~ ')");
-check('Emily queda como tracker comun', /Trackers:Emily\|tracker/.test(grupos), grupos);
+check('un tracker comun queda en su grupo', /Trackers:Mercantil Panama\|tracker/.test(grupos), grupos);
+// Las 4 columnas en una fila: el layout que se rompia antes de sacar .wm-acts
+// del flujo. Se fija el ancho porque abajo de 1280 baja a 2 a proposito.
+await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+await sleep(350);
+const filas = await ev("(function(){var g=[...document.querySelectorAll('#page-wallets .wm-group')];var tops={};g.forEach(function(e){tops[Math.round(e.getBoundingClientRect().top)]=1});return g.length+'/'+Object.keys(tops).length;})()");
+check('los 4 grupos entran en una sola fila', filas === '4/1', `grupos/filas = ${filas}`);
+const cortado = await ev("[...document.querySelectorAll('#page-wallets .wm-name')].some(function(e){return e.scrollWidth>e.clientWidth+1})");
+check('ningun nombre se desborda a 1600px', cortado === false);
+await send('Emulation.clearDeviceMetricsOverride', {});
+await sleep(250);
+
 check('las dos direcciones van juntas en Debts', /Debts:Roi\|me deben,Fam\|me deben,Ana\|debo/.test(grupos), grupos);
 
 // El boton de sumar es opt-in por wallet (la casilla "ciclo"), no sale en todas.
@@ -419,7 +430,7 @@ const settle = async (id, monto) => {
 };
 await settle(11, 150);
 check('cobrar baja lo que te deben', (await heroTotal()) === base - 150, `total=${await heroTotal()}`);
-check('un tracker comun no ofrece Cobrar/Pagar', (await ev("[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(r){return r.querySelector('.wm-name').textContent==='Emily'}).map(function(r){return !!r.querySelector('.wsettle')})[0]")) === false);
+check('un tracker comun no ofrece Cobrar/Pagar', (await ev("[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(r){return r.querySelector('.wm-name').textContent==='Mercantil Panama'}).map(function(r){return !!r.querySelector('.wsettle')})[0]")) === false);
 await settle(22, 150);
 check('pagar con esa plata deja el patrimonio igual', (await heroTotal()) === base, `antes=${base} despues=${await heroTotal()}`);
 
@@ -434,7 +445,7 @@ check('las dos son Savings (no tocan budget ni P&L)', txs.every((t) => t.categor
 // Captura opcional de la pagina de Wallets con una deuda cargada: SHOT=<archivo>.
 if (process.env.SHOT) {
   await ev("document.querySelectorAll('[class*=form-panel],[class*=overlay],.action-toast').forEach(function(e){e.style.display='none'});document.documentElement.classList.remove('sheet-open');showPage('wallets')"); await sleep(600);
-  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false });
+  await send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 900, deviceScaleFactor: 2, mobile: false });
   await sleep(400);
   const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
   (await import('node:fs')).writeFileSync(process.env.SHOT, Buffer.from(shot.result.data, 'base64'));

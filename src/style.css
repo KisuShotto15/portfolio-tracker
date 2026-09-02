@@ -738,12 +738,17 @@ input,select,textarea,button{font-family:inherit}
 .wm-key b{font-family:var(--font-num);color:var(--txt3);font-weight:400}
 .wm-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
 .wm-cols-3{grid-template-columns:1fr 1fr 1fr}
+/* Cuatro grupos (Exchanges, Trackers, Manual, Debts) en una sola fila. Entra
+   porque .wm-acts salio del flujo: antes cada fila reservaba 126px para los
+   botones y el nombre se quedaba sin lugar apenas la columna bajaba de ~330px. */
+.wm-cols-4{grid-template-columns:repeat(4,1fr)}
 /* Cobrar/Pagar: el unico boton de la fila con texto, porque es el que se usa. */
 .wico.wsettle{width:auto;padding:0 9px;font-size:11px;font-weight:600;color:var(--txt2)}
 .wico.wsettle:hover{color:var(--txt)}
 /* Cada fila de wallet mide ~200px de min-content (chip + saldo + acciones), asi que
    3 columnas piden ~640px y no entraban entre 721 y ~830px: la pagina se iba a
    scroll horizontal. A 2 columnas entra de sobra; ≤720px ya baja a 1. */
+@media(max-width:1280px){.wm-cols-4{grid-template-columns:1fr 1fr}}
 @media(max-width:900px){.wm-cols-3{grid-template-columns:1fr 1fr}}
 .wm-group{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:7px 8px 11px;min-width:0}
 .wm-group-head{display:flex;align-items:baseline;justify-content:space-between;padding:13px 16px 11px}
@@ -760,7 +765,9 @@ input,select,textarea,button{font-family:inherit}
 .wm-status.on{background:var(--green)}
 .wm-status.off{background:#6B7280}
 .wm-rid{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.wm-name{font-size:15px;font-weight:500;color:var(--txt);display:flex;align-items:center;gap:7px}
+/* Con cuatro columnas la fila puede quedar en ~130px: un nombre largo tiene que
+   cortarse con puntos suspensivos, no desbordar sobre el balance. */
+.wm-name{font-size:15px;font-weight:500;color:var(--txt);display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wm-meta{font-size:12px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wm-bal{font-family:var(--font-num);font-size:16px;font-weight:600;color:var(--txt);flex-shrink:0;white-space:nowrap}
 .wm-bal-stack{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0}
