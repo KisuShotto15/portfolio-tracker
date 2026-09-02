@@ -3,7 +3,7 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, m
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
-  rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore,
+  rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -1612,7 +1612,8 @@ function renderTx(){
 
 function getMonths(){ var seen={}; S.transactions.forEach(function(t){ seen[t.date.slice(0,7)]=1; }); var u=Object.keys(seen).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
 function fmtMonthLabel(m){ var p=String(m).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ',', '); }
-function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=getMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
+function dashMonths(){ return dashMonthsCore(getMonths(), S.snapshots, monthKey(new Date())); }
+function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=dashMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
 function populateTxMonth(){
   var sel=document.getElementById('tf-month'); if(!sel) return;
   var cur=sel.value;

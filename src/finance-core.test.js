@@ -3,7 +3,7 @@ import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
-  rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore,
+  rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -376,5 +376,32 @@ describe('ritmo por categoria', () => {
 
   it('sin gasto no hay ritmo que proyectar', () => {
     expect(catPaceAlertCore(0, 75, 15, 30)).toBeNull();
+  });
+});
+
+describe('meses del selector del Dashboard', () => {
+  // El bug: la ultima tx era de agosto y septiembre no aparecia, asi que no habia
+  // forma de volver al mes en curso.
+  it('siempre ofrece el mes en curso aunque no tenga transacciones', () => {
+    expect(dashMonthsCore(['2026-08', '2026-07'], [], '2026-09'))
+      .toEqual(['2026-09', '2026-08', '2026-07']);
+  });
+
+  it('incluye meses que solo tienen snapshot', () => {
+    expect(dashMonthsCore(['2026-08'], [{ date: '2026-06-30' }], '2026-08'))
+      .toEqual(['2026-08', '2026-06']);
+  });
+
+  it('no duplica un mes que ya venia de las txs', () => {
+    expect(dashMonthsCore(['2026-09'], [{ date: '2026-09-01' }], '2026-09'))
+      .toEqual(['2026-09']);
+  });
+
+  it('sin nada cargado ofrece el mes en curso', () => {
+    expect(dashMonthsCore([], [], '2026-09')).toEqual(['2026-09']);
+  });
+
+  it('descarta snapshots con fecha vacia', () => {
+    expect(dashMonthsCore([], [{ date: '' }, {}], '2026-09')).toEqual(['2026-09']);
   });
 });

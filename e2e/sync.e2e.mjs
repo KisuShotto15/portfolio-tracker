@@ -551,6 +551,27 @@ const mcTxt2 = await ev("(document.getElementById('month-close')||{}).textConten
 check('aparece la linea de sin explicar', /Sin explicar/.test(mcTxt2), mcTxt2.slice(0, 300));
 check('y dice cuanto falta: $80', /\+\$80/.test(mcTxt2), mcTxt2);
 
+// ── 13 · selector de mes del Dashboard ────────────────────────────────────
+// El bug reportado: con la ultima tx en un mes viejo, el Dashboard se quedaba
+// trabado ahi y no ofrecia el mes en curso. Pasa cuando alguien no cargo nada
+// todavia este mes — o sea, todos los 1ros de mes.
+console.log('E2E meses del Dashboard');
+cloudDoc = {};
+const mesViejo = `${antesR.getFullYear()}-${String(antesR.getMonth() + 1).padStart(2, '0')}`;
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { snapshots: [], snapshotsUpdatedAt: Date.now(), lastCloseSeen: '${mesViejo}',
+    transactions: [ { id: 950, createdAt: 950, seq: 0, date: '${mesViejo}-10',
+      desc: 'vieja', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 20,
+      originalCurrency: 'USD', imported: false, updatedAt: 950 } ],
+    transactionsUpdatedAt: Date.now(), deletedTxIds: [] })))`);
+await boot();
+await ev("showPage('summary')"); await sleep(400);
+const opts = JSON.parse(await ev("JSON.stringify([...document.querySelectorAll('#sum-month option')].map(function(o){return o.value}))"));
+check('ofrece el mes en curso aunque no tenga txs', opts.includes(mesActR), `opciones=${JSON.stringify(opts)}`);
+check('sigue ofreciendo el mes con txs', opts.includes(mesViejo), `opciones=${JSON.stringify(opts)}`);
+check('se puede cambiar de mes', await ev(`(function(){var s=document.getElementById('sum-month');s.value='${mesActR}';s.dispatchEvent(new Event('change'));return s.value==='${mesActR}';})()`));
+
 if (process.env.SHOT2) {
   await ev("document.querySelectorAll('#month-close').forEach(function(e){e.remove()})");
   await ev(`showMonthClose('${mesAntR}')`); await sleep(300);

@@ -224,3 +224,20 @@ export function catPaceAlertCore(spent, limit, dayOfMonth, daysInMonth) {
   if (p.projected <= limit * 1.05) return null;
   return { projected: p.projected, over: p.over, sev: p.projected > limit * 1.3 ? 'crit' : 'warn' };
 }
+
+// Meses que ofrece el selector del Dashboard. NO alcanza con los meses que tienen
+// transacciones: el Dashboard vive de snapshots y del mes en curso, asi que quien
+// no cargo ninguna tx este mes se quedaba trabado en el ultimo mes que si tenia,
+// sin manera de volver al actual. (El Budget y el filtro de Transacciones ya
+// sumaban el mes en curso por su cuenta; el Dashboard era el unico que no.)
+export function dashMonthsCore(txMonths, snapshots, nowMonth) {
+  var seen = {}, out = [];
+  (txMonths || [])
+    .concat((snapshots || []).map(function (s) { return String(s.date || '').slice(0, 7); }))
+    .concat([nowMonth])
+    .forEach(function (m) {
+      if (!m || seen[m]) return;
+      seen[m] = 1; out.push(m);
+    });
+  return out.sort().reverse();
+}
