@@ -198,6 +198,28 @@ export function rolloverCarryCore(prevLimit, prevSpent) {
 // Limite efectivo del mes: el asignado por % mas el arrastre. Nunca baja de 0 —
 // un exceso mayor al limite dejaria la categoria en negativo, que no se puede
 // gastar ni dibujar en una barra.
+// Rollover por MES: solo arrastra lo que este marcado para ese mes concreto.
+// Antes el mapa era plano ({cat:false} = excepcion) y valia para todos los meses,
+// asi que encender una categoria la encendia tambien en los meses ya cerrados.
+export function rollOnCore(rolloverByMonth, cat, month) {
+  var m = (rolloverByMonth || {})[month];
+  return !!(m && m[cat] === true);
+}
+
+// Pasa el mapa plano viejo al nuevo por-mes. Lo que estaba encendido (todo menos
+// las excepciones en false) queda encendido SOLO en `month`: los meses anteriores
+// arrancan apagados, que era el comportamiento que sobraba. Idempotente: si ya
+// tiene forma nueva (valores objeto) lo devuelve tal cual.
+export function migrateRolloverCore(cur, cats, month) {
+  var keys = Object.keys(cur || {});
+  if (keys.some(function (k) { return cur[k] && typeof cur[k] === 'object'; })) return cur;
+  var m = {};
+  (cats || []).forEach(function (c) { if ((cur || {})[c] !== false) m[c] = true; });
+  var out = {};
+  if (Object.keys(m).length) out[month] = m;
+  return out;
+}
+
 export function catLimitWithCarryCore(baseLimit, carry, on) {
   if (!on || !(baseLimit > 0)) return parseFloat((baseLimit || 0).toFixed(2));
   return parseFloat(Math.max(0, baseLimit + carry).toFixed(2));

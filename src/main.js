@@ -3,7 +3,7 @@ import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, m
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
-  rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore,
+  rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -1907,11 +1907,11 @@ function monthCloseData(month){
     var pcta=catBudgetPct(cat,month);
     var base=pcta>0?parseFloat((pcta/100*bt).toFixed(2)):0;
     var cy=catCarry(cat,month);
-    var l=catLimitWithCarryCore(base,cy,rollOn(cat));
+    var l=catLimitWithCarryCore(base,cy,rollOn(cat,month));
     var sp=catNetSpend(month,[cat]);
     if(l<=0&&sp<=0) return;
     lim[cat]=l; spent[cat]=sp; totLim+=l; totSpent+=sp;
-    carry[cat]=rollOn(cat)&&base>0?cy:0;
+    carry[cat]=rollOn(cat,month)&&base>0?cy:0;
     prev[cat]=catNetSpend(pm,[cat]);
   });
   // Snapshot vigente al cierre de un mes: el ultimo tomado en ese mes o antes. Sin
@@ -2067,7 +2067,7 @@ function getActiveAlerts(){
   BUDGET_CATS.forEach(function(cat){
     var pcta=catBudgetPct(cat,curMonth);
     var base=pcta>0?parseFloat((pcta/100*_bt).toFixed(2)):0;
-    var lim=catLimitWithCarryCore(base,catCarry(cat,curMonth),rollOn(cat));
+    var lim=catLimitWithCarryCore(base,catCarry(cat,curMonth),rollOn(cat,curMonth));
     var pace=catPaceAlertCore(catNetSpend(curMonth,[cat]),lim,now.getDate(),_dim);
     if(!pace) return;
     alerts.push({
@@ -2761,20 +2761,31 @@ function saveBudget(){
 function budgetTotalFor(month){ return budgetTotalForCore(S.budgetTotal, S.budgetTotalByMonth, month); }
 // % efectivo de una categoria para un mes: override del mes > default global.
 function catBudgetPct(cat,month){ return catBudgetPctCore(S.categoryBudgetPcts, S.categoryBudgetPctsByMonth, cat, month); }
-// Arrastre del mes anterior para una categoria: solo si tiene rollover encendido.
-// Ausente = encendido; solo un false explicito lo apaga.
-function rollOn(cat){ return (S.rolloverCats||{})[cat]!==false; }
+// Arrastre del mes anterior para una categoria: solo si ese MES tiene el rollover
+// encendido para ella. Ausente = apagado; se enciende mes por mes a proposito.
+function rollOn(cat,month){ return rollOnCore(S.rolloverCats,cat,month); }
 function catCarry(cat,month){
-  if(!rollOn(cat)) return 0;
+  if(!rollOn(cat,month)) return 0;
   var pm=prevMonth(month), pPct=catBudgetPct(cat,pm);
   var pLim=pPct>0?parseFloat((pPct/100*budgetTotalFor(pm)).toFixed(2)):0;
   return rolloverCarryCore(pLim, catNetSpend(pm,[cat]));
 }
 var _rolloverUI=false;
 window._budRolloverUI=function(){ _rolloverUI=!_rolloverUI; renderBudget(); };
-window.toggleRolloverCat=function(cat){
+window.toggleRolloverCat=function(cat,month){
   if(!S.rolloverCats) S.rolloverCats={};
-  if(rollOn(cat)) S.rolloverCats[cat]=false; else delete S.rolloverCats[cat];
+  var m=S.rolloverCats[month]||(S.rolloverCats[month]={});
+  if(m[cat]===true) delete m[cat]; else m[cat]=true;
+  if(!Object.keys(m).length) delete S.rolloverCats[month];
+  S.rolloverCatsUpdatedAt=stamp();
+  save(); renderBudget();
+};
+// Todo o nada para el mes visible: con seis categorias, encenderlas una por una
+// era el gesto mas repetido del panel.
+window.toggleRolloverAll=function(month){
+  if(!S.rolloverCats) S.rolloverCats={};
+  if(BUDGET_CATS.every(function(c){ return rollOn(c,month); })) delete S.rolloverCats[month];
+  else { var m={}; BUDGET_CATS.forEach(function(c){ m[c]=true; }); S.rolloverCats[month]=m; }
   S.rolloverCatsUpdatedAt=stamp();
   save(); renderBudget();
 };
@@ -3022,7 +3033,7 @@ function renderBudget(){
   var allocTxt=Math.abs(allocDiff)<0.5?sumPctHead.toFixed(1)+'% ✓'
     :allocDiff>0?sumPctHead.toFixed(1)+'% · '+allocDiff+'% short'
     :sumPctHead.toFixed(1)+'% · '+Math.abs(allocDiff)+'% over';
-  var rollN=BUDGET_CATS.filter(rollOn).length;
+  var rollN=BUDGET_CATS.filter(function(c){ return rollOn(c,month); }).length;
   html+='<div class="bdg-cat-head"><span class="cleg" style="margin:0">Categories</span>'
     +'<span class="bdg-alloc-chip" style="--ac:'+allocCol+'" title="Sum of allocated % (target: 100%)">'
     +'<i class="bdg-alloc-mini"><i style="width:'+Math.min(100,sumPctHead)+'%"></i></i>'+allocTxt+'</span>'
@@ -3040,16 +3051,19 @@ function renderBudget(){
       :(hasOvr?'<span class="bdg-scope"><button class="bdg-scope-btn reset" title="Back to the default budget for '+mShort+'" onclick="window._budResetMonth()">Reset '+mShort+'</button></span>':''))
     // Fuera del ternario: la fila de scope hoy esta apagada (BUDGET_SCOPE_UI) y el
     // rollover tiene que verse igual.
-    +'<span class="bdg-scope"><button class="bdg-scope-btn'+(_rolloverUI?' on':'')+'" title="Arrastrar al mes siguiente lo que sobra (o falta) en cada categoria" onclick="window._budRolloverUI()">Rollover · '+rollN+'/'+BUDGET_CATS.length+'</button></span>'
+    +'<span class="bdg-scope"><button class="bdg-scope-btn'+(_rolloverUI?' on':'')+'" title="Arrastrar a '+mShort+' lo que sobro (o falto) el mes anterior. Se elige mes por mes." onclick="window._budRolloverUI()">Rollover '+mShort+' · '+rollN+'/'+BUDGET_CATS.length+'</button></span>'
     +'</div>';
   // Elegir a que categorias se les arrastra el sobrante. Se despliega desde el
   // boton para no ocupar una fila permanente por una opcion que se toca una vez.
   if(_rolloverUI){
+    var allOn=rollN===BUDGET_CATS.length;
     html+='<div class="bdg-roll-row">'
-      +'<span class="bdg-roll-hint">Lo que sobra se suma al limite del mes siguiente; lo que te pasas se resta. Encendido en todas por defecto — tocá una para apagarla.</span>'
-      +'<span class="bdg-scope">'+BUDGET_CATS.map(function(c){
-        return '<button class="bdg-scope-btn'+(rollOn(c)?' on':'')+'" onclick="toggleRolloverCat(\''+c+'\')">'+c+'</button>';
-      }).join('')+'</span></div>';
+      +'<span class="bdg-roll-hint">Suma a '+mShort+' lo que sobro en '+fmtMonthLabel(prevMonth(month))+' y resta lo que te pasaste. Vale solo para '+mShort+': cada mes se enciende aparte.</span>'
+      +'<span class="bdg-scope">'
+        +'<button class="bdg-scope-btn roll-all" onclick="toggleRolloverAll(\''+month+'\')">'+(allOn?'Ninguna':'Todas')+'</button>'
+        +BUDGET_CATS.map(function(c){
+          return '<button class="bdg-scope-btn'+(rollOn(c,month)?' on':'')+'" onclick="toggleRolloverCat(\''+c+'\',\''+month+'\')">'+c+'</button>';
+        }).join('')+'</span></div>';
   }
   html+='<div class="bdg-cats">';
   var insMonth=prevMonth(month);
@@ -3060,7 +3074,7 @@ function renderBudget(){
     // El arrastre mueve SOLO el limite de la categoria. El total del mes, el
     // "Remaining" del hero y el medidor de % siguen siendo los asignados: el
     // rollover reparte distinto, no crea presupuesto.
-    var on=rollOn(cat), carry=on?catCarry(cat,month):0;
+    var on=rollOn(cat,month), carry=on?catCarry(cat,month):0;
     return {cat:cat,s:s,pct:pcta,lim:catLimitWithCarryCore(base,carry,on),carry:on?carry:0,
       ovr:!!(monthOvr&&monthOvr[cat]!=null)};
   });
@@ -4157,6 +4171,11 @@ var MIGRATIONS=[
     var hit=S.manualWallets.filter(function(w){ return w.owed===true; });
     S.manualWallets.forEach(function(w){ if('owed' in w){ if(w.owed===true) w.debt='out'; delete w.owed; } });
     if(hit.length) S.manualWalletsUpdatedAt=stamp();
+  }},
+  { v:5, fn:function(){ // rollover plano (valia para todos los meses) → por mes
+    var next=migrateRolloverCore(S.rolloverCats,BUDGET_CATS,monthKey(new Date()));
+    if(next===S.rolloverCats) return;
+    S.rolloverCats=next; S.rolloverCatsUpdatedAt=stamp();
   }},
 ];
 function runMigrations(){

@@ -577,6 +577,10 @@ input,select,textarea,button{font-family:inherit}
 .bdg-scope-btn{font-size:11px;padding:3px 11px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s}
 .bdg-scope-btn.on{border-color:var(--accent);color:#fff;background:rgba(155,112,240,0.14)}
 .bdg-scope-btn.reset{color:#E24B4A}
+/* Todas/Ninguna manda sobre el resto de la fila: se separa con un divisor para
+   que no se lea como una categoria mas. */
+.bdg-scope-btn.roll-all{font-weight:600;color:var(--txt2);margin-right:6px;padding-right:13px;border-right:0;position:relative}
+.bdg-scope-btn.roll-all::after{content:'';position:absolute;right:-4px;top:2px;bottom:2px;width:1px;background:var(--line-soft)}
 .tx-rec-row{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
 .tx-rec-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt2);cursor:pointer;padding:6px 0;user-select:none}
 /* especificidad extra: .tx-form-panel input (width:100%,height:42px) lo agrandaba */

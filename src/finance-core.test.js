@@ -4,6 +4,7 @@ import {
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
+  rollOnCore, migrateRolloverCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -403,5 +404,44 @@ describe('meses del selector del Dashboard', () => {
 
   it('descarta snapshots con fecha vacia', () => {
     expect(dashMonthsCore([], [{ date: '' }, {}], '2026-09')).toEqual(['2026-09']);
+  });
+});
+
+describe('rollover por mes', () => {
+  it('solo cuenta lo marcado para ESE mes', () => {
+    const r = { '2026-09': { Groceries: true } };
+    expect(rollOnCore(r, 'Groceries', '2026-09')).toBe(true);
+    expect(rollOnCore(r, 'Groceries', '2026-08')).toBe(false);
+    expect(rollOnCore(r, 'Home', '2026-09')).toBe(false);
+  });
+
+  it('sin nada guardado esta apagado', () => {
+    expect(rollOnCore(undefined, 'Home', '2026-09')).toBe(false);
+    expect(rollOnCore({}, 'Home', '2026-09')).toBe(false);
+    expect(rollOnCore({ '2026-09': {} }, 'Home', '2026-09')).toBe(false);
+  });
+
+  it('un false explicito no enciende', () => {
+    expect(rollOnCore({ '2026-09': { Home: false } }, 'Home', '2026-09')).toBe(false);
+  });
+
+  it('migra el mapa plano dejando encendido solo el mes en curso', () => {
+    const out = migrateRolloverCore({ Groceries: false }, ['Home', 'Groceries'], '2026-09');
+    expect(out).toEqual({ '2026-09': { Home: true } });
+    expect(out['2026-08']).toBeUndefined();
+  });
+
+  it('mapa plano vacio = todo encendido, pero solo en el mes en curso', () => {
+    expect(migrateRolloverCore({}, ['Home', 'Groceries'], '2026-09'))
+      .toEqual({ '2026-09': { Home: true, Groceries: true } });
+  });
+
+  it('si todas eran excepcion no deja mes alguno', () => {
+    expect(migrateRolloverCore({ Home: false, Groceries: false }, ['Home', 'Groceries'], '2026-09')).toEqual({});
+  });
+
+  it('es idempotente sobre la forma nueva', () => {
+    const cur = { '2026-07': { Home: true } };
+    expect(migrateRolloverCore(cur, ['Home', 'Groceries'], '2026-09')).toBe(cur);
   });
 });

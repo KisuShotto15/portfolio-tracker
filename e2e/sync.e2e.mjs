@@ -391,6 +391,7 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
       { id: 44, name: 'Fam', trackerOnly: true, balance: 80, debt: 'in', cycle: true },
       { id: 11, name: 'Roi', trackerOnly: true, balance: 1700, debt: 'in' },
       { id: 22, name: 'Ana', trackerOnly: true, balance: 300, owed: true } ],
+    rolloverCats: { Groceries: false }, rolloverCatsUpdatedAt: Date.now(),
     manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
 await boot();
 await ev("showPage('wallets')"); await sleep(400);
@@ -403,6 +404,14 @@ const liqSub = async () => await ev(
 // Ana entra con el owed:true viejo: la migracion v4 tiene que convertirlo.
 const anaDebt = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).filter(function(w){return w.name==='Ana'}).map(function(w){return w.debt+'/'+('owed' in w)})[0]");
 check('migra owed:true a debt:out', anaDebt === 'out/false', `Ana=${anaDebt}`);
+
+// v5: el rollover plano valia para todos los meses. Al migrar queda encendido
+// solo en el mes en curso, y respetando la excepcion que estaba en false.
+const rollMig = JSON.parse(await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').rolloverCats||{})"));
+const mesHoy = new Date().toISOString().slice(0, 7);
+check('migra el rollover plano al mes en curso', rollMig[mesHoy] && rollMig[mesHoy].Home === true, JSON.stringify(rollMig));
+check('respeta la excepcion vieja', !(rollMig[mesHoy] || {}).Groceries, JSON.stringify(rollMig));
+check('y no enciende meses viejos', Object.keys(rollMig).length === 1, JSON.stringify(rollMig));
 
 const nw0 = await heroTotal();
 check('la deuda resta del total de wallets', nw0 === 200 + 80 + 1700 - 300, `total=${nw0} (esperado 1680)`);
@@ -511,9 +520,13 @@ await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesA
 // limite y nota al pie de una card, por nombre de categoria
 const card = async (cat) => await ev(`(function(){var c=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent===${JSON.stringify(cat)}})[0];if(!c)return 'sin card';return (c.querySelector('.bdg-cat-sub')||{}).textContent||'';})()`);
 
-// Viene encendido para todas: el mapa guarda solo las excepciones.
+// Arranca apagado: el rollover se enciende mes por mes, no viene puesto.
+check('sin encender no hay arrastre', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+
+await ev("window._budRolloverUI()"); await sleep(300);
+await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
 // Groceries: limite 100, gasto previo 60 -> sobran 40 -> 140
-check('lo que sobro sube el limite', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
+check('Todas enciende de una', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
 check('la card dice de donde sale', /\+\$40.*del mes pasado/.test(await card('Groceries')), await card('Groceries'));
 // Transport: limite 100, gasto previo 130 -> exceso 30 -> 70
 check('lo que te pasaste baja el limite', (await card('Transport')).includes('of $70.00'), await card('Transport'));
@@ -523,11 +536,22 @@ check('el exceso se muestra en negativo', /-\$30.*del mes pasado/.test(await car
 const heroTot = await ev("(document.querySelector('.bdg-hero-sub')||{}).textContent||''");
 check('el total del mes no se mueve', heroTot.includes('$1,000.00'), heroTot);
 
+// El bug que motivo el cambio: encender un mes NO puede encender los anteriores.
+const rollLS = async () => await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').rolloverCats||{})");
+check('queda guardado bajo el mes visible', JSON.parse(await rollLS())[mesActR].Groceries === true, await rollLS());
+check('el mes anterior sigue apagado', JSON.parse(await rollLS())[mesAntR] === undefined, await rollLS());
+
+await ev(`toggleRolloverCat('Groceries','${mesActR}')`); await sleep(400);
+check('apagar una vuelve al limite asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
+check('y no toca a las demas', (await card('Transport')).includes('of $70.00'), await card('Transport'));
+check('sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('of $70.00'); })(), await card('Transport'));
+
 await ev("window._budRolloverUI()"); await sleep(300);
-await ev("toggleRolloverCat('Groceries')"); await sleep(400);
-check('apagarlo vuelve al limite asignado', (await card('Groceries')).includes('of $100.00'), await card('Groceries'));
-check('la excepcion queda guardada como false', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').rolloverCats.Groceries===false"));
-check('y sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('of $70.00'); })(), await card('Transport'));
+await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
+check('Todas con una apagada las enciende todas', (await card('Groceries')).includes('of $140.00'), await card('Groceries'));
+await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
+check('Ninguna las apaga todas', (await card('Groceries')).includes('of $100.00') && (await card('Transport')).includes('of $100.00'), await card('Transport'));
+check('y borra el mes del mapa', JSON.parse(await rollLS())[mesActR] === undefined, await rollLS());
 
 // ── 12 · cierre de mes ────────────────────────────────────────────────────
 // El escenario anterior dejo gasto en el mes pasado y ninguno en este, asi que el
