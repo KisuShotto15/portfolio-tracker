@@ -451,6 +451,9 @@ const mesActR = `${hoyR.getFullYear()}-${String(hoyR.getMonth() + 1).padStart(2,
 const antesR = new Date(hoyR.getFullYear(), hoyR.getMonth() - 1, 15);
 const mesAntR = `${antesR.getFullYear()}-${String(antesR.getMonth() + 1).padStart(2, '0')}`;
 const dAntR = `${mesAntR}-15`;
+const dosAntes = new Date(hoyR.getFullYear(), hoyR.getMonth() - 2, 28);
+const dPrevSnapR = `${dosAntes.getFullYear()}-${String(dosAntes.getMonth() + 1).padStart(2, '0')}-28`;
+const dCloseSnapR = `${mesAntR}-28`;
 await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   JSON.parse(localStorage.getItem('ft13')||'{}'),
   { manualWallets: [], rolloverCats: {}, rolloverCatsUpdatedAt: Date.now(),
@@ -459,7 +462,15 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
     categoryBudgetPctsByMonth: {},
     transactions: [
       { id: 901, createdAt: 901, seq: 0, date: '${dAntR}', desc: 'prev groceries', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 60, originalCurrency: 'USD', imported: false, updatedAt: 901 },
-      { id: 902, createdAt: 902, seq: 1, date: '${dAntR}', desc: 'prev transport', wallet: '', type: 'Debit', category: 'Transport', amountUSD: 130, originalCurrency: 'USD', imported: false, updatedAt: 902 } ],
+      { id: 902, createdAt: 902, seq: 1, date: '${dAntR}', desc: 'prev transport', wallet: '', type: 'Debit', category: 'Transport', amountUSD: 130, originalCurrency: 'USD', imported: false, updatedAt: 902 },
+      { id: 903, createdAt: 903, seq: 2, date: '${dAntR}', desc: 'sueldo', wallet: '', type: 'Credit', category: 'Income', amountUSD: 500, originalCurrency: 'USD', imported: false, updatedAt: 903 },
+      { id: 904, createdAt: 904, seq: 3, date: '${dAntR}', desc: 'a la novia', wallet: '', type: 'Debit', category: 'Transfer', amountUSD: 200, originalCurrency: 'USD', imported: false, updatedAt: 904 } ],
+    // Dos snapshots que abrazan el mes cerrado: sin ellos no hay variacion de
+    // patrimonio ni conciliacion que mostrar. 1000 -> 1110 = 500 - 190 - 200 + 0.
+    snapshots: [
+      { date: '${dPrevSnapR}', total: 1000, derivedIncome: 0 },
+      { date: '${dCloseSnapR}', total: 1110, derivedIncome: 0 } ],
+    snapshotsUpdatedAt: Date.now(),
     transactionsUpdatedAt: Date.now(), deletedTxIds: [] })))`);
 await boot();
 await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesActR}')`); await sleep(600);
@@ -496,6 +507,17 @@ check('titula el mes cerrado', mcTxt.includes('Cierre de'), mcTxt.slice(0, 80));
 check('muestra plan vs real por categoria', /Transport/.test(mcTxt) && /\$130\.00/.test(mcTxt) && /Groceries/.test(mcTxt), mcTxt.slice(0, 400));
 check('dice el movimiento mas grande', /Movimiento mas grande/.test(mcTxt) && /prev transport/.test(mcTxt), mcTxt.slice(0, 400));
 check('suma el gasto del mes', /\$190\.00/.test(mcTxt), mcTxt.slice(0, 400));
+check('cuenta los movimientos', /4 movimientos/.test(mcTxt), mcTxt.slice(0, 400));
+check('compara contra el mes anterior', /vs /.test(mcTxt), mcTxt.slice(0, 300));
+
+// Conciliacion: 500 de ingreso - 190 de gasto - 200 que salio en Transfer = +110,
+// que es exactamente lo que subio el patrimonio. Sin residuo.
+check('concilia la variacion del patrimonio', /Como se movio el patrimonio/.test(mcTxt), mcTxt.slice(0, 200));
+check('muestra los flujos externos aparte', /Flujos externos/.test(mcTxt) && /-\$200/.test(mcTxt), mcTxt);
+check('la variacion cuadra: +\$110', /\+\$110/.test(mcTxt), mcTxt);
+check('sin residuo no hay linea de "sin explicar"', !/Sin explicar/.test(mcTxt), mcTxt);
+// Ahorro = 500 - 190 = 310, 62% de los ingresos
+check('muestra el ahorro del mes', /\+\$310/.test(mcTxt) && /62% de tus ingresos/.test(mcTxt), mcTxt.slice(0, 400));
 
 await ev("document.getElementById('_mcok').click()"); await sleep(300);
 check('al cerrarlo desaparece', !(await ev("!!document.getElementById('month-close')")));
@@ -506,7 +528,23 @@ check('no vuelve a aparecer en el proximo arranque', !(await ev("!!document.getE
 await ev(`showPage('budget'); showMonthClose('${mesAntR}')`); await sleep(400);
 check('se puede reabrir a mano', await ev("!!document.getElementById('month-close')"));
 
+// La linea de "sin explicar" no puede ser decorativa: si el patrimonio se movio
+// mas de lo que explican las txs, tiene que aparecer con la diferencia exacta.
+// Patrimonio +190 en vez de +110 -> quedan $80 sin explicar.
+cloudDoc = {};
+await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');
+  d.snapshots[1].total=1190; d.snapshotsUpdatedAt=Date.now(); d.lastCloseSeen=null;
+  localStorage.setItem('ft13',JSON.stringify(d));})()`);
+await boot();
+const mcTxt2 = await ev("(document.getElementById('month-close')||{}).textContent||''");
+check('aparece la linea de sin explicar', /Sin explicar/.test(mcTxt2), mcTxt2.slice(0, 300));
+check('y dice cuanto falta: $80', /\+\$80/.test(mcTxt2), mcTxt2);
+
 if (process.env.SHOT2) {
+  await ev("document.querySelectorAll('#month-close').forEach(function(e){e.remove()})");
+  await ev(`showMonthClose('${mesAntR}')`); await sleep(300);
+  await send('Emulation.setDeviceMetricsOverride', { width: 900, height: 1000, deviceScaleFactor: 2, mobile: false });
+  await sleep(300);
   const s3 = await send('Page.captureScreenshot', { format: 'png' });
   (await import('node:fs')).writeFileSync(process.env.SHOT2.replace('.png', '-cierre.png'), Buffer.from(s3.result.data, 'base64'));
   await ev("document.getElementById('_mcok').click()"); await sleep(200);

@@ -1900,15 +1900,18 @@ window.toggleAlertsDrop=function(){ _hbmToggle('alerts'); };
 // lo que faltaba era un momento donde la app te cuente que paso. Se arma para un
 // mes cerrado y se abre solo la primera vez que entras con el mes ya cambiado.
 function monthCloseData(month){
-  var lim={}, spent={}, totLim=0, totSpent=0;
-  var bt=budgetTotalFor(month);
+  var lim={}, spent={}, carry={}, prev={}, totLim=0, totSpent=0;
+  var bt=budgetTotalFor(month), pm=prevMonth(month);
   BUDGET_CATS.forEach(function(cat){
     var pcta=catBudgetPct(cat,month);
     var base=pcta>0?parseFloat((pcta/100*bt).toFixed(2)):0;
-    var l=catLimitWithCarryCore(base,catCarry(cat,month),rollOn(cat));
+    var cy=catCarry(cat,month);
+    var l=catLimitWithCarryCore(base,cy,rollOn(cat));
     var sp=catNetSpend(month,[cat]);
     if(l<=0&&sp<=0) return;
     lim[cat]=l; spent[cat]=sp; totLim+=l; totSpent+=sp;
+    carry[cat]=rollOn(cat)&&base>0?cy:0;
+    prev[cat]=catNetSpend(pm,[cat]);
   });
   // Snapshot vigente al cierre de un mes: el ultimo tomado en ese mes o antes. Sin
   // uno de cada lado no se puede hablar de variacion y la linea no se dibuja.
@@ -1920,42 +1923,92 @@ function monthCloseData(month){
   };
   var sNow=snapUpTo(month), sPrev=snapUpTo(prevMonth(month));
   var nwDelta=(sNow&&sPrev&&sNow!==sPrev)?parseFloat((sNow.total-sPrev.total).toFixed(2)):null;
+  // Conciliacion sobre el periodo ENTRE snapshots — que es donde la identidad del
+  // app se cumple exacta: nwDelta = (anotado + derivado) - gasto - (invOut - invIn).
+  // Sale de la definicion de derivedIncome; si el residuo no da ~0 es que algo no
+  // esta anotado, y esa linea lo dice en vez de esconderlo.
+  var rec=null;
+  if(nwDelta!=null){
+    var f=investmentFlow(sPrev,sNow);
+    var logged=periodLoggedIncome(sPrev,sNow);
+    var derived=0;
+    snaps.forEach(function(x){
+      if(x.date>sPrev.date&&x.date<=sNow.date&&typeof x.derivedIncome==='number') derived+=x.derivedIncome;
+    });
+    var pSpend=periodNetSpend(sPrev,sNow);
+    var ext=parseFloat((f.invOut-f.invIn).toFixed(2));
+    var r2=function(n){ return parseFloat(n.toFixed(2)); };
+    rec={logged:r2(logged),derived:r2(derived),spend:r2(pSpend),ext:ext,
+      resid:r2(nwDelta-(logged+derived-pSpend-ext))};
+  }
   var big=null;
   S.transactions.forEach(function(t){
     if(t.date.slice(0,7)!==month) return;
     if(EXPENSE_CATS_DASH.indexOf(t.category)<0) return;
     if(!big||t.amountUSD>big.amountUSD) big=t;
   });
-  return {month:month,lim:lim,spent:spent,totLim:parseFloat(totLim.toFixed(2)),
-    totSpent:parseFloat(totSpent.toFixed(2)),income:monthIncome(month),nwDelta:nwDelta,big:big};
+  var nTx=S.transactions.filter(function(t){ return t.date.slice(0,7)===month; }).length;
+  return {month:month,lim:lim,spent:spent,carry:carry,prev:prev,
+    totLim:parseFloat(totLim.toFixed(2)),totSpent:parseFloat(totSpent.toFixed(2)),
+    income:monthIncome(month),nwDelta:nwDelta,big:big,nTx:nTx,rec:rec};
 }
 window.showMonthClose=function(month){
   var d=monthCloseData(month);
   var lbl=fmtMonthLabel(month);
+  var sgn=function(n){ return (n>=0?'+':'-')+fmtShortUSD(Math.abs(n)); };
   var cats=Object.keys(d.lim).sort(function(a,b){ return d.spent[b]-d.spent[a]; });
   var rows=cats.map(function(c){
     var diff=parseFloat((d.lim[c]-d.spent[c]).toFixed(2));
     var col=d.lim[c]<=0?'var(--txt3)':diff<0?'#E24B4A':'#4ED9A4';
+    // Delta contra el mes anterior: gastar mas que el mes pasado se lee en rojo
+    // aunque hayas quedado dentro del plan — son dos preguntas distintas.
+    var dp=parseFloat((d.spent[c]-(d.prev[c]||0)).toFixed(2));
+    var dpTxt=(d.prev[c]||0)<=0?(d.spent[c]>0?'nuevo':'—'):sgn(dp);
+    var dpCol=(d.prev[c]||0)<=0?'var(--txt3)':dp>0?'#E24B4A':dp<0?'#4ED9A4':'var(--txt3)';
     return '<div class="mc-row"><span class="mc-cat"><i class="bdg-dot" style="background:'+(CCOLORS[c]||'#9B70F0')+'"></i>'+c+'</span>'
       +'<span class="mc-num">'+fmtUSD(d.spent[c])+'</span>'
-      +'<span class="mc-num mc-dim">'+(d.lim[c]>0?fmtUSD(d.lim[c]):'—')+'</span>'
-      +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?(diff>=0?'+':'-')+fmtShortUSD(Math.abs(diff)):'—')+'</span></div>';
+      // El plan viene de dos partes: el % asignado y el arrastre del mes anterior.
+      // La segunda va debajo, chica, porque explica por que el numero no es redondo.
+      +'<span class="mc-num mc-dim mc-plan">'+(d.lim[c]>0?fmtUSD(d.lim[c]):'—')
+        +(d.carry[c]?'<i>'+sgn(d.carry[c])+' arrastre</i>':'')+'</span>'
+      +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?sgn(diff):'—')+'</span>'
+      +'<span class="mc-num" style="color:'+dpCol+'">'+dpTxt+'</span></div>';
   }).join('');
-  var stat=function(l,v,c){ return '<div class="mc-stat"><span class="mc-stat-l">'+l+'</span><span class="mc-stat-v"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
+  var stat=function(l,v,c,sub){ return '<div class="mc-stat"><span class="mc-stat-l">'+l+'</span>'
+    +'<span class="mc-stat-v"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span>'
+    +(sub?'<span class="mc-stat-s">'+sub+'</span>':'')+'</div>'; };
   var totDiff=parseFloat((d.totLim-d.totSpent).toFixed(2));
+  var ahorro=parseFloat((d.income-d.totSpent).toFixed(2));
+  var tasa=d.income>0?Math.round(ahorro/d.income*100):null;
+  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' anotado · '+fmtShortUSD(d.rec.derived)+' derivado':'';
+  // Conciliacion: por que el patrimonio se movio lo que se movio. Sin esto el
+  // resumen mostraba ingresos y gastos que no cierran contra la variacion real.
+  var recLine=function(l,v,c){ return '<div class="mc-rec-row"><span>'+l+'</span><span class="mc-num"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
+  var recHtml='';
+  if(d.rec){
+    recHtml='<div class="mc-rec"><div class="mc-rec-h">Como se movio el patrimonio</div>'
+      +recLine('Ingresos',sgn(d.rec.logged+d.rec.derived),'#4ED9A4')
+      +recLine('Gasto',sgn(-d.rec.spend),'#E24B4A')
+      +(d.rec.ext!==0?recLine('Flujos externos · Transfer / Investments',sgn(-d.rec.ext),d.rec.ext>0?'#E24B4A':'#4ED9A4'):'')
+      +(Math.abs(d.rec.resid)>=0.5?recLine('Sin explicar · mercado o algo sin anotar',sgn(d.rec.resid),'var(--txt3)'):'')
+      +'<div class="mc-rec-row mc-rec-tot"><span>Variacion del patrimonio</span><span class="mc-num" style="color:'+(d.nwDelta>=0?'#4ED9A4':'#E24B4A')+'">'+sgn(d.nwDelta)+'</span></div>'
+      +'</div>';
+  }
   var ov=document.createElement('div');
   ov.className='app-modal-overlay open';
   ov.id='month-close';
   ov.innerHTML='<div class="app-modal mc-modal">'
     +'<h3>Cierre de '+lbl+'</h3>'
     +'<div class="mc-stats">'
-      +stat('Ingresos',fmtUSD(d.income),'#5DCAA5')
-      +stat('Gasto',fmtUSD(d.totSpent),'')
-      +stat(totDiff>=0?'Bajo el plan':'Sobre el plan',fmtShortUSD(Math.abs(totDiff)),totDiff>=0?'#4ED9A4':'#E24B4A')
-      +(d.nwDelta!=null?stat('Patrimonio',(d.nwDelta>=0?'+':'-')+fmtShortUSD(Math.abs(d.nwDelta)),d.nwDelta>=0?'#4ED9A4':'#E24B4A'):'')
+      +stat('Ingresos',fmtUSD(d.income),'#5DCAA5',incSub)
+      +stat('Gasto',fmtUSD(d.totSpent),'',d.nTx+' movimiento'+(d.nTx===1?'':'s'))
+      +stat('Ahorro',sgn(ahorro),ahorro>=0?'#4ED9A4':'#E24B4A',tasa!=null?tasa+'% de tus ingresos':'')
+      +stat('vs Plan',sgn(totDiff),totDiff>=0?'#4ED9A4':'#E24B4A',fmtShortUSD(d.totLim)+' planeado')
+      +(d.nwDelta!=null?stat('Patrimonio',sgn(d.nwDelta),d.nwDelta>=0?'#4ED9A4':'#E24B4A'):'')
     +'</div>'
+    +recHtml
     +(d.big?'<div class="mc-big">Movimiento mas grande · <b>'+escHtml(d.big.desc)+'</b> '+fmtUSD(d.big.amountUSD)+' en '+d.big.category+'</div>':'')
-    +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span></div><div class="mc-rows">'+rows+'</div>'
+    +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span><span class="mc-num">vs '+fmtMonthLabel(prevMonth(month)).slice(0,3)+'</span></div><div class="mc-rows">'+rows+'</div>'
           :'<div class="mc-big">Sin gasto registrado en '+lbl+'.</div>')
     +'<div class="modal-actions"><button class="btn btnp" id="_mcok">Listo</button></div>'
     +'</div>';

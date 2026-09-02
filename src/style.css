@@ -1573,15 +1573,28 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 
 /* ── Cierre de mes ─────────────────────────────────────────────────────── */
 .mc-modal{max-width:520px}
-.mc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:14px}
+/* minmax alto a proposito: con 5 tiles y 96px entraban 4 y el quinto quedaba solo
+   en su fila. A 112px caen 3+2, que se lee parejo. */
+.mc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:10px;margin-bottom:14px}
 .mc-stat{display:flex;flex-direction:column;gap:3px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:10px}
 .mc-stat-l{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
 .mc-stat-v{font-family:var(--font-num);font-size:17px;font-weight:600}
+.mc-stat-s{font-size:10px;color:var(--txt3);line-height:1.35}
+/* El label del tile no se parte: "vs Plan" en dos lineas descuadraba la fila */
+.mc-stat-l{white-space:nowrap}
+/* Conciliacion: por que el patrimonio se movio lo que se movio */
+.mc-rec{margin-bottom:14px;padding:11px 13px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);border-radius:10px}
+.mc-rec-h{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3);margin-bottom:8px}
+.mc-rec-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12.5px;color:var(--txt2);padding:3px 0}
+.mc-rec-tot{margin-top:6px;padding-top:8px;border-top:1px solid var(--line-soft);color:var(--txt);font-weight:600}
+/* El arrastre va debajo del plan: explica por que el numero no es redondo */
+.mc-plan{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.mc-plan i{font-style:normal;font-size:9.5px;opacity:.75}
 .mc-big{font-size:12.5px;color:var(--txt2);line-height:1.5;margin-bottom:14px}
 .mc-big b{color:var(--txt);font-weight:600}
 /* Las cuatro columnas comparten grid entre cabecera y filas para que Real/Plan/Dif
    queden alineados sin depender de cuanto mide el nombre de la categoria. */
-.mc-head,.mc-row{display:grid;grid-template-columns:1fr 74px 74px 66px;gap:6px;align-items:center}
+.mc-head,.mc-row{display:grid;grid-template-columns:1fr 74px 74px 60px 60px;gap:6px;align-items:center}
 .mc-head{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);padding-bottom:8px;border-bottom:1px solid var(--line-soft)}
 .mc-rows{max-height:min(46vh,320px);overflow-y:auto;margin-top:4px}
 .mc-row{font-size:13px;padding:7px 0;border-bottom:1px solid var(--line-soft)}
@@ -1590,7 +1603,8 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 .mc-num{font-family:var(--font-num);font-size:12.5px;text-align:right}
 .mc-dim{color:var(--txt3)}
 @media(max-width:520px){
-  .mc-head,.mc-row{grid-template-columns:1fr 62px 62px 56px}
-  .mc-num{font-size:11.5px}
+  .mc-head,.mc-row{grid-template-columns:1fr 58px 58px 48px 48px;gap:4px}
+  .mc-num{font-size:10.5px}
+  .mc-row{font-size:12px}
 }
 .bdg-close-row{display:flex;justify-content:center;margin:26px 0 8px}
