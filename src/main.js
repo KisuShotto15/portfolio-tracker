@@ -4,6 +4,7 @@ import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './fo
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
+  debtSinceCore, daysBetweenISO,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -2092,6 +2093,21 @@ function getActiveAlerts(){
     }
   }
 
+  // 3b. Deudas viejas. Una deuda parada no aparece en ningun gasto y su saldo no
+  // se mueve: sin aviso se vuelve invisible y te olvidas de cobrarla.
+  S.manualWallets.forEach(function(w){
+    if(!w.trackerOnly||!w.debt) return;
+    var bal=calcTrackerBal(w.name);
+    if(!(bal>0.005)) return;
+    var d=daysBetweenISO(debtSinceCore(S.transactions,w.name,w.balance||0),localToday());
+    if(d==null||d<DEBT_STALE_DAYS) return;
+    alerts.push({
+      sev:d>=180?'crit':'warn',
+      msg:(w.debt==='out'?'Le debes a ':'Te debe ')+w.name+' '+fmtUSD(bal)+' desde hace '+debtAgeLabel(d),
+      action:w.debt==='out'?'Pagala o acordá una fecha':'Cobrala o acordá una fecha'
+    });
+  });
+
   // 4. Goal progress lento
   if(S.dashGoal>0){
     var nw=snaps.length>0?snaps[0].total:getTotalBalance();
@@ -3237,6 +3253,16 @@ function trackerTxBalances(){
   _trkKey=k; _trkMap=trackerTxBalancesCore(S.manualWallets, S.transactions);
   return _trkMap;
 }
+// A partir de dos meses el aviso salta y la etiqueta pasa a meses: "hace 74 dias"
+// no se lee, "hace 2 meses" si.
+var DEBT_STALE_DAYS=60;
+function debtAgeLabel(d){
+  if(d<=0) return 'hoy';
+  if(d===1) return '1 dia';
+  if(d<DEBT_STALE_DAYS) return d+' dias';
+  var m=Math.round(d/30.44);
+  return m===1?'1 mes':m+' meses';
+}
 function calcTrackerBal(name){
   // Preferir la entrada tracker si hay duplicados con el mismo nombre.
   var mw=S.manualWallets.find(function(w){ return w.name===name&&w.trackerOnly===true; })
@@ -3522,6 +3548,12 @@ function renderWallets(){
     var mw=S.manualWallets.find(function(w){return w.name===name&&w.trackerOnly;});
     var total=_trkVal(name), isDebt=kind==='out';
     var meta='<span class="wm-badge'+(isDebt?' is-debt':'')+'">'+(kind==='in'?'me deben':isDebt?'debo':'tracker')+'</span>';
+    // Hace cuanto que existe ESTA deuda. Solo si hay saldo: a cero no hay deuda
+    // de la que contar dias.
+    if(kind&&total>0.005){
+      var dAge=daysBetweenISO(debtSinceCore(S.transactions,name,mw?(mw.balance||0):0),localToday());
+      if(dAge!=null) meta+='<span class="wm-age'+(dAge>=DEBT_STALE_DAYS?' is-stale':'')+'">hace '+debtAgeLabel(dAge)+'</span>';
+    }
     var right='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
     var acts='';
     if(mw){

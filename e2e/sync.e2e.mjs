@@ -492,6 +492,40 @@ if (process.env.SHOT) {
   console.log('  · captura en ' + process.env.SHOT);
 }
 
+// ── 10b · antiguedad de una deuda ─────────────────────────────────────────
+// Cuenta desde que el saldo dejo de ser cero, no desde la tx mas vieja: en una
+// wallet de ciclo esa fecha seria de una deuda ya saldada.
+console.log('E2E antiguedad de deudas');
+cloudDoc = {};
+const hoyD = new Date();
+const haceD = (n) => { const d = new Date(hoyD.getFullYear(), hoyD.getMonth(), hoyD.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { snapshots: [], deletedTxIds: [], manualWallets: [
+      { id: 61, name: 'Vieja', trackerOnly: true, balance: 0, debt: 'in' },
+      { id: 62, name: 'Reciente', trackerOnly: true, balance: 0, debt: 'out' },
+      { id: 63, name: 'Ciclo', trackerOnly: true, balance: 0, debt: 'in', cycle: true } ],
+    transactions: [
+      { id: 610, createdAt: 610, seq: 0, date: '${haceD(200)}', desc: 'preste', wallet: 'Vieja', type: 'Credit', category: 'Transfer', amountUSD: 400, originalCurrency: 'USD', imported: false, updatedAt: 610 },
+      { id: 620, createdAt: 620, seq: 1, date: '${haceD(5)}', desc: 'me prestaron', wallet: 'Reciente', type: 'Credit', category: 'Transfer', amountUSD: 50, originalCurrency: 'USD', imported: false, updatedAt: 620 },
+      { id: 630, createdAt: 630, seq: 2, date: '${haceD(300)}', desc: 'preste', wallet: 'Ciclo', type: 'Credit', category: 'Transfer', amountUSD: 90, originalCurrency: 'USD', imported: false, updatedAt: 630 },
+      { id: 631, createdAt: 631, seq: 3, date: '${haceD(250)}', desc: 'me pago', wallet: 'Ciclo', type: 'Debit', category: 'Transfer', amountUSD: 90, originalCurrency: 'USD', imported: false, updatedAt: 631 },
+      { id: 632, createdAt: 632, seq: 4, date: '${haceD(70)}', desc: 'preste otra vez', wallet: 'Ciclo', type: 'Credit', category: 'Transfer', amountUSD: 120, originalCurrency: 'USD', imported: false, updatedAt: 632 } ],
+    manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('wallets')"); await sleep(500);
+const ageOf = async (n) => await ev(`(function(){var r=[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(e){var x=e.querySelector('.wm-name');return x&&x.textContent===${JSON.stringify(n)}})[0];if(!r)return 'sin fila';var a=r.querySelector('.wm-age');return a?a.textContent+'|'+(a.className.indexOf('is-stale')>=0?'stale':'ok'):'sin edad';})()`);
+check('una deuda vieja dice los meses', (await ageOf('Vieja')).startsWith('hace 7 meses'), await ageOf('Vieja'));
+check('y se marca como parada', (await ageOf('Vieja')).endsWith('stale'), await ageOf('Vieja'));
+check('una reciente dice los dias', (await ageOf('Reciente')) === 'hace 5 dias|ok', await ageOf('Reciente'));
+// Ciclo: prestada hace 300, saldada hace 250, prestada de nuevo hace 70.
+check('en una de ciclo cuenta la deuda vigente', (await ageOf('Ciclo')).startsWith('hace 2 meses'), await ageOf('Ciclo'));
+const alertD = await ev("[...document.querySelectorAll('.alert-item,.alert-row,#alerts-list *')].map(e=>e.textContent).join(' ~ ')");
+check('avisa de la deuda parada', /Te debe Vieja/.test(alertD), alertD.slice(0, 300));
+check('con el verbo correcto segun la direccion', /Cobrala/.test(alertD), alertD.slice(0, 300));
+check('una deuda reciente no genera aviso', !/Reciente/.test(alertD), alertD.slice(0, 300));
+
 // ── 11 · rollover de categoria ────────────────────────────────────────────
 // El sobrante del mes pasado sube el limite de este; el exceso lo baja. Se prueba
 // contra la card real, que es donde el numero importa.

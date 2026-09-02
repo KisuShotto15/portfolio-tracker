@@ -190,6 +190,39 @@ export function debtSplitCore(manualWallets, balances) {
 // asignado arranca limpio en vez de heredar un "sobrante" igual a todo su gasto.
 // Arrastra UN mes, no encadena: el limite de marzo mira el sobrante de febrero,
 // no el de enero acumulado.
+// Desde cuando existe la deuda que hay HOY: la fecha en que el saldo dejo de ser
+// cero por ultima vez. No la tx mas vieja del tracker — en una wallet de ciclo
+// (prestas, te pagan, volves a prestar) esa fecha es de una deuda ya saldada y
+// diria "hace dos años" sobre plata que prestaste ayer.
+// null si no se puede saber: saldo cero (no hay deuda) o un balance base
+// distinto de cero, que es plata que ya existia antes del primer movimiento.
+export function debtSinceCore(transactions, wallet, base) {
+  var z = function (v) { return Math.abs(v) < 0.005; };
+  if (!z(base || 0)) return null;
+  var txs = (transactions || [])
+    .filter(function (t) { return !t.imported && t.wallet === wallet; })
+    .sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.seq || 0) - (b.seq || 0) || (a.createdAt || 0) - (b.createdAt || 0);
+    });
+  var run = 0, since = null;
+  txs.forEach(function (t) {
+    var was = run;
+    run += (t.type === 'Credit' ? 1 : -1) * (t.amountUSD || 0);
+    if (z(run)) since = null;
+    else if (z(was)) since = t.date;
+  });
+  return z(run) ? null : since;
+}
+
+// Dias transcurridos entre dos fechas ISO (YYYY-MM-DD), a mediodia UTC para que
+// un cambio de horario de verano no sume ni reste un dia.
+export function daysBetweenISO(from, to) {
+  if (!from || !to) return null;
+  var d = (Date.parse(to + 'T12:00:00Z') - Date.parse(from + 'T12:00:00Z')) / 86400000;
+  return isFinite(d) ? Math.round(d) : null;
+}
+
 export function rolloverCarryCore(prevLimit, prevSpent) {
   if (!(prevLimit > 0)) return 0;
   return parseFloat((prevLimit - (prevSpent || 0)).toFixed(2));

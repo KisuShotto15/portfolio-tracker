@@ -4,7 +4,7 @@ import {
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
-  rollOnCore, migrateRolloverCore, histAllocPctCore,
+  rollOnCore, migrateRolloverCore, histAllocPctCore, debtSinceCore, daysBetweenISO,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -474,5 +474,56 @@ describe('plan automatico de un mes nuevo', () => {
 
   it('gastar mas que el total pasa de 100% (el medidor lo avisa)', () => {
     expect(histAllocPctCore({ Home: 1200 }, 1000)).toEqual({ Home: 120 });
+  });
+});
+
+describe('antiguedad de una deuda', () => {
+  const tx = (date, type, amt, seq) => ({ date, type, amountUSD: amt, wallet: 'Roi', seq: seq || 0 });
+
+  it('cuenta desde que el saldo dejo de ser cero', () => {
+    expect(debtSinceCore([tx('2026-03-10', 'Credit', 500)], 'Roi', 0)).toBe('2026-03-10');
+  });
+
+  it('en una wallet de ciclo mira la deuda VIGENTE, no la primera', () => {
+    const txs = [
+      tx('2026-01-05', 'Credit', 200),  // prestaste
+      tx('2026-02-01', 'Debit', 200),   // te pagaron -> saldo 0
+      tx('2026-06-20', 'Credit', 80),   // prestaste de nuevo
+    ];
+    expect(debtSinceCore(txs, 'Roi', 0)).toBe('2026-06-20');
+  });
+
+  it('un abono parcial no reinicia el reloj', () => {
+    const txs = [tx('2026-01-05', 'Credit', 200), tx('2026-03-01', 'Debit', 50)];
+    expect(debtSinceCore(txs, 'Roi', 0)).toBe('2026-01-05');
+  });
+
+  it('saldo cero = sin deuda', () => {
+    expect(debtSinceCore([tx('2026-01-05', 'Credit', 200), tx('2026-02-01', 'Debit', 200)], 'Roi', 0)).toBe(null);
+    expect(debtSinceCore([], 'Roi', 0)).toBe(null);
+  });
+
+  it('con balance base no se puede saber', () => {
+    expect(debtSinceCore([tx('2026-03-10', 'Credit', 500)], 'Roi', 300)).toBe(null);
+  });
+
+  it('ignora otras wallets y las importadas', () => {
+    const txs = [
+      { date: '2026-01-01', type: 'Credit', amountUSD: 900, wallet: 'Emily' },
+      { date: '2026-02-02', type: 'Credit', amountUSD: 900, wallet: 'Roi', imported: true },
+      tx('2026-05-05', 'Credit', 100),
+    ];
+    expect(debtSinceCore(txs, 'Roi', 0)).toBe('2026-05-05');
+  });
+
+  it('ordena por seq cuando dos caen el mismo dia', () => {
+    const txs = [tx('2026-04-01', 'Debit', 100, 2), tx('2026-04-01', 'Credit', 100, 1)];
+    expect(debtSinceCore(txs, 'Roi', 0)).toBe(null);
+  });
+
+  it('cuenta los dias sin que el horario de verano corra uno', () => {
+    expect(daysBetweenISO('2026-03-01', '2026-04-01')).toBe(31);
+    expect(daysBetweenISO('2026-09-02', '2026-09-02')).toBe(0);
+    expect(daysBetweenISO(null, '2026-09-02')).toBe(null);
   });
 });
