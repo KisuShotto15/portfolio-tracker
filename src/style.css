@@ -587,16 +587,21 @@ input,select,textarea,button{font-family:inherit}
    parte del limite mismo. */
 .bdg-carry{display:block;margin-top:3px;font-size:10.5px;color:var(--green)}
 .bdg-carry.is-neg{color:#E24B4A}
-/* Limite en USD editable en el pie de la card. Se lee como texto: sin caja, con
-   subrayado punteado al pasar por encima, igual que la pastilla del %. */
-.bdg-amt-wrap{color:inherit;font-family:var(--font-num)}
+/* Limite en USD editable en el pie de la card. Mismo tratamiento que la pastilla
+   del %: sin caja, punteado al pasar por encima y borde de acento al enfocar. */
+.bdg-amt-wrap{display:inline-flex;align-items:baseline;color:inherit;font-family:var(--font-num);
+  border-bottom:1px dashed transparent;transition:border-color .15s}
 .bdg-amt-wrap.is-fixed{color:var(--txt2)}
-.bdg-amt-inp{font:inherit;color:inherit;background:transparent;border:0;padding:0;text-align:left;cursor:text}
-.bdg-amt-inp:focus{outline:none;color:#fff}
-.bdg-amt-inp::placeholder{color:var(--txt3)}
+.bdg-amt-wrap:hover{border-bottom-color:var(--line)}
+.bdg-amt-wrap:focus-within{border-bottom-color:var(--accent)}
+.bdg-amt-inp{font:inherit;color:inherit;background:transparent;border:none;border-radius:0;
+  padding:0;text-align:left;cursor:text;-moz-appearance:textfield}
 .bdg-amt-inp::-webkit-outer-spin-button,.bdg-amt-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.bdg-amt-inp{-moz-appearance:textfield}
-@media(hover:hover){.bdg-amt-wrap:hover .bdg-amt-inp{text-decoration:underline dotted}}
+/* El input global trae border-radius:12px + un box-shadow de 3px al enfocar: en un
+   campo de esta altura ese halo redondeado asoma como un ovalo detras del numero.
+   Mismo apagado que .bdg-lim-inp. */
+.bdg-amt-inp:focus{outline:none;color:#fff;box-shadow:none;border-radius:0}
+.bdg-amt-inp::placeholder{color:var(--txt3)}
 .bdg-scope-btn{font-size:10.5px;padding:3px 10px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s}
 .bdg-scope-btn.on{border-color:var(--accent);color:#fff;background:rgba(155,112,240,0.14)}
 .bdg-scope-btn.reset{color:#E24B4A}

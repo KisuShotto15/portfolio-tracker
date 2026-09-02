@@ -3000,24 +3000,27 @@ window.applyBudgetRec=function(kind){
   save(); renderBudget();
 };
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
-// getMonths() solo lista meses CON transacciones. El Budget suma el mes en curso y
-// el siguiente: el total por mes se planifica antes de gastar (bajar hoy el del mes
-// que viene), y sin esto no habria mes que seleccionar para hacerlo.
+// getMonths() solo lista meses CON transacciones; el Budget suma el mes en curso,
+// que se planifica antes de gastar.
+// El mes SIGUIENTE ya no se ofrece: abrirlo antes de tiempo hacia que se repartiera
+// con el promedio de los 3 meses previos a EL, que deja afuera el mes en curso
+// todavia sin cerrar. Sin esa opcion, el reparto de octubre lo calcula el 1 de
+// octubre — con septiembre ya cerrado y contando.
 function budgetMonths(){
-  var now=new Date();
   var seen={}, out=[];
-  getMonths().concat([monthKey(now), monthKey(new Date(now.getFullYear(),now.getMonth()+1,1))])
+  getMonths().concat([monthKey(new Date())])
     .forEach(function(m){ if(!seen[m]){ seen[m]=1; out.push(m); } });
   return out.sort().reverse();
 }
 // Un mes sin plan propio se reparte solo, segun tu gasto real de los 3 meses
 // anteriores. Antes caia al % global — que ya no lo escribe nadie desde la UI —
 // asi que cada mes nuevo arrancaba practicamente vacio.
-// Solo el mes en curso y los siguientes: un mes ya cerrado sin plan se quedo sin
-// plan, y rellenarlo despues falsearia su cierre. Corre una sola vez por mes: al
-// escribirlo el mes pasa a tener overrides propios y el guard de arriba lo saltea.
+// Solo el mes en curso: uno ya cerrado sin plan se quedo sin plan y rellenarlo
+// despues falsearia su cierre; y uno futuro (llega aca si tiene una tx con fecha
+// adelantada) se repartiria sin contar el mes que todavia corre. Corre una sola vez
+// por mes: al escribirlo el mes pasa a tener overrides propios y el guard lo saltea.
 function seedMonthPlan(month){
-  if(!month||month<monthKey(new Date())) return;
+  if(!month||month!==monthKey(new Date())) return;
   var o=(S.categoryBudgetPctsByMonth||{})[month];
   if(o&&Object.keys(o).length) return;
   var pcts=histAllocPctCore(_budHistAvg(month),budgetTotalFor(month));

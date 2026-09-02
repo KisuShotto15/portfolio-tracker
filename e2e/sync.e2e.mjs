@@ -762,6 +762,11 @@ await ev(`showPage('budget'); window._budMonthSel && window._budMonthSel('${mesA
 const planP = async () => JSON.parse(await ev(
   "JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').categoryBudgetPctsByMonth)||{})"));
 const P1 = await planP();
+const opcP = await ev("[...document.querySelectorAll('#page-budget .dash-head select option')].map(function(o){return o.value}).join(',')");
+check('el selector ofrece el mes en curso', opcP.split(',').includes(mesActP), opcP);
+// El mes siguiente no se ofrece: repartirlo antes de tiempo lo calcularia sin
+// contar el mes que todavia corre.
+check('pero no el siguiente', !opcP.split(',').some((m) => m > mesActP), opcP);
 check('el mes en curso se reparte solo', !!P1[mesActP], JSON.stringify(P1));
 check('Groceries toma su promedio real: 30%', (P1[mesActP] || {}).Groceries === 30, JSON.stringify(P1[mesActP]));
 check('Home el suyo: 10%', (P1[mesActP] || {}).Home === 10, JSON.stringify(P1[mesActP]));
@@ -802,6 +807,12 @@ await ev("saveCategoryAmt('Groceries','300')"); await sleep(300);
 await ev("saveCategoryAmt('Groceries','')"); await sleep(400);
 check('vaciarlo lo devuelve al %', (await subP('Groceries')).includes('inp=500'), await subP('Groceries'));
 await ev("document.getElementById('bud-total').value='1000';saveBudget()"); await sleep(400);
+// El input global trae border-radius + box-shadow al enfocar: en este campo ese
+// halo asomaba como un ovalo detras del numero. Va al final del escenario: enfocar
+// y despues re-renderizar dispara el blur, que commitea y pisaria los valores.
+const inpFx = await ev(`(function(){var i=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent==='Groceries'})[0].querySelector('.bdg-amt-inp');i.focus();var c=getComputedStyle(i);var r=c.boxShadow+'|'+c.borderRadius+'|'+c.borderTopWidth;i.blur();return r;})()`);
+check('enfocarlo no dibuja ningun halo', /^none\|0px\|0px$/.test(inpFx), inpFx);
+await sleep(300);
 
 // ── 15 · sello de build ─────────────────────────────────────────────────────
 // Sin esto no hay forma de saber, mirando el telefono, si un deploy llego: el
