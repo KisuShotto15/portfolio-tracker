@@ -970,6 +970,56 @@ await ev("showPage('transactions',null);renderTx()"); await sleep(200);
 const txOpt = await ev("(function(){var s=document.getElementById('tf-month');return s&&s.options.length>1?s.options[1].textContent:'';})()");
 check('el filtro usa la version corta', /^[A-Z][a-z]{2} \d{4}$/.test(txOpt), txOpt);
 
+// ── 19 · editar una regla recurrente ────────────────────────────────────────
+// La lista de reglas se abre con la casilla "Recurring" apagada, y de ahi se llega
+// a editar. Sin encenderla, el "Day of month" quedaba escondido detras del campo
+// Date y el boton —aunque dijera "Save rule"— caia en addTx(): en vez de guardar
+// la regla anotaba una transaccion suelta con la fecha de hoy.
+console.log('E2E editar regla recurrente');
+cloudDoc = {};
+const mesR = (function () { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { transactions: [], deletedTxIds: [], recurringLog: [],
+    manualWallets: [ { id: 81, name: 'Provincial', trackerOnly: true, balance: 0 },
+                     { id: 82, name: 'OKX Card', trackerOnly: true, balance: 0 } ],
+    recurring: [ { id: 900, label: 'Netflix', dayOfMonth: 9, amount: 5.99, wallet: 'Provincial',
+                   type: 'Debit', category: 'Discretionary', currency: 'USD', lastRun: '${mesR}' } ],
+    recurringUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+const nTxAntes = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length");
+await ev("showPage('transactions',null);openTxForm()"); await sleep(400);
+// La casilla queda apagada a proposito: es el camino que rompia.
+check('el form abre sin modo recurrente', (await ev("document.getElementById('tx-recurring').checked")) === false);
+await ev("toggleTxRecList()"); await sleep(200);
+await ev("editRecurringRule(900)"); await sleep(300);
+const formR = JSON.parse(await ev(`(function(){
+  return JSON.stringify({chk:document.getElementById('tx-recurring').checked,
+    dia:document.getElementById('tx-rec-day').value,
+    diaVis:getComputedStyle(document.getElementById('tx-rec-day-field')).display!=='none',
+    fechaVis:getComputedStyle(document.getElementById('tx-date-field')).display!=='none',
+    wallet:document.getElementById('tx-wallet').value,
+    btn:(document.querySelector('.btn-add')||{}).textContent});})()`));
+check('editar enciende el modo recurrente', formR.chk === true, JSON.stringify(formR));
+check('y muestra el dia de la regla, no la fecha de hoy', formR.dia === '9' && formR.diaVis && !formR.fechaVis, JSON.stringify(formR));
+check('con el wallet actual de la regla', formR.wallet === 'Provincial', JSON.stringify(formR));
+check('y el boton guarda la regla', formR.btn === 'Save rule', JSON.stringify(formR));
+// Solo cambiar el wallet, que es el caso real: Provincial -> OKX Card.
+await ev("document.getElementById('tx-wallet').value='OKX Card';addTxOrUpdate()"); await sleep(400);
+const reglaR = JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').recurring||[])[0]||{})"));
+check('el wallet cambia', reglaR.wallet === 'OKX Card', JSON.stringify(reglaR));
+check('el dia se mantiene', reglaR.dayOfMonth === 9, JSON.stringify(reglaR));
+check('y el resto de la regla tambien', reglaR.id === 900 && reglaR.amount === 5.99 && reglaR.category === 'Discretionary', JSON.stringify(reglaR));
+check('no se anota ninguna transaccion suelta', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === nTxAntes,
+  await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.desc+'/'+t.date}))"));
+await ev("closeTxForm()"); await sleep(300);
+
+// El logo sale del mapa exacto y, si no esta, del match por marca: "OKX Card" no
+// esta en WALLET_LOGOS pero lleva OKX en el nombre.
+await ev("showPage('wallets',null)"); await sleep(500);
+const logoR = await ev("(function(){var r=[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&n.textContent.trim()==='OKX Card'})[0];if(!r)return 'sin fila';var i=r.querySelector('.wm-logo');return i?i.getAttribute('src'):'sin logo';})()");
+check('OKX Card sale con el logo de OKX', /logo-okx/.test(logoR), logoR);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

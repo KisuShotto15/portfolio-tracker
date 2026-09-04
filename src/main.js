@@ -2337,6 +2337,13 @@ function renderTxRecList(){
 window.editRecurringRule=function(id){
   var r=(S.recurring||[]).find(function(x){ return x.id===id; }); if(!r) return;
   _editingRecId=id;
+  // La lista de reglas se puede abrir con la casilla "Recurring" apagada, y de ahi
+  // se llega a este editar. Sin encenderla, el "Day of month" queda escondido
+  // detras del campo Date (con la fecha de hoy, no la de la regla) y el boton
+  // —aunque diga "Save rule"— cae en addTx(): anotaba una transaccion suelta en
+  // vez de guardar la regla que estabas editando.
+  var rc=document.getElementById('tx-recurring');
+  if(rc&&!rc.checked){ rc.checked=true; toggleTxRecurring(); }
   document.getElementById('tx-desc').value=r.label||'';
   // Sin el else, editar una regla sin wallet dejaba el select con el valor de la
   // regla anterior: guardabas y se le pegaba un wallet ajeno. Y una regla creada
@@ -3377,7 +3384,10 @@ var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','P
 var _WLOGOS_NORM={};
 Object.keys(WALLET_LOGOS).forEach(function(k){ _WLOGOS_NORM[_wnorm(k)]=WALLET_LOGOS[k]; });
 function _wnorm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-function walletLogo(name){ return _WLOGOS_NORM[_wnorm(name)]||null; }
+// Si el nombre no esta en el mapa exacto, cae al match por marca de los
+// exchanges: asi "OKX Card" sale con el logo de OKX sin tener que anotar cada
+// variante a mano (tambien "Binance P2P", "Zinli 2", etc).
+function walletLogo(name){ return _WLOGOS_NORM[_wnorm(name)]||exchangeLogoByName(name); }
 
 // ── Wallets de exchange personalizados (por usuario) ────────────────────────
 // Cada usuario agrega los suyos con nombre propio + credenciales, desde la app.
