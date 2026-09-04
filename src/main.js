@@ -94,11 +94,13 @@ var S = {
   profitCalc:{}, profitCalcUpdatedAt:null,
   p2pCalc:{}, p2pCalcUpdatedAt:null,     // P2P Spread: sell/buy/fee
   bcvCalc:{}, bcvCalcUpdatedAt:null,     // BCV->Emily: usd/usdt/bs
-  // Limites por categoria como % del Monthly Total (fuente de verdad). El USD se
-  // deriva: pct/100 * budgetTotal, asi cambiar el total rescala todo.
+  // % por categoria de ALCANCE GLOBAL. Legacy: la UI ya no lo escribe (todo % que
+  // editas se guarda en el mes visible) y solo lo llena la migracion v2 desde los
+  // limites en USD viejos. Sigue siendo el fallback de un mes sin plan propio.
   categoryBudgetPcts:{}, categoryBudgetPctsUpdatedAt:null,
-  // Overrides por mes: {'2026-07':{Groceries:30,...}}. Un mes sin override hereda
-  // el default; asi un mes con mas Discretionary/Health se ajusta puntualmente.
+  // El plan de cada mes: {'2026-07':{Groceries:30,...}}. Es lo que escribe la UI.
+  // Un mes sin plan propio lo reparte seedMonthPlan segun el gasto promedio de los
+  // 3 meses anteriores; recien si no hay historial cae al % global de arriba.
   categoryBudgetPctsByMonth:{}, categoryBudgetPctsByMonthUpdatedAt:null,
   rateUpdatedAt:null, rateEur:null, rateEurUpdatedAt:null,
   presets:[], presetsUpdatedAt:null, // legacy (plantillas eliminadas; docs viejos lo traen)
@@ -107,9 +109,10 @@ var S = {
   recurring:[], recurringUpdatedAt:null,
   recurringLog:[], recurringLogUpdatedAt:null,
   toolFees:{bpay:4.1, wally:3.745, zinli:3.75, emily:10}, toolFeesUpdatedAt:null,
-  // Rollover: encendido para todas por defecto. El mapa guarda solo las EXCEPCIONES
-  // ({Groceries:false}), asi una categoria nueva arranca con rollover sin que haya
-  // que acordarse de prenderla. Sincroniza solo por el LWW generico.
+  // Rollover POR MES: {'2026-09':{Groceries:true}}. Solo cuenta lo marcado en ese
+  // mes concreto — apagado es la ausencia, y un mes se enciende aparte de los demas
+  // (antes el mapa era plano y encender una categoria la encendia tambien en los
+  // meses ya cerrados). Sincroniza solo por el LWW generico.
   rolloverCats:{}, rolloverCatsUpdatedAt:null,
   // Limite en USD fijo por mes y categoria. Manda sobre el %: existe justamente
   // para las categorias de monto fijo (suscripciones, alquiler), que no tienen
@@ -4289,8 +4292,9 @@ var MIGRATIONS=[
     frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; });
     S.manualWalletsUpdatedAt=stamp();
   }},
-  // Va al final a proposito: runMigrations referencia MIGRATIONS[2] (la v3, que
-  // corre en cada boot) por indice, y toma la ultima entrada como version vigente.
+  // De aca para abajo, SIEMPRE append: runMigrations referencia MIGRATIONS[2] (la
+  // v3, que corre en cada boot) por indice, y toma la ultima entrada como version
+  // vigente. Insertar en el medio rompe las dos cosas.
   { v:4, fn:function(){ // owed:true → debt:'out' (el flag paso a tener tres estados)
     var hit=S.manualWallets.filter(function(w){ return w.owed===true; });
     S.manualWallets.forEach(function(w){ if('owed' in w){ if(w.owed===true) w.debt='out'; delete w.owed; } });
