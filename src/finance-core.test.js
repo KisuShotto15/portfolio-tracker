@@ -267,25 +267,27 @@ describe('trackerTxBalancesCore', () => {
 
 describe('debtSplitCore', () => {
   var W = [
-    { name: 'Emily', trackerOnly: true },                 // tracker comun: no es deuda
+    { name: 'Emily', trackerOnly: true },                 // cuenta propia: plata liquida
     { name: 'Roi', trackerOnly: true, debt: 'in' },       // me deben
     { name: 'Ana', trackerOnly: true, debt: 'out' },      // debo
     { name: 'Cash' },                                     // manual normal: no participa
   ];
   var B = { Emily: 200, Roi: 1550, Ana: 300, Cash: 99 };
 
-  it('separa lo que debes del resto', () => {
-    expect(debtSplitCore(W, B)).toEqual({ receivable: 1750, owed: 300 });
+  it('separa las tres cosas', () => {
+    expect(debtSplitCore(W, B)).toEqual({ cash: 200, receivable: 1550, owed: 300 });
   });
 
-  it('un tracker sin marcar sigue contando como antes (nada que migrar)', () => {
-    expect(debtSplitCore([{ name: 'Emily', trackerOnly: true }], { Emily: 40 }))
-      .toEqual({ receivable: 40, owed: 0 });
+  // Mercantil, Zinli, una tarjeta prepaga: son cuentas propias, plata que puedes
+  // gastar hoy. Contarlas como "por cobrar" hacia que el KPI Liquid mintiera.
+  it('un tracker sin marcar es plata liquida, no algo por cobrar', () => {
+    expect(debtSplitCore([{ name: 'Zinli', trackerOnly: true }], { Zinli: 40 }))
+      .toEqual({ cash: 40, receivable: 0, owed: 0 });
   });
 
   it('ignora los wallets que no son tracker', () => {
     expect(debtSplitCore([{ name: 'Cash', debt: 'out' }], { Cash: 500 }))
-      .toEqual({ receivable: 0, owed: 0 });
+      .toEqual({ cash: 0, receivable: 0, owed: 0 });
   });
 
   it('un wallet sin saldo en el mapa cuenta 0, no NaN', () => {
@@ -303,9 +305,9 @@ describe('debtSplitCore', () => {
     expect(mv.Roi).toBe(-150);
     expect(mv.Ana).toBe(-150);
     var d = debtSplitCore(W, { Emily: 200, Roi: 1550 + mv.Roi, Ana: 300 + mv.Ana });
-    expect(d).toEqual({ receivable: 1600, owed: 150 });
+    expect(d).toEqual({ cash: 200, receivable: 1400, owed: 150 });
     // te pagaron 150 y con eso pagaste 150: el patrimonio no se movio
-    expect(d.receivable - d.owed).toBe(1750 - 300);
+    expect(d.cash + d.receivable - d.owed).toBe(200 + 1550 - 300);
   });
 });
 

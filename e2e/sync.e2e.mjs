@@ -459,6 +459,11 @@ await ev("showPage('summary')"); await sleep(400);
 const sub = await liqSub();
 check('el KPI Liquid muestra lo que te deben', sub.includes('receivable'), sub);
 check('el KPI Liquid muestra lo que debes', sub.includes('owed'), sub);
+// Mercantil Panama es un tracker sin marcar: una cuenta propia, plata que puedes
+// gastar hoy. Antes caia en receivable y el KPI Liquid la restaba.
+const liqVal = await ev("[...document.querySelectorAll('.kpi-card')].filter(c=>c.textContent.includes('Liquid')).map(c=>c.querySelector('.kpi-val').textContent)[0]||''");
+check('un tracker propio cuenta como liquido', liqVal.replace(/[^0-9.]/g, '') === '200.00', `liquid=${liqVal}`);
+check('y no aparece como algo por cobrar', sub.includes('$1,800.00 receivable'), sub);
 
 // Cobrar 150 de Roi y pagar 150 a Ana, por los botones de la fila.
 await ev("showPage('wallets')"); await sleep(400);

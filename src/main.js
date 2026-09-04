@@ -2613,9 +2613,10 @@ function renderEquityChart(){
   eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:_eqDs},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false,min:_eqYMin}}}});}
 
 // El patrimonio partido en tres: lo que puedes gastar HOY, lo que te deben y lo que
-// debes. Las wallets trackerOnly son deudas — a favor por defecto (ej: Roi), en
-// contra si llevan owed. Las dos guardan cuanto FALTA, siempre positivo; el signo
-// lo pone debtSplitCore. El KPI Liquid vive de esta separacion.
+// debes. Un wallet trackerOnly es una de tres cosas segun su campo debt: una cuenta
+// propia (sin debt — banco, wallet, tarjeta: plata liquida), plata que te deben
+// (debt:'in') o plata que debes (debt:'out'). Las tres guardan un numero positivo;
+// el signo lo pone debtSplitCore. El KPI Liquid vive de esta separacion.
 function trackerBalances(){
   var out={};
   S.manualWallets.forEach(function(w){
@@ -2627,7 +2628,7 @@ function trackerBalances(){
 function getBalanceSplit(){
   var api=(S.exchangeWallets||[]).reduce(function(s,w){ return s+(w.balance||0); },0);
   var d=debtSplitCore(S.manualWallets,trackerBalances());
-  var liquid=api+manualNormalTotal();
+  var liquid=api+manualNormalTotal()+d.cash;
   return {liquid:parseFloat(liquid.toFixed(2)),receivable:d.receivable,owed:d.owed};
 }
 function getTotalBalance(){

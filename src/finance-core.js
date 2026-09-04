@@ -171,17 +171,22 @@ export function trackerTxBalancesCore(manualWallets, transactions) {
 // (debt:'out'). Los tres guardan un numero positivo y se mueven con la MISMA regla:
 // Debit baja el saldo, Credit lo sube (lo que ya hace trackerTxBalancesCore). El
 // signo aparece recien aca — solo lo que debes resta.
-// Los trackers sin marcar caen del lado de receivable, que es donde vivian antes de
-// que existiera esto: plata contada en el patrimonio pero que no es liquida.
+// Los trackers sin marcar salen en `cash`: son bancos y wallets propias (Mercantil,
+// Zinli, una tarjeta prepaga), plata que puedes gastar hoy. Antes caian en
+// receivable — herencia de cuando el unico tracker posible era una deuda a favor —
+// y el KPI Liquid restaba plata que si es liquida.
 // `balances` es {nombre: saldo ya resuelto} — override si lo hay, si no base+txs.
+// El patrimonio es cash + receivable - owed: mover un tracker de bucket no lo mueve.
 export function debtSplitCore(manualWallets, balances) {
-  var receivable = 0, owed = 0;
+  var cash = 0, receivable = 0, owed = 0;
   (manualWallets || []).forEach(function (w) {
     if (!w.trackerOnly) return;
     var v = (balances || {})[w.name] || 0;
-    if (w.debt === 'out') owed += v; else receivable += v;
+    if (w.debt === 'out') owed += v;
+    else if (w.debt === 'in') receivable += v;
+    else cash += v;
   });
-  return { receivable: parseFloat(receivable.toFixed(2)), owed: parseFloat(owed.toFixed(2)) };
+  return { cash: parseFloat(cash.toFixed(2)), receivable: parseFloat(receivable.toFixed(2)), owed: parseFloat(owed.toFixed(2)) };
 }
 
 // Rollover: lo que sobro (o falto) en una categoria el mes pasado se arrastra al
