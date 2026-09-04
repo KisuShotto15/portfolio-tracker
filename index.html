@@ -243,7 +243,7 @@
       <button class="btn btns" onclick="closeWalletForm()" style="padding:4px 10px">&#x2715; Close</button>
     </div>
     <div class="field"><span class="field-lbl">Name</span><input type="text" id="wm-name" placeholder="Wallet name"/></div>
-    <div class="field" id="wm-cur-field"><span class="field-lbl">Moneda</span>
+    <div class="field" id="wm-cur-field"><span class="field-lbl">Currency</span>
       <select id="wm-cur" onchange="toggleWmBalField()">
         <option value="USD">USD</option>
         <option value="VES">Bs — valued automatically at the USDT rate</option>
@@ -258,7 +258,7 @@
         <option value="debt">Debt — money you owe</option>
       </select>
     </div>
-    <label class="tx-rec-check" id="wm-cycle-field" style="display:none"><input type="checkbox" id="wm-cycle"/>Ciclo de ida y vuelta — mostrar tambien el boton de sumar</label>
+    <label class="tx-rec-check" id="wm-cycle-field" style="display:none"><input type="checkbox" id="wm-cycle"/>Two-way cycle — also show the button that increases it</label>
     <div style="display:flex;justify-content:center;margin-top:18px">
       <button class="btn btnp" style="min-width:140px" onclick="saveManualWallet()">Save</button>
     </div>
@@ -271,22 +271,22 @@
       <h3>Add exchange</h3>
       <button class="btn btns" onclick="closeExchangeForm()" style="padding:4px 10px">&#x2715; Close</button>
     </div>
-    <p class="hint" style="margin:0 0 12px">Binance/Bybit/OKX usan tus API keys (read-only, sin retiro). Direccion BSC lee el balance USDT on-chain. Se guardan solo en tu cuenta.</p>
-    <div class="field"><span class="field-lbl">Nombre</span><input id="xw-name" type="text" placeholder="Ej: Mi Binance"/></div>
-    <div class="field"><span class="field-lbl">Tipo</span>
+    <p class="hint" style="margin:0 0 12px">Binance/Bybit/OKX use your API keys (read-only, no withdrawals). BSC address reads the on-chain USDT balance. They are stored in your account only.</p>
+    <div class="field"><span class="field-lbl">Name</span><input id="xw-name" type="text" placeholder="e.g. My Binance"/></div>
+    <div class="field"><span class="field-lbl">Type</span>
       <select id="xw-type" onchange="toggleXwFields()">
         <option value="binance">Binance (API keys)</option>
         <option value="bybit">Bybit (API keys)</option>
         <option value="okx">OKX (API keys)</option>
-        <option value="bsc">Direccion BSC (0x...)</option>
+        <option value="bsc">BSC address (0x...)</option>
       </select>
     </div>
-    <div class="field" id="xw-binance-fields"><span class="field-lbl">Credenciales</span>
+    <div class="field" id="xw-binance-fields"><span class="field-lbl">Credentials</span>
       <input id="xw-key" type="password" placeholder="API Key"/>
       <input id="xw-secret" type="password" placeholder="API Secret" style="margin-top:6px"/>
       <input id="xw-pass" type="password" placeholder="Passphrase (OKX)" style="margin-top:6px;display:none" data-okx-pass/>
     </div>
-    <div class="field" id="xw-bsc-fields" style="display:none"><span class="field-lbl">Direccion</span>
+    <div class="field" id="xw-bsc-fields" style="display:none"><span class="field-lbl">Address</span>
       <input id="xw-address" type="text" placeholder="0x..."/>
     </div>
     <div style="display:flex;justify-content:center;margin-top:18px">
@@ -328,9 +328,9 @@
       <div class="hld-wallets-body" id="mh-body">
         <div id="mh-list"></div>
         <div class="hld-add">
-          <input type="text" id="mh-label" placeholder="Label (opcional)"/>
+          <input type="text" id="mh-label" placeholder="Label (optional)"/>
           <select id="mh-coin"></select>
-          <input type="number" id="mh-qty" step="any" placeholder="Cantidad" style="flex:1;min-width:120px;font-family:var(--font-num)"/>
+          <input type="number" id="mh-qty" step="any" placeholder="Amount" style="flex:1;min-width:120px;font-family:var(--font-num)"/>
           <button class="btn btnp btns" onclick="addManualHolding()">Add</button>
         </div>
       </div>
@@ -439,11 +439,11 @@
   <div id="page-settings" class="page">
 
     <div class="set-section">
-    <span class="set-sec-lbl">Datos y sync</span>
+    <span class="set-sec-lbl">Data and sync</span>
     <div class="set-grid">
     <div class="fc">
       <h3>Cloud sync</h3>
-      <p class="hint">Tus datos se sincronizan automaticamente a tu cuenta en cada cambio.</p>
+      <p class="hint">Your data syncs to your account automatically on every change.</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
         <button class="btn btns btnp" onclick="forcePull()">Pull from cloud</button>
         <button class="btn btns" onclick="forcePush()">Push to cloud</button>
@@ -451,11 +451,11 @@
       <div id="cloud-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
     </div>
     <div class="fc">
-      <h3>Cuenta</h3>
+      <h3>Account</h3>
       <p class="hint" id="acct-email" style="margin-bottom:10px"></p>
       <div id="pk-list" style="margin-bottom:8px"></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
-        <button class="btn btns btnp" onclick="passkeyRegister()">Crear passkey en este dispositivo</button>
+        <button class="btn btns btnp" onclick="passkeyRegister()">Create a passkey on this device</button>
         <button class="btn btns" onclick="signOut()">Sign out</button>
       </div>
       <div id="pk-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
@@ -476,7 +476,7 @@
       <h3>Version</h3>
       <p class="hint" id="build-id" style="margin-bottom:10px">&mdash;</p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
-        <button class="btn btns btnp" onclick="forceUpdate()">Forzar actualizacion</button>
+        <button class="btn btns btnp" onclick="forceUpdate()">Force update</button>
       </div>
       <div id="build-status" style="font-size:12px;color:var(--color-text-secondary)"></div>
     </div>
@@ -505,16 +505,16 @@
     <img src="/KS.png" alt="" class="auth-logo">
     <h2>Portfolio</h2>
     <div id="auth-step-email">
-      <p class="auth-sub">Inicia sesion con tu correo</p>
-      <input type="email" id="auth-email" placeholder="tucorreo@ejemplo.com" autocomplete="email" enterkeyhint="send" onkeydown="if(event.key==='Enter')authSendCode()">
-      <button class="btn btnp" onclick="authSendCode()">Enviar codigo</button>
-      <button class="btn btns" style="margin-top:8px" onclick="authPasskey()">🔑 Entrar con passkey</button>
+      <p class="auth-sub">Sign in with your email</p>
+      <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email" enterkeyhint="send" onkeydown="if(event.key==='Enter')authSendCode()">
+      <button class="btn btnp" onclick="authSendCode()">Send code</button>
+      <button class="btn btns" style="margin-top:8px" onclick="authPasskey()">🔑 Sign in with a passkey</button>
     </div>
     <div id="auth-step-code" style="display:none">
-      <p class="auth-sub">Ingresa el codigo que te llego al correo</p>
+      <p class="auth-sub">Enter the code we emailed you</p>
       <input type="text" id="auth-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" enterkeyhint="go" onkeydown="if(event.key==='Enter')authVerifyCode()">
-      <button class="btn btnp" onclick="authVerifyCode()">Entrar</button>
-      <button class="btn btns" onclick="authBackToEmail()">Cambiar correo</button>
+      <button class="btn btnp" onclick="authVerifyCode()">Sign in</button>
+      <button class="btn btns" onclick="authBackToEmail()">Use another email</button>
     </div>
     <div id="auth-msg" class="auth-msg"></div>
   </div>
@@ -593,7 +593,7 @@
       </div>
     </div>
     <div class="field" id="tx-rec-day-field" style="display:none"><span class="field-lbl">Day of month</span><input type="number" id="tx-rec-day" min="1" max="31" placeholder="1-31" inputmode="numeric"/></div>
-    <div class="field note-field-wrap" style="grid-column:span 2;position:relative"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote();updateNoteSuggest()" style="padding-right:38px"/><button type="button" class="note-dd-btn" onclick="toggleNoteSuggest(event)" aria-label="Notas recientes"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div id="note-suggest-pop" popover="manual"></div></div>
+    <div class="field note-field-wrap" style="grid-column:span 2;position:relative"><span class="field-lbl">Note <span id="autofill-hint" style="font-size:10px;color:#9B70F0;opacity:0;transition:opacity .4s;margin-left:4px">✦ autofilled</span></span><input type="text" id="tx-desc" placeholder="Description" tabindex="1" oninput="autofillFromNote();updateNoteSuggest()" style="padding-right:38px"/><button type="button" class="note-dd-btn" onclick="toggleNoteSuggest(event)" aria-label="Recent notes"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div id="note-suggest-pop" popover="manual"></div></div>
     <div class="field"><span class="field-lbl">Wallet</span><select id="tx-wallet" tabindex="2"></select></div>
   </div>
   <div class="field-row">
@@ -604,8 +604,8 @@
     <div class="cat-hint" id="cat-hint"></div>
   </div>
   <div class="tx-rec-row" id="tx-rec-row">
-    <label class="tx-rec-check"><input type="checkbox" id="tx-recurring" onchange="toggleTxRecurring()"/><span>Recurrente</span></label>
-    <button type="button" class="tx-rec-toggle" id="tx-rec-toggle" style="display:none" onclick="toggleTxRecList()">Reglas</button>
+    <label class="tx-rec-check"><input type="checkbox" id="tx-recurring" onchange="toggleTxRecurring()"/><span>Recurring</span></label>
+    <button type="button" class="tx-rec-toggle" id="tx-rec-toggle" style="display:none" onclick="toggleTxRecList()">Rules</button>
   </div>
   <div id="tx-rec-list" style="display:none"></div>
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
@@ -617,14 +617,14 @@
     <div class="receipt-attach">
       <button class="btn btns" id="btn-receipt" title="Attach receipt" onclick="toggleReceiptMenu(event)">📎</button>
       <div class="receipt-menu" id="receipt-menu">
-        <button class="btn btns receipt-menu-btn" id="receipt-cam-btn" title="Camara" onclick="pickReceipt('tx-receipt-cam')"><svg width="38" height="38" viewBox="1 2 22 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
-        <button class="btn btns receipt-menu-btn" title="Galeria" onclick="pickReceipt('tx-receipt')"><svg width="38" height="38" viewBox="2 2 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
+        <button class="btn btns receipt-menu-btn" id="receipt-cam-btn" title="Camera" onclick="pickReceipt('tx-receipt-cam')"><svg width="38" height="38" viewBox="1 2 22 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+        <button class="btn btns receipt-menu-btn" title="Gallery" onclick="pickReceipt('tx-receipt')"><svg width="38" height="38" viewBox="2 2 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
       </div>
     </div>
     <span id="tx-receipt-status" style="font-size:12px;color:var(--color-text-secondary)"></span>
     <div id="tx-receipt-preview" style="display:none;align-items:center;gap:8px">
       <img id="tx-receipt-img" src="" alt="" onclick="openReceipt(this.src)"/>
-      <button class="btn btns" onclick="removeReceipt()" style="color:#E24B4A;border-color:transparent;padding:2px 8px">Quitar</button>
+      <button class="btn btns" onclick="removeReceipt()" style="color:#E24B4A;border-color:transparent;padding:2px 8px">Remove</button>
     </div>
     <span id="ves-hint" style="display:none;font-size:12px;color:var(--color-text-secondary)">approx <span id="usd-preview">-</span> USDT</span>
   </div>

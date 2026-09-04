@@ -380,7 +380,7 @@ function showSyncBanner(show){
   var b=document.getElementById('sync-banner');
   if(!b&&show){
     b=document.createElement('div'); b.id='sync-banner'; b.className='sync-banner';
-    b.innerHTML='<span>⚠ No se pudo sincronizar. Tus cambios estan guardados solo en este dispositivo.</span><button onclick="window.retrySyncNow()">Reintentar</button>';
+    b.innerHTML='<span>⚠ Could not sync. Your changes are saved on this device only.</span><button onclick="window.retrySyncNow()">Retry</button>';
     document.body.appendChild(b);
   }
   if(b) b.classList.toggle('show', !!show);
@@ -522,7 +522,7 @@ function renderUsdtRate(){
   if(_usdtRate){
     txt=_usdtRate.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
     var age=Math.round((Date.now()-_usdtAt)/60000);
-    title='Mediana top-10 merchants BDV · hace '+age+' min';
+    title='Median of top-10 BDV merchants · '+age+' min ago';
     if(age>30) txt+=' ⚠'; // dato viejo: el monitor no esta refrescando
   }
   // Pulso al cambiar: flecha + color 1.6s para que el movimiento de la tasa se note.
@@ -899,10 +899,10 @@ window.removeManualHolding=function(id){
 // una lista hardcodeada aca mentiria en silencio el dia que se mueva una categoria.
 function catHintFor(cat){
   if(!cat) return '';
-  if(cat==='Income') return '<b>Income</b> · entra plata nueva. Es la unica que suma al income del mes.';
-  if(EXPENSE_CATS_DASH.indexOf(cat)>=0) return '<b>Gasto</b> · baja tu patrimonio y cuenta en el budget del mes.';
-  if(NEUTRAL_CATS.indexOf(cat)>=0) return '<b>Neutra</b> · no toca budget ni P&L. Plata que cambia de wallet entre cuentas que la app ya ve.';
-  if(isExtFlow(cat)) return '<b>Flujo externo</b> · no cuenta como gasto y se netea del P&L. Plata que sale o entra de lo rastreado.';
+  if(cat==='Income') return '<b>Income</b> · new money coming in. The only one that adds to the month income.';
+  if(EXPENSE_CATS_DASH.indexOf(cat)>=0) return '<b>Expense</b> · lowers your net worth and counts toward this month budget.';
+  if(NEUTRAL_CATS.indexOf(cat)>=0) return '<b>Neutral</b> · touches neither budget nor P&L. Money moving between accounts the app already sees.';
+  if(isExtFlow(cat)) return '<b>External flow</b> · not spending, and netted out of P&L. Money leaving or entering what is tracked.';
   return '';
 }
 function updateCatHint(){
@@ -1406,9 +1406,9 @@ async function settleTracker(id,sube){
   var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return;
   var falta=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name);
   var esDeuda=w.debt==='out';
-  var titulo=sube?(esDeuda?'Pedir prestado':'Prestar'):(esDeuda?'Pagar deuda':'Cobrar');
+  var titulo=sube?(esDeuda?'Borrow more':'Lend'):(esDeuda?'Pay debt':'Collect');
   var r=await appPrompt(titulo,
-    escHtml(w.name)+' · '+(esDeuda?'debes ':'te deben ')+fmtUSD(falta)+' · acepta sumas (50+100)',
+    escHtml(w.name)+' · '+(esDeuda?'you owe ':'owed to you ')+fmtUSD(falta)+' · accepts sums (50+100)',
     '',{math:true});
   if(!r) return;
   var v=evalMath(r.value);
@@ -1417,7 +1417,7 @@ async function settleTracker(id,sube){
   snapshot();
   var _now=Date.now(), _ut=stamp();
   S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:localToday(),
-    desc:(sube?(esDeuda?'Deuda con ':'Prestamo a '):(esDeuda?'Pago ':'Cobro '))+w.name,
+    desc:(sube?(esDeuda?'Debt with ':'Loan to '):(esDeuda?'Payment ':'Collected '))+w.name,
     wallet:w.name,type:sube?'Credit':'Debit',category:'Savings',
     amountUSD:parseFloat(v.toFixed(2)),amountVES:null,originalCurrency:'USD',rateUsed:null,
     imported:false,receiptUrl:null,updatedAt:_ut});
@@ -1988,14 +1988,14 @@ window.showMonthClose=function(month){
     // Delta contra el mes anterior: gastar mas que el mes pasado se lee en rojo
     // aunque hayas quedado dentro del plan — son dos preguntas distintas.
     var dp=parseFloat((d.spent[c]-(d.prev[c]||0)).toFixed(2));
-    var dpTxt=(d.prev[c]||0)<=0?(d.spent[c]>0?'nuevo':'—'):sgn(dp);
+    var dpTxt=(d.prev[c]||0)<=0?(d.spent[c]>0?'new':'—'):sgn(dp);
     var dpCol=(d.prev[c]||0)<=0?'var(--txt3)':dp>0?'#E24B4A':dp<0?'#4ED9A4':'var(--txt3)';
     return '<div class="mc-row"><span class="mc-cat"><i class="bdg-dot" style="background:'+(CCOLORS[c]||'#9B70F0')+'"></i>'+c+'</span>'
       +'<span class="mc-num">'+fmtUSD(d.spent[c])+'</span>'
       // El plan viene de dos partes: el % asignado y el arrastre del mes anterior.
       // La segunda va debajo, chica, porque explica por que el numero no es redondo.
       +'<span class="mc-num mc-dim mc-plan">'+(d.lim[c]>0?fmtUSD(d.lim[c]):'—')
-        +(d.carry[c]?'<i>'+sgn(d.carry[c])+' <b>arrastre</b><u>arr</u></i>':'')+'</span>'
+        +(d.carry[c]?'<i>'+sgn(d.carry[c])+' <b>carryover</b><u>carry</u></i>':'')+'</span>'
       +'<span class="mc-num" style="color:'+col+'">'+(d.lim[c]>0?sgn(diff):'—')+'</span>'
       +'<span class="mc-num" style="color:'+dpCol+'">'+dpTxt+'</span></div>';
   }).join('');
@@ -2005,39 +2005,39 @@ window.showMonthClose=function(month){
   var totDiff=parseFloat((d.totLim-d.totSpent).toFixed(2));
   var ahorro=parseFloat((d.income-d.totSpent).toFixed(2));
   var tasa=d.income>0?Math.round(ahorro/d.income*100):null;
-  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' anotado · '+fmtShortUSD(d.rec.derived)+' derivado':'';
+  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' logged · '+fmtShortUSD(d.rec.derived)+' derived':'';
   // Conciliacion: por que el patrimonio se movio lo que se movio. Sin esto el
   // resumen mostraba ingresos y gastos que no cierran contra la variacion real.
   var recLine=function(l,v,c){ return '<div class="mc-rec-row"><span>'+l+'</span><span class="mc-num"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
   var recHtml='';
   if(d.rec){
-    recHtml='<div class="mc-rec"><div class="mc-rec-h">Como se movio el patrimonio</div>'
-      +recLine('Ingresos',sgn(d.rec.logged+d.rec.derived),'#4ED9A4')
-      +recLine('Gasto',sgn(-d.rec.spend),'#E24B4A')
-      +(d.rec.ext!==0?recLine('Flujos externos · Transfer / Investments',sgn(-d.rec.ext),d.rec.ext>0?'#E24B4A':'#4ED9A4'):'')
-      +(Math.abs(d.rec.resid)>=0.5?recLine('Sin explicar · mercado o algo sin anotar',sgn(d.rec.resid),'var(--txt3)'):'')
-      +'<div class="mc-rec-row mc-rec-tot"><span>Variacion del patrimonio</span><span class="mc-num" style="color:'+(d.nwDelta>=0?'#4ED9A4':'#E24B4A')+'">'+sgn(d.nwDelta)+'</span></div>'
+    recHtml='<div class="mc-rec"><div class="mc-rec-h">How net worth moved</div>'
+      +recLine('Income',sgn(d.rec.logged+d.rec.derived),'#4ED9A4')
+      +recLine('Spending',sgn(-d.rec.spend),'#E24B4A')
+      +(d.rec.ext!==0?recLine('External flows · Transfer / Investments',sgn(-d.rec.ext),d.rec.ext>0?'#E24B4A':'#4ED9A4'):'')
+      +(Math.abs(d.rec.resid)>=0.5?recLine('Unexplained · market or something unlogged',sgn(d.rec.resid),'var(--txt3)'):'')
+      +'<div class="mc-rec-row mc-rec-tot"><span>Net worth change</span><span class="mc-num" style="color:'+(d.nwDelta>=0?'#4ED9A4':'#E24B4A')+'">'+sgn(d.nwDelta)+'</span></div>'
       +'</div>';
   }
   var ov=document.createElement('div');
   ov.className='app-modal-overlay mc-ov open';
   ov.id='month-close';
   ov.innerHTML='<div class="app-modal mc-modal">'
-    +'<h3>Cierre de '+lbl+'</h3>'
+    +'<h3>Month close · '+lbl+'</h3>'
     +'<div class="mc-body">'
     +'<div class="mc-stats">'
-      +stat('Ingresos',fmtUSD(d.income),'#5DCAA5',incSub)
-      +stat('Gasto',fmtUSD(d.totSpent),'',d.nTx+' movimiento'+(d.nTx===1?'':'s'))
-      +stat('Ahorro',sgn(ahorro),ahorro>=0?'#4ED9A4':'#E24B4A',tasa!=null?tasa+'% de tus ingresos':'')
-      +stat('vs Plan',sgn(totDiff),totDiff>=0?'#4ED9A4':'#E24B4A',fmtShortUSD(d.totLim)+' planeado')
-      +(d.nwDelta!=null?stat('Patrimonio',sgn(d.nwDelta),d.nwDelta>=0?'#4ED9A4':'#E24B4A'):'')
+      +stat('Income',fmtUSD(d.income),'#5DCAA5',incSub)
+      +stat('Spending',fmtUSD(d.totSpent),'',d.nTx+' transaction'+(d.nTx===1?'':'s'))
+      +stat('Saved',sgn(ahorro),ahorro>=0?'#4ED9A4':'#E24B4A',tasa!=null?tasa+'% of income':'')
+      +stat('vs Plan',sgn(totDiff),totDiff>=0?'#4ED9A4':'#E24B4A',fmtShortUSD(d.totLim)+' planned')
+      +(d.nwDelta!=null?stat('Net worth',sgn(d.nwDelta),d.nwDelta>=0?'#4ED9A4':'#E24B4A'):'')
     +'</div>'
     +recHtml
-    +(d.big?'<div class="mc-big">Movimiento mas grande · <b>'+escHtml(d.big.desc)+'</b> '+fmtUSD(d.big.amountUSD)+' en '+d.big.category+'</div>':'')
-    +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span><span class="mc-num">vs '+monthName(prevMonth(month),true)+'</span></div><div class="mc-rows">'+rows+'</div>'
-          :'<div class="mc-big">Sin gasto registrado en '+lbl+'.</div>')
+    +(d.big?'<div class="mc-big">Largest transaction · <b>'+escHtml(d.big.desc)+'</b> '+fmtUSD(d.big.amountUSD)+' in '+d.big.category+'</div>':'')
+    +(rows?'<div class="mc-head"><span>Category</span><span class="mc-num">Actual</span><span class="mc-num">Plan</span><span class="mc-num">Diff</span><span class="mc-num">vs '+monthName(prevMonth(month),true)+'</span></div><div class="mc-rows">'+rows+'</div>'
+          :'<div class="mc-big">No spending logged in '+lbl+'.</div>')
     +'</div>'
-    +'<div class="modal-actions"><button class="btn btnp" id="_mcok">Listo</button></div>'
+    +'<div class="modal-actions"><button class="btn btnp" id="_mcok">Done</button></div>'
     +'</div>';
   document.body.appendChild(ov);
   var close=function(){
@@ -2093,8 +2093,8 @@ function getActiveAlerts(){
     if(!pace) return;
     alerts.push({
       sev:pace.sev,
-      msg:'A este ritmo '+cat+' termina en '+fmtUSD(pace.projected)+' de '+fmtUSD(lim),
-      action:'Te pasarias por '+fmtUSD(pace.over)+' · quedan '+(_dim-now.getDate())+' dias'
+      msg:'At this pace '+cat+' ends at '+fmtUSD(pace.projected)+' of '+fmtUSD(lim),
+      action:'You would go over by '+fmtUSD(pace.over)+' · '+(_dim-now.getDate())+' days left'
     });
   });
 
@@ -2123,8 +2123,8 @@ function getActiveAlerts(){
     if(d==null||d<DEBT_STALE_DAYS) return;
     alerts.push({
       sev:d>=180?'crit':'warn',
-      msg:(w.debt==='out'?'Le debes a ':'Te debe ')+w.name+' '+fmtUSD(bal)+' desde hace '+debtAgeLabel(d),
-      action:w.debt==='out'?'Pagala o acordá una fecha':'Cobrala o acordá una fecha'
+      msg:(w.debt==='out'?'You owe '+w.name:w.name+' owes you')+' '+fmtUSD(bal)+' for '+debtAgeLabel(d),
+      action:w.debt==='out'?'Pay it or agree on a date':'Collect it or agree on a date'
     });
   });
 
@@ -2137,7 +2137,7 @@ function getActiveAlerts(){
       if(months>60){
         alerts.push({
           sev:'warn',
-          msg:'Al ritmo actual: '+months+' months to reach the goal',
+          msg:'At the current pace: '+months+' months to reach the goal',
           action:'Increase monthly contribution or adjust the goal'
         });
       }
@@ -2432,7 +2432,7 @@ function renderGoal(){
       +'</div>'
       +inputRow
       +'<div class="goal-bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'
-      +(months?'<div class="goal-meta"><span class="goal-meta-item"><b>~'+months+'</b> mo</span><span class="goal-meta-dot">·</span><span class="goal-meta-item"><b>'+fmtUSD(contrib)+'</b>/mo</span><span class="goal-meta-dot">·</span><span class="goal-meta-item"><b>'+fmtUSD(contrib/30)+'</b>/dia</span></div>':'');
+      +(months?'<div class="goal-meta"><span class="goal-meta-item"><b>~'+months+'</b> mo</span><span class="goal-meta-dot">·</span><span class="goal-meta-item"><b>'+fmtUSD(contrib)+'</b>/mo</span><span class="goal-meta-dot">·</span><span class="goal-meta-item"><b>'+fmtUSD(contrib/30)+'</b>/day</span></div>':'');
   } else {
     gHtml='<div class="cleg">Financial Goal</div>'+inputRow;
   }
@@ -3142,7 +3142,7 @@ function renderBudget(){
     // y cada boton caia en su propia linea.
     +'<span class="bdg-acts">'
     // La fila de scope hoy esta apagada (BUDGET_SCOPE_UI) pero el rollover se ve igual.
-    +'<button class="bdg-scope-btn roll-tgl'+(_rolloverUI?' on':'')+'" title="Arrastrar a '+mShort+' lo que sobro (o falto) el mes anterior. Hoy: '+rollN+' de '+BUDGET_CATS.length+' categorias. Se elige mes por mes." onclick="window._budRolloverUI()">Rollover</button>'
+    +'<button class="bdg-scope-btn roll-tgl'+(_rolloverUI?' on':'')+'" title="Carry into '+mShort+' whatever was left over (or overspent) last month. Now: '+rollN+' of '+BUDGET_CATS.length+' categories. Chosen month by month." onclick="window._budRolloverUI()">Rollover</button>'
     +(BUDGET_SCOPE_UI
       ?'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
         +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
@@ -3162,9 +3162,9 @@ function renderBudget(){
   if(_rolloverUI){
     var allOn=rollN===BUDGET_CATS.length;
     html+='<div class="bdg-roll-row">'
-      +'<span class="bdg-roll-hint">Suma a '+mShort+' lo que sobro en '+monthLabel(prevMonth(month))+' y resta lo que te pasaste. Vale solo para '+mShort+': cada mes se enciende aparte.</span>'
+      +'<span class="bdg-roll-hint">Adds to '+mShort+' whatever was left over in '+monthLabel(prevMonth(month))+', and subtracts what you overspent. Applies to '+mShort+' only: each month is switched on separately.</span>'
       +'<span class="bdg-scope">'
-        +'<button class="bdg-scope-btn roll-all" onclick="toggleRolloverAll(\''+month+'\')">'+(allOn?'Ninguna':'Todas')+'</button>'
+        +'<button class="bdg-scope-btn roll-all" onclick="toggleRolloverAll(\''+month+'\')">'+(allOn?'None':'All')+'</button>'
         +BUDGET_CATS.map(function(c){
           return '<button class="bdg-scope-btn'+(rollOn(c,month)?' on':'')+'" onclick="toggleRolloverCat(\''+c+'\',\''+month+'\')">'+c+'</button>';
         }).join('')+'</span></div>';
@@ -3188,7 +3188,7 @@ function renderBudget(){
   function amtInp(cat,ci){
     var v=ci.base>0?parseFloat(ci.base.toFixed(2)):'';
     var w=Math.max(2,String(v||0).length+1);
-    return '<span class="bdg-amt-wrap'+(ci.fixed?' is-fixed':'')+'" title="'+(ci.fixed?'Monto fijo del mes':'Limite del mes — escribilo en USD y queda fijo')+'">$'
+    return '<span class="bdg-amt-wrap'+(ci.fixed?' is-fixed':'')+'" title="'+(ci.fixed?'Fixed amount for the month':'Month limit — type it in USD and it stays fixed')+'">$'
       +'<input type="number" class="bdg-amt-inp" style="width:'+w+'ch" value="'+v+'" placeholder="0" step="1" min="0" inputmode="decimal"'
       +' onclick="event.stopPropagation()" onblur="bdgAmtCommit(this,\''+cat+'\')"'
       +' onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=this.defaultValue;this.blur();}"></span>';
@@ -3226,7 +3226,7 @@ function renderBudget(){
       // El limite del pie se edita en USD igual que el % de arriba: para una
       // categoria de monto fijo (una suscripcion) pensar en % es la cuenta al reves.
       +'<div class="bdg-cat-sub">'+(catLim>0?fmtUSD(s)+' of '+amtInp(cat,ci):amtInp(cat,ci)+' planned')
-        +(ci.carry?'<span class="bdg-carry'+(ci.carry<0?' is-neg':'')+'">'+(ci.carry>0?'+':'-')+fmtShortUSD(Math.abs(ci.carry))+' del mes pasado · '+fmtUSD(catLim)+'</span>':'')
+        +(ci.carry?'<span class="bdg-carry'+(ci.carry<0?' is-neg':'')+'">'+(ci.carry>0?'+':'-')+fmtShortUSD(Math.abs(ci.carry))+' from last month · '+fmtUSD(catLim)+'</span>':'')
       +'</div>'
       +'</div>';
   });
@@ -3262,7 +3262,7 @@ function renderBudget(){
     var dT=t0-t1, colT=dT===0?'var(--txt3)':(dT>0?'#E24B4A':'#5DCAA5'), arrT=dT===0?'·':(dT>0?'▲':'▼');
     html+='<div class="mvm-card">'
       +'<span class="cleg" style="margin-bottom:20px">Month vs month'+(isCurMonth?' <span style="text-transform:none;letter-spacing:0;color:var(--txt3)">· through day '+dayNum+'</span>':'')+'</span>'
-      +'<div class="mvm-row mvm-head"><span class="mvm-cat">Categoria</span><span class="mvm-num">'+lbl(m2)+'</span><span class="mvm-num">'+lbl(m1)+'</span><span class="mvm-num">'+lbl(month)+'</span><span class="mvm-num">Δ</span></div>'
+      +'<div class="mvm-row mvm-head"><span class="mvm-cat">Category</span><span class="mvm-num">'+lbl(m2)+'</span><span class="mvm-num">'+lbl(m1)+'</span><span class="mvm-num">'+lbl(month)+'</span><span class="mvm-num">Δ</span></div>'
       +(rows||'<div style="font-size:14px;color:var(--txt3);padding:10px 2px">No spending in these months.</div>')
       +'<div class="mvm-row mvm-total"><span class="mvm-cat">Total</span><span class="mvm-num mvm-pre">'+fmtUSD(t2)+'</span><span class="mvm-num mvm-pre">'+fmtUSD(t1)+'</span><span class="mvm-num">'+fmtUSD(t0)+'</span><span class="mvm-num mvm-delta" style="color:'+colT+'">'+arrT+' '+(dT===0?'—':fmtUSD(Math.abs(dT)))+'</span></div>'
       +'</div>';
@@ -3271,7 +3271,7 @@ function renderBudget(){
   // Al pie de la pagina: el resumen del mes se abre solo cuando cambia el mes, y
   // este es el modo de volver a verlo (o de mirar otro mes). Va ultimo porque es
   // un cierre, no un control del budget que estas editando arriba.
-  html+='<div class="bdg-close-row"><button class="btn btns" onclick="showMonthClose(\''+month+'\')">Ver cierre de '+monthLabel(month)+'</button></div>';
+  html+='<div class="bdg-close-row"><button class="btn btns" onclick="showMonthClose(\''+month+'\')">View month close · '+monthLabel(month)+'</button></div>';
 
   // (la config del Monthly Total vive en el hero: 'of $X' tap-to-edit)
 
@@ -3336,11 +3336,11 @@ function trackerTxBalances(){
 // no se lee, "hace 2 meses" si.
 var DEBT_STALE_DAYS=60;
 function debtAgeLabel(d){
-  if(d<=0) return 'hoy';
-  if(d===1) return '1 dia';
-  if(d<DEBT_STALE_DAYS) return d+' dias';
+  if(d<=0) return 'today';
+  if(d===1) return '1 day';
+  if(d<DEBT_STALE_DAYS) return d+' days';
   var m=Math.round(d/30.44);
-  return m===1?'1 mes':m+' meses';
+  return m===1?'1 mo':m+' mo';
 }
 function calcTrackerBal(name){
   // Preferir la entrada tracker si hay duplicados con el mismo nombre.
@@ -3499,7 +3499,7 @@ window.addExchangeWallet=async function(){
   var w={id:Date.now(),name:name,type:type,balance:null,updated:null,fetchedAt:null};
   if(type==='bsc'){
     var addr=(document.getElementById('xw-address').value||'').trim();
-    if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){ if(st) st.textContent='Direccion 0x invalida'; return; }
+    if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){ if(st) st.textContent='Invalid 0x address'; return; }
     w.address=addr;
   } else {
     // Las credenciales van SOLO al almacen local del dispositivo, nunca a S.
@@ -3616,7 +3616,7 @@ function renderWallets(){
     return wmRow('#9B70F0',escHtml(w.name).slice(0,1).toUpperCase(),w.balance!=null?'on':'off',escHtml(w.name),meta||'Connected',right,acts,logo);
   }
   var exRows=!showEx?'':(xwList.map(xwRow).join('')
-    ||'<p class="hint" style="padding:8px 4px">Aun no agregaste exchanges.</p>');
+    ||'<p class="hint" style="padding:8px 4px">No exchanges added yet.</p>');
 
   // ── Trackers + Manual ─────────────────────────────────────────────────
   // Una sola fabrica para las dos listas: lo unico que cambia es el color, la
@@ -3626,20 +3626,20 @@ function renderWallets(){
   function trkRow(name,kind){
     var mw=S.manualWallets.find(function(w){return w.name===name&&w.trackerOnly;});
     var total=_trkVal(name), isDebt=kind==='out';
-    var meta='<span class="wm-badge'+(isDebt?' is-debt':'')+'">'+(kind==='in'?'me deben':isDebt?'debo':'tracker')+'</span>';
+    var meta='<span class="wm-badge'+(isDebt?' is-debt':'')+'">'+(kind==='in'?'owes you':isDebt?'you owe':'tracker')+'</span>';
     // Hace cuanto que existe ESTA deuda. Solo si hay saldo: a cero no hay deuda
     // de la que contar dias.
     if(kind&&total>0.005){
       var dAge=daysBetweenISO(debtSinceCore(S.transactions,name,mw?(mw.balance||0):0),localToday());
-      if(dAge!=null) meta+='<span class="wm-age'+(dAge>=DEBT_STALE_DAYS?' is-stale':'')+'">hace '+debtAgeLabel(dAge)+'</span>';
+      if(dAge!=null) meta+='<span class="wm-age'+(dAge>=DEBT_STALE_DAYS?' is-stale':'')+'">'+debtAgeLabel(dAge)+' old</span>';
     }
     var right='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
     var acts='';
     if(mw){
       // El boton de sumar solo aparece si el wallet se marco como ciclo: en una
       // deuda de una sola vez seria un boton que no se usa nunca.
-      if(kind&&mw.cycle) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+',1)">'+(isDebt?'Pedir':'Prestar')+'</button>';
-      if(kind&&total>0) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pagar':'Cobrar')+'</button>';
+      if(kind&&mw.cycle) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+',1)">'+(isDebt?'Borrow':'Lend')+'</button>';
+      if(kind&&total>0) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pay':'Collect')+'</button>';
       acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
@@ -3683,7 +3683,7 @@ function renderWallets(){
           +(showEx?htile('Exchanges',apiTotal,'#9B70F0'):'')
           +htile('Trackers',trackerTotal,'#2DD4BF')
           +htile('Manual',manualNormal,'#6B7280')
-          +(lentTotal>0||debtTotal>0?'<div class="whtile"><span class="whtile-lbl"><i style="background:#E24B4A"></i>Debts</span><span class="whtile-val"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span><span class="whtile-sub">'+fmtUSD(lentTotal)+' te deben · '+fmtUSD(debtTotal)+' debes</span></div>':'')
+          +(lentTotal>0||debtTotal>0?'<div class="whtile"><span class="whtile-lbl"><i style="background:#E24B4A"></i>Debts</span><span class="whtile-val"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span><span class="whtile-sub">'+fmtUSD(lentTotal)+' owed to you · '+fmtUSD(debtTotal)+' you owe</span></div>':'')
         +'</div>'
       +'</div>'
       +'<div class="wm-alloc">'+wvBar+'</div>'
@@ -3696,7 +3696,7 @@ function renderWallets(){
       +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div><button class="wm-add" onclick="openExchangeForm()">+ Add exchange</button></div>':'')
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
-      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Debts</span><span class="wm-group-sum"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span></div><div class="wm-rows">'+(dbRows||'<p class="hint" style="padding:8px 4px">Quien te debe y a quien le debes, en una sola lista.</p>')+'</div><div class="wm-add-pair"><button class="wm-add" onclick="openWalletForm(\'lent\')">+ Me deben</button><button class="wm-add" onclick="openWalletForm(\'debt\')">+ Debo</button></div></div>'
+      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Debts</span><span class="wm-group-sum"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span></div><div class="wm-rows">'+(dbRows||'<p class="hint" style="padding:8px 4px">Who owes you and who you owe, in one list.</p>')+'</div><div class="wm-add-pair"><button class="wm-add" onclick="openWalletForm(\'lent\')">+ Owed to me</button><button class="wm-add" onclick="openWalletForm(\'debt\')">+ I owe</button></div></div>'
     +'</div>';
   // Skip re-render when unchanged → no flicker / re-animation on tab return.
   if(wHtml!==_walletsSig){ grid.innerHTML=wHtml; _walletsSig=wHtml; }

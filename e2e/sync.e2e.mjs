@@ -372,11 +372,11 @@ const HINT = "(document.getElementById('cat-hint')||{}).textContent||''";
 const setCat = async (c) => { await ev(`document.getElementById('tx-cat').value=${JSON.stringify(c)};updateCatHint()`); return await ev(HINT); };
 
 check('sin categoria no hay hint', (await setCat('')) === '');
-check('Groceries = Gasto', (await setCat('Groceries')).startsWith('Gasto'), await ev(HINT));
-check('Support = Gasto', (await setCat('Support')).startsWith('Gasto'), await ev(HINT));
-check('Savings = Neutra', (await setCat('Savings')).startsWith('Neutra'), await ev(HINT));
-check('Transfer = Flujo externo', (await setCat('Transfer')).startsWith('Flujo externo'), await ev(HINT));
-check('Investments = Flujo externo', (await setCat('Investments')).startsWith('Flujo externo'), await ev(HINT));
+check('Groceries = Expense', (await setCat('Groceries')).startsWith('Expense'), await ev(HINT));
+check('Support = Expense', (await setCat('Support')).startsWith('Expense'), await ev(HINT));
+check('Savings = Neutral', (await setCat('Savings')).startsWith('Neutral'), await ev(HINT));
+check('Transfer = External flow', (await setCat('Transfer')).startsWith('External flow'), await ev(HINT));
+check('Investments = External flow', (await setCat('Investments')).startsWith('External flow'), await ev(HINT));
 check('Income = Income', (await setCat('Income')).startsWith('Income'), await ev(HINT));
 // Y que se actualice solo cuando el form se puebla por codigo, no solo al tocarlo.
 await ev('closeTxForm()'); await sleep(300);
@@ -439,13 +439,13 @@ check('ningun nombre se desborda a 1600px', cortado === false);
 await send('Emulation.clearDeviceMetricsOverride', {});
 await sleep(250);
 
-check('las dos direcciones van juntas en Debts', /Debts:Roi\|me deben,Fam\|me deben,Ana\|debo/.test(grupos), grupos);
+check('las dos direcciones van juntas en Debts', /Debts:Roi\|owes you,Fam\|owes you,Ana\|you owe/.test(grupos), grupos);
 
 // El boton de sumar es opt-in por wallet (la casilla "ciclo"), no sale en todas.
 const botones = (n) => ev(`[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(r){return r.querySelector('.wm-name').textContent===${JSON.stringify(n)}}).map(function(r){return [...r.querySelectorAll('.wsettle')].map(function(b){return b.textContent}).join('+')})[0]`);
-check('la wallet de ciclo ofrece las dos direcciones', (await botones('Fam')) === 'Prestar+Cobrar', await botones('Fam'));
-check('una deuda de una sola vez solo ofrece saldar', (await botones('Roi')) === 'Cobrar', await botones('Roi'));
-check('una deuda en contra dice Pagar', (await botones('Ana')) === 'Pagar', await botones('Ana'));
+check('la wallet de ciclo ofrece las dos direcciones', (await botones('Fam')) === 'Lend+Collect', await botones('Fam'));
+check('una deuda de una sola vez solo ofrece saldar', (await botones('Roi')) === 'Collect', await botones('Roi'));
+check('una deuda en contra dice Pagar', (await botones('Ana')) === 'Pay', await botones('Ana'));
 
 // Prestar de nuevo SUBE lo que te deben: es un Credit, la unica tx que no es Debit.
 const antesFam = await heroTotal();
@@ -516,14 +516,14 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
 await boot();
 await ev("showPage('wallets')"); await sleep(500);
 const ageOf = async (n) => await ev(`(function(){var r=[...document.querySelectorAll('#page-wallets .wm-row')].filter(function(e){var x=e.querySelector('.wm-name');return x&&x.textContent===${JSON.stringify(n)}})[0];if(!r)return 'sin fila';var a=r.querySelector('.wm-age');return a?a.textContent+'|'+(a.className.indexOf('is-stale')>=0?'stale':'ok'):'sin edad';})()`);
-check('una deuda vieja dice los meses', (await ageOf('Vieja')).startsWith('hace 7 meses'), await ageOf('Vieja'));
+check('una deuda vieja dice los meses', (await ageOf('Vieja')).startsWith('7 mo old'), await ageOf('Vieja'));
 check('y se marca como parada', (await ageOf('Vieja')).endsWith('stale'), await ageOf('Vieja'));
-check('una reciente dice los dias', (await ageOf('Reciente')) === 'hace 5 dias|ok', await ageOf('Reciente'));
+check('una reciente dice los dias', (await ageOf('Reciente')) === '5 days old|ok', await ageOf('Reciente'));
 // Ciclo: prestada hace 300, saldada hace 250, prestada de nuevo hace 70.
-check('en una de ciclo cuenta la deuda vigente', (await ageOf('Ciclo')).startsWith('hace 2 meses'), await ageOf('Ciclo'));
+check('en una de ciclo cuenta la deuda vigente', (await ageOf('Ciclo')).startsWith('2 mo old'), await ageOf('Ciclo'));
 const alertD = await ev("[...document.querySelectorAll('.alert-item,.alert-row,#alerts-list *')].map(e=>e.textContent).join(' ~ ')");
-check('avisa de la deuda parada', /Te debe Vieja/.test(alertD), alertD.slice(0, 300));
-check('con el verbo correcto segun la direccion', /Cobrala/.test(alertD), alertD.slice(0, 300));
+check('avisa de la deuda parada', /Vieja owes you/.test(alertD), alertD.slice(0, 300));
+check('con el verbo correcto segun la direccion', /Collect it/.test(alertD), alertD.slice(0, 300));
 check('una deuda reciente no genera aviso', !/Reciente/.test(alertD), alertD.slice(0, 300));
 
 // ── 11 · rollover de categoria ────────────────────────────────────────────
@@ -599,10 +599,10 @@ await ev("window._budRolloverUI()"); await sleep(300);
 await ev(`toggleRolloverAll('${mesActR}')`); await sleep(400);
 // Groceries: limite 100, gasto previo 60 -> sobran 40 -> 140
 check('Todas enciende de una', (await card('Groceries')).includes('· $140.00'), await card('Groceries'));
-check('la card dice de donde sale', /\+\$40.*del mes pasado/.test(await card('Groceries')), await card('Groceries'));
+check('la card dice de donde sale', /\+\$40.*from last month/.test(await card('Groceries')), await card('Groceries'));
 // Transport: limite 100, gasto previo 130 -> exceso 30 -> 70
 check('lo que te pasaste baja el limite', (await card('Transport')).includes('· $70.00'), await card('Transport'));
-check('el exceso se muestra en negativo', /-\$30.*del mes pasado/.test(await card('Transport')), await card('Transport'));
+check('el exceso se muestra en negativo', /-\$30.*from last month/.test(await card('Transport')), await card('Transport'));
 
 // El rollover reparte distinto, no crea presupuesto: el total del mes no se mueve.
 const heroTot = await ev("(document.querySelector('.bdg-hero-sub')||{}).textContent||''");
@@ -614,7 +614,7 @@ check('queda guardado bajo el mes visible', JSON.parse(await rollLS())[mesActR].
 check('el mes anterior sigue apagado', JSON.parse(await rollLS())[mesAntR] === undefined, await rollLS());
 
 await ev(`toggleRolloverCat('Groceries','${mesActR}')`); await sleep(400);
-check('apagar una vuelve al limite asignado', (await card('Groceries')).includes('base=100')&&!(await card('Groceries')).includes('del mes pasado'), await card('Groceries'));
+check('apagar una vuelve al limite asignado', (await card('Groceries')).includes('base=100')&&!(await card('Groceries')).includes('from last month'), await card('Groceries'));
 check('y no toca a las demas', (await card('Transport')).includes('· $70.00'), await card('Transport'));
 check('sobrevive al reload', await (async () => { await boot(); await ev(`showPage('budget')`); await sleep(500); return (await card('Transport')).includes('· $70.00'); })(), await card('Transport'));
 
@@ -631,22 +631,22 @@ check('y borra el mes del mapa', JSON.parse(await rollLS())[mesActR] === undefin
 console.log('E2E cierre de mes');
 check('el cierre se abre solo con el mes ya cambiado', await ev("!!document.getElementById('month-close')"));
 const mcTxt = await ev("(document.getElementById('month-close')||{}).textContent||''");
-check('titula el mes cerrado', mcTxt.includes('Cierre de'), mcTxt.slice(0, 80));
+check('titula el mes cerrado', mcTxt.includes('Month close'), mcTxt.slice(0, 80));
 // Transport: plan 100, gasto 130 -> se paso por 30. Groceries: plan 100, gasto 60.
 check('muestra plan vs real por categoria', /Transport/.test(mcTxt) && /\$130\.00/.test(mcTxt) && /Groceries/.test(mcTxt), mcTxt.slice(0, 400));
-check('dice el movimiento mas grande', /Movimiento mas grande/.test(mcTxt) && /prev transport/.test(mcTxt), mcTxt.slice(0, 400));
+check('dice el movimiento mas grande', /Largest transaction/.test(mcTxt) && /prev transport/.test(mcTxt), mcTxt.slice(0, 400));
 check('suma el gasto del mes', /\$190\.00/.test(mcTxt), mcTxt.slice(0, 400));
-check('cuenta los movimientos', /4 movimientos/.test(mcTxt), mcTxt.slice(0, 400));
+check('cuenta los movimientos', /4 transactions/.test(mcTxt), mcTxt.slice(0, 400));
 check('compara contra el mes anterior', /vs /.test(mcTxt), mcTxt.slice(0, 300));
 
 // Conciliacion: 500 de ingreso - 190 de gasto - 200 que salio en Transfer = +110,
 // que es exactamente lo que subio el patrimonio. Sin residuo.
-check('concilia la variacion del patrimonio', /Como se movio el patrimonio/.test(mcTxt), mcTxt.slice(0, 200));
-check('muestra los flujos externos aparte', /Flujos externos/.test(mcTxt) && /-\$200/.test(mcTxt), mcTxt);
+check('concilia la variacion del patrimonio', /How net worth moved/.test(mcTxt), mcTxt.slice(0, 200));
+check('muestra los flujos externos aparte', /External flows/.test(mcTxt) && /-\$200/.test(mcTxt), mcTxt);
 check('la variacion cuadra: +\$110', /\+\$110/.test(mcTxt), mcTxt);
-check('sin residuo no hay linea de "sin explicar"', !/Sin explicar/.test(mcTxt), mcTxt);
+check('sin residuo no hay linea de "sin explicar"', !/Unexplained/.test(mcTxt), mcTxt);
 // Ahorro = 500 - 190 = 310, 62% de los ingresos
-check('muestra el ahorro del mes', /\+\$310/.test(mcTxt) && /62% de tus ingresos/.test(mcTxt), mcTxt.slice(0, 400));
+check('muestra el ahorro del mes', /\+\$310/.test(mcTxt) && /62% of income/.test(mcTxt), mcTxt.slice(0, 400));
 
 // El modal tiene que caber ENTERO dentro del overlay, franjas del sistema
 // incluidas. En un telefono con viewport-fit=cover la barra de estado y la de
@@ -667,6 +667,10 @@ const fit = await ev(`(function(){
     ok:!!document.getElementById('_mcok'),scroll:b.scrollHeight>b.clientHeight+1});
 })()`);
 const F = JSON.parse(fit);
+// Las filas no pueden crecer a dos lineas: la columna Plan lleva el arrastre
+// debajo del monto, y en movil entra solo con la etiqueta corta.
+const rowH = await ev("(function(){var r=document.querySelectorAll('#month-close .mc-row');if(!r.length)return -1;var h=0;for(var i=0;i<r.length;i++)h=Math.max(h,r[i].getBoundingClientRect().height);return Math.round(h);})()");
+check('las filas no se parten en dos lineas', rowH > 0 && rowH <= 46, `alto=${rowH}`);
 check('el modal no se mete bajo la barra de estado', F.top >= 89, fit);
 check('ni bajo la barra de gestos', F.bot <= F.vh - 39, fit);
 check('el cuerpo scrollea cuando no entra', F.scroll, fit);
@@ -691,7 +695,7 @@ await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');
   localStorage.setItem('ft13',JSON.stringify(d));})()`);
 await boot();
 const mcTxt2 = await ev("(document.getElementById('month-close')||{}).textContent||''");
-check('aparece la linea de sin explicar', /Sin explicar/.test(mcTxt2), mcTxt2.slice(0, 300));
+check('aparece la linea de sin explicar', /Unexplained/.test(mcTxt2), mcTxt2.slice(0, 300));
 check('y dice cuanto falta: $80', /\+\$80/.test(mcTxt2), mcTxt2);
 
 // ── 13 · selector de mes del Dashboard ────────────────────────────────────
