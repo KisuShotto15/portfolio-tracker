@@ -28,7 +28,7 @@ var PRICE_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/prices';
 // Tasa USDT/VES del monitor P2P (mediana top-20 merchants BDV, lo fetchea 24/7).
 var USDT_RATE_URL = 'https://kisushotto-site.vercel.app/api/usdt-ves';
 // Multi-usuario (Supabase): sesion, OTP y syncFetch viven en ./auth.js.
-initAuth({ syncProxy:SYNC_PROXY, onLogin:function(){ return bootAfterAuth(true); } });
+initAuth({ syncProxy:SYNC_PROXY, onLogin:function(){ return bootAfterAuth(true); }, confirm:appConfirm });
 
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
@@ -58,6 +58,10 @@ var SUMMARY_CATS = CATS;
 // 'Transfer' (deposito/retiro) NO va en SUMMARY_CATS ni CATS: asi queda fuera de
 // income/gasto, donut y budget automaticamente. Mueve el balance del wallet pero
 // se netea del P&L como Investments (isExtFlow, ahora en finance-core.js).
+// Pero SI es elegible al anotar y al filtrar: los dos <select> de categoria salen
+// de aca (populateCatSelects), no de <option> escritos a mano en el HTML — antes
+// eran tres listas que habia que mantener sincronizadas a mano.
+var FORM_CATS    = CATS.concat(['Transfer']);
 var CCOLORS      = {Income:'#34D399',Home:'#818CF8',Groceries:'#34D399',Transport:'#60A5FA',Health:'#A78BFA',Business:'#FBBF24',Discretionary:'#38BDF8','Eating Out':'#FB923C',Support:'#F59E0B',Investments:'#C084FC',Savings:'#6EE7B7',
   // legacy — kept so old transactions still render with a color
   Services:'#818CF8','Help others':'#F59E0B',Emergency:'#F87171',Other:'#6B7280'};
@@ -454,7 +458,7 @@ function _tombstoneMissing(prevTxs,newTxs){
 function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(_cloneTxs(S.transactions)); S.transactions=undoStack.pop(); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(_cloneTxs(S.transactions)); S.transactions=redoStack.pop(); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
-function clearAllTx(){ if(!confirm('Delete ALL transactions? Can be undone with Undo.')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
+async function clearAllTx(){ if(!await appConfirm('Delete ALL transactions?','Can be undone with Undo.','Delete')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
@@ -797,13 +801,16 @@ function renderOnchainWallets(){
       +'</div>';
   }).join('');
 }
+function owStatus(msg){ var el=document.getElementById('ow-status'); if(el){ el.textContent=msg||''; el.style.color='#E24B4A'; } }
+function jsonStatus(msg,color){ var el=document.getElementById('json-status'); if(el){ el.textContent=msg||''; el.style.color=color||'var(--color-text-secondary)'; } }
 function saveOnchainWallet(){
   var label=document.getElementById('ow-label').value.trim();
   var chain=document.getElementById('ow-chain').value;
   var addr=document.getElementById('ow-addr').value.trim();
   if(!label||!addr) return;
-  if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ alert('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
-  if(chain==='btc'&&!/^([xyz]pub[A-Za-z0-9]{100,}|(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87})$/.test(addr)){ alert('Invalid Bitcoin address or xpub/zpub/ypub'); return; }
+  if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ owStatus('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
+  if(chain==='btc'&&!/^([xyz]pub[A-Za-z0-9]{100,}|(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87})$/.test(addr)){ owStatus('Invalid Bitcoin address or xpub/zpub/ypub'); return; }
+  owStatus('');
   S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr}]);
   S.onchainWalletsUpdatedAt=stamp();
   document.getElementById('ow-label').value='';
@@ -1533,8 +1540,7 @@ function txRowHtml(t){
     +'<td class="td-cat">'+(t.category?'<span class="tag '+tagCat(t.category)+'">'+escHtml(t.category)+'</span>':'<span style="color:var(--color-text-secondary);font-size:12px">—</span>')+'</td>'
     +'<td class="td-orig">'+orig+'</td>'
     +'<td class="td-amt">'
-    +  '<span class="td-amt-val td-amt-mob" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
-    +  '<span class="td-amt-val td-amt-desk" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
+    +  '<span class="td-amt-val" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
     +  origM
     +'</td>'
     +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" width="28" height="28" loading="lazy" decoding="async" title="Receipt" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
@@ -1590,6 +1596,7 @@ function renderTx(){
   // Reset pagination whenever the filter set changes (loadMoreTx keeps the same filters → no reset).
   var fSig=tF+'|'+cF+'|'+wF+'|'+mF+'|'+sF;
   if(fSig!==_txFilterSig){ _txLimit=_txBase; _txFilterSig=fSig; }
+  syncTxFilterState(cF,wF,mF);
   // Skip completo si nada que afecte la lista cambio: ordenar 2000 txs y re-parsear
   // filas de innerHTML costaba ~90ms por CADA vuelta a la tab en un telefono medio.
   var rSig=txRSig(fSig);
@@ -3515,8 +3522,8 @@ window.addExchangeWallet=async function(){
   try{ await fetchExchangeWallet(w); }catch(e){ /* balance queda en — hasta el proximo refresh */ }
   renderWallets(); renderSummary();
 };
-window.removeExchangeWallet=function(id){
-  if(!confirm('Delete this exchange wallet?')) return;
+window.removeExchangeWallet=async function(id){
+  if(!await appConfirm('Delete this exchange wallet?','Its keys are removed from this device.','Delete')) return;
   S.exchangeWallets=(S.exchangeWallets||[]).filter(function(w){ return w.id!==id; });
   xkDel(id);
   S.exchangeWalletsUpdatedAt=stamp(); save();
@@ -3707,6 +3714,13 @@ function drawWalletDonut(data, grand){
 }
 
 
+function populateCatSelects(){
+  var opts=FORM_CATS.map(function(c){ return '<option>'+c+'</option>'; }).join('');
+  var tx=document.getElementById('tx-cat');
+  if(tx) tx.innerHTML='<option value="">\u2014</option>'+opts;
+  var tf=document.getElementById('tf-cat');
+  if(tf){ var cur=tf.value; tf.innerHTML='<option value="">Category</option>'+opts; tf.value=cur; }
+}
 function populateWalletSelects(){
   var names=['Binance','Cash'];
   S.manualWallets.forEach(function(w){ if(names.indexOf(w.name)<0) names.push(w.name); });
@@ -3774,7 +3788,7 @@ function _parseCSV(file){
 }
 
 function exportCSV(){
-  if(!S.transactions.length){ alert('No data'); return; }
+  if(!S.transactions.length){ jsonStatus('No transactions to export.','#E24B4A'); return; }
   var csv='Date,Description,Wallet,Transaction,Category,USD,VES Original,Tracker\n'+S.transactions.map(function(t){ return t.date+',"'+t.desc+'",'+(t.wallet||'')+','+t.type+','+t.category+','+t.amountUSD+','+(t.amountVES||'')+','+(t.imported?'0':'1'); }).join('\n');
   var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='transactions_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
 }
@@ -3787,11 +3801,11 @@ function importJSON(file){
   if(!file) return;
   var st=document.getElementById('json-status');
   var reader=new FileReader();
-  reader.onload=function(e){
+  reader.onload=async function(e){
     try{
       var parsed=JSON.parse(e.target.result);
       if(!parsed.transactions&&!parsed.portfolio){ st.textContent='Invalid backup file.'; st.style.color='#E24B4A'; return; }
-      if(!confirm('This will replace ALL current data with the backup. Continue?')) return;
+      if(!await appConfirm('Restore backup?','This replaces ALL current data with the file, on this device and in the cloud.','Restore')) return;
       S=Object.assign({},S,parsed);
       // Re-estampar todo con un timestamp fresco para que el restore GANE el
       // last-writer-wins del servidor; si no, el merge autoritativo conserva la
@@ -3811,7 +3825,17 @@ function importJSON(file){
   reader.readAsText(file);
 }
 
-function clearAll(){ if(confirm('Delete ALL data? This cannot be undone.')){ _slDisabled=true; flushSaveLocal(); localStorage.removeItem('ft13'); location.reload(); } }
+async function clearAll(){
+  if(!await appConfirm('Delete ALL data?','Transactions, wallets, holdings and settings on this device. This cannot be undone.','Delete')) return;
+  _slDisabled=true; flushSaveLocal(); localStorage.removeItem('ft13'); location.reload();
+}
+// El Sign out vivia como confirm() nativo en el onclick del boton; aca usa el
+// mismo modal que el resto de la app.
+async function signOut(){
+  if(!await appConfirm('Sign out?','Your data stays synced in the cloud and comes back when you sign in again.','Sign out')) return;
+  logout();
+}
+window.signOut=signOut;
 
 var _pageInTimer=null;
 var _historyCameFrom=null;
@@ -3987,6 +4011,22 @@ window.toggleSidebar = toggleSidebar;
 window.showPage = showPage;
 function setTxTab(btn,val){ document.getElementById('tf-type').value=val; document.querySelectorAll('.ttt').forEach(function(b){b.classList.remove('active');}); btn.classList.add('active'); renderTx(); }
 function toggleTxFilters(){ document.getElementById('tx-filters-extra').classList.toggle('open'); }
+// En movil los selects de categoria/wallet/mes se ocultan al colapsar el panel, pero
+// siguen filtrando la lista. El badge dice cuantos hay puestos y la X los limpia,
+// asi no queda una lista filtrada sin nada visible que lo explique.
+function syncTxFilterState(cF,wF,mF){
+  var n=(cF?1:0)+(wF?1:0)+(mF?1:0);
+  var btn=document.querySelector('.tx-filter-toggle');
+  if(btn) btn.classList.toggle('on',n>0);
+  var b=document.getElementById('tf-badge');
+  if(b) b.textContent=n||'';
+  var c=document.getElementById('tf-clear');
+  if(c) c.style.display=n?'':'none';
+}
+function clearTxFilters(){
+  ['tf-cat','tf-wallet','tf-month'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  renderTx();
+}
 // Movil: la lupa despliega el campo de busqueda; al cerrarlo, limpia el filtro.
 function toggleTxSearch(){
   var i=document.getElementById('tf-search');
@@ -3994,6 +4034,7 @@ function toggleTxSearch(){
   else if(i.value){ i.value=''; renderTx(); }
 }
 window.setTxTab=setTxTab; window.toggleTxFilters=toggleTxFilters; window.toggleTxSearch=toggleTxSearch;
+window.clearTxFilters=clearTxFilters;
 window.fetchRate = fetchRate;
 window.fetchUsdtRate = fetchUsdtRate;
 window.addTx = addTx;
@@ -4358,6 +4399,7 @@ async function init(){
   });
   var today=localToday();
   document.getElementById('tx-date').value=today;
+  populateCatSelects();
   populateTxMonth(); // default: All months (value queda '')
   document.getElementById('tf-search').addEventListener('input', function(){ clearTimeout(_srchTimer); _srchTimer=setTimeout(renderTx,220); });
   restoreProfitCalc();

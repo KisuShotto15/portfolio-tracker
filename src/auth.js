@@ -10,7 +10,10 @@ export var MULTIUSER    = !!(SUPABASE_URL && SUPABASE_KEY);
 
 var _syncProxy='';
 var _onLogin=function(){};
-export function initAuth(o){ _syncProxy=o.syncProxy; _onLogin=o.onLogin||_onLogin; }
+// main.js inyecta su modal de confirmacion: auth.js no puede importarlo (vive en
+// main.js, que ya importa de aca). Sin inyeccion cae al confirm() del navegador.
+var _ask=function(t){ return Promise.resolve(window.confirm(t)); };
+export function initAuth(o){ _syncProxy=o.syncProxy; _onLogin=o.onLogin||_onLogin; if(o.confirm) _ask=o.confirm; }
 
 export function sbGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
 function sbSetSession(j){
@@ -198,7 +201,7 @@ window.passkeyRegister=async function(){
   }catch(e){ pkStatus(e&&e.name==='NotAllowedError'?'Cancelled':'Error: '+(e&&e.message||e)); }
 };
 window.passkeyDelete=async function(id){
-  if(!confirm('Delete this passkey? The device using it will have to sign in by email.')) return;
+  if(!await _ask('Delete this passkey?','The device using it will have to sign in by email.','Delete')) return;
   var r=await sbAuthedFetch('/passkeys/'+id,'DELETE');
   if(r.ok) renderPasskeys(); else pkStatus('Could not delete');
 };

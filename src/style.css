@@ -191,7 +191,6 @@ input,select,textarea,button{font-family:inherit}
    Net Profit (del mes) y Liquid (ahora). Los otros que habia — Profit Retention y
    Emergency Fund — ya viven en Budget y en Salud Financiera; duplicarlos aca solo
    repetia el mismo numero con otro nombre. */
-.dash-hidden{display:none}
 #kpi-strip .kpi-card:first-child{display:none}
 #kpi-strip .kpi-card:nth-child(4){display:none}
 .dash-grid > .span12{grid-column:1/-1}
@@ -246,7 +245,6 @@ input,select,textarea,button{font-family:inherit}
 @media(max-width:720px){ .ins-stats{grid-template-columns:1fr 1fr} }
 
 /* Monthly breakdown mini-cards */
-#sum-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;margin:0 0 30px}
 .mc{padding:2px 22px;border-right:1px solid var(--line-soft);text-align:center}
 .mc:last-child{border-right:none}
 .mc-l{font-size:14px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
@@ -420,14 +418,19 @@ input,select,textarea,button{font-family:inherit}
 .td-sub{display:none;font-size:12px;color:var(--txt3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .td-desc-txt{display:block;max-width:100%}
 .td-amt-val{display:block}
-.td-amt-mob{display:none}
-.td-amt-desk{display:block}
 .td-orig-m{display:none;font-size:11px;color:var(--txt3);margin-top:2px}
 .tx-mob-hdr{display:none}
 .tx-type-tabs{display:none}
 .ttt{background:none;border:none;color:var(--txt3);font-size:13px;font-weight:500;cursor:pointer;padding:6px 14px;border-radius:999px;transition:color .12s,background .12s}
 .ttt.active{color:var(--accent)}
 .tx-filter-toggle{display:none}
+.tf-badge{display:none}
+/* Limpiar los tres selects de una. En desktop vive en la fila de filtros; en movil,
+   dentro del panel desplegable. Solo aparece si hay algo que limpiar. */
+.tf-clear{width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:var(--surface2);border:1px solid var(--line-soft);border-radius:999px;
+  color:var(--txt3);font-size:12px;cursor:pointer;transition:color .12s,border-color .12s}
+.tf-clear:hover{color:var(--txt);border-color:var(--accent)}
 .tx-toolbar{display:contents}
 .tx-search-btn{display:none}
 .ttt-short{display:none}
@@ -1182,8 +1185,7 @@ input::placeholder{color:var(--txt3)}
      menos hay que bajarle la fuente o se sale de la tarjeta. */
   .kpi-card{min-width:0}
   .kpi-val,.kpi-sub,.kpi-lbl{max-width:100%}
-  #sum-cards{grid-template-columns:1fr 1fr;gap:18px 0}
-  .mc:nth-child(2n){border-right:none}
+    .mc:nth-child(2n){border-right:none}
   .nw-hero .nw-val{font-size:40px}
   .dash-head{margin-bottom:16px}
   /* El chart sangra 18px a cada lado para ir de borde a borde, pero .nw-hero
@@ -1227,7 +1229,13 @@ input::placeholder{color:var(--txt3)}
   #btn-undo,#btn-redo{width:36px;height:36px;padding:0!important;display:flex;align-items:center;justify-content:center;border-radius:999px}
   #tf-search{display:none}
   #tf-search.open{display:block;flex-basis:100%;min-width:0;order:9;margin-top:2px}
-  .tx-filter-toggle{display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;background:var(--surface2);border:1px solid var(--line-soft);border-radius:999px;color:var(--txt2);font-size:13px;cursor:pointer;flex-shrink:0}
+  .tx-filter-toggle{position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;background:var(--surface2);border:1px solid var(--line-soft);border-radius:999px;color:var(--txt2);font-size:13px;cursor:pointer;flex-shrink:0}
+  .tx-filter-toggle.on{color:var(--accent);border-color:var(--accent)}
+  .tf-badge{display:flex;align-items:center;justify-content:center;position:absolute;top:-3px;right:-3px;
+    min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--accent);
+    color:#fff;font-size:10px;font-weight:700;line-height:1}
+  .tx-filter-toggle:not(.on) .tf-badge{display:none}
+  .tf-clear{width:36px;height:36px}
   .tf-lbl{display:none}
   #btn-undo,#btn-redo{flex-shrink:0}
   #tx-filters-extra{display:none}
@@ -1249,8 +1257,7 @@ input::placeholder{color:var(--txt3)}
   .td-desc-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;font-size:14px;color:var(--txt);width:100%;max-width:100%}
   .td-sub{display:block}
   .td-amt{display:flex!important;flex-direction:column;align-items:flex-end;flex-shrink:0;padding:0}
-  .td-amt-mob{display:block;font-size:14px;font-weight:600}
-  .td-amt-desk{display:none}
+  .td-amt-val{font-size:14px;font-weight:600}
   .td-orig-m{display:block}
   .date-sep{display:block}
   .date-sep td{display:block;padding:18px 0 6px;border:none;background:none}

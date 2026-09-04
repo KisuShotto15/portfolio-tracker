@@ -881,6 +881,48 @@ check('Settings muestra el build', /^[a-z0-9]{6,}$/.test(uiBuild), `ui=${uiBuild
 check('y coincide con el del service worker', uiBuild === swBuild, `ui=${uiBuild} sw=${swBuild}`);
 check('el boton de forzar existe', await ev("typeof window.forceUpdate==='function'"));
 
+// ── 16 · filtros activos que no se ven ──────────────────────────────────────
+// En movil los selects se ocultan al colapsar el panel pero siguen filtrando: la
+// lista quedaba recortada sin nada en pantalla que lo explicara.
+console.log('E2E filtros activos');
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
+await ev("showPage('transactions',null);renderTx()"); await sleep(200);
+const nRows = () => ev("document.querySelectorAll('#tx-wrap .tx-row').length");
+const badge = () => ev("(function(){var b=document.querySelector('.tx-filter-toggle');var n=document.getElementById('tf-badge');var x=document.getElementById('tf-clear');return [n?n.textContent.trim():'?',b&&b.classList.contains('on')?1:0,x?getComputedStyle(x).display:'?'].join('|');})()");
+const todas = await nRows();
+check('sin filtros no hay badge', (await badge()) === '|0|none', await badge());
+await ev("document.getElementById('tf-cat').value='Groceries';renderTx()"); await sleep(150);
+check('un filtro puesto lo anuncia', (await badge()) === '1|1|flex', await badge());
+check('y el panel colapsado lo sigue mostrando', await ev("getComputedStyle(document.getElementById('tx-filters-extra')).display==='none'&&document.querySelector('.tx-filter-toggle.on')!==null"));
+await ev("document.getElementById('tf-month').value=document.getElementById('tf-month').options[1].value;renderTx()"); await sleep(150);
+check('dos filtros, dos', (await badge()) === '2|1|flex', await badge());
+await ev("clearTxFilters()"); await sleep(150);
+check('la X los limpia', (await badge()) === '|0|none', await badge());
+check('y la lista vuelve entera', (await nRows()) === todas, `${await nRows()} vs ${todas}`);
+await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+
+// ── 17 · confirmaciones sin dialogos nativos ────────────────────────────────
+// En la PWA de iOS el confirm() del navegador se ve ajeno (y puede bloquearse):
+// todo lo destructivo pasa por el modal de la app.
+console.log('E2E confirmaciones');
+await ev("window.__nativeConfirm=false;window.confirm=function(){window.__nativeConfirm=true;return false;};0");
+const modalTitle = () => ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('h3').textContent:'';})()");
+const cancelModal = () => ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');if(!m.length)return 0;m[m.length-1].querySelector('#_amc').click();return 1;})()");
+await ev("signOut();0");
+await waitFor(async () => (await modalTitle()) === 'Sign out?', 3000, 60, 'el modal de Sign out');
+check('Sign out pregunta con el modal de la app', true);
+check('cancelar no cierra sesion', (await cancelModal()) === 1 && (await ev("!!document.getElementById('tx-wrap')&&document.querySelectorAll('.app-modal-overlay').length===0")));
+await ev("window.passkeyDelete('e2e-fake-id');0");
+await waitFor(async () => (await modalTitle()) === 'Delete this passkey?', 3000, 60, 'el modal de passkey (auth.js con el confirm inyectado)');
+check('auth.js usa el modal inyectado, no el nativo', true);
+await cancelModal(); await sleep(100);
+await ev("removeExchangeWallet('e2e-fake-id');0");
+await waitFor(async () => (await modalTitle()) === 'Delete this exchange wallet?', 3000, 60, 'el modal del exchange wallet');
+check('borrar un exchange wallet tambien', true);
+await cancelModal(); await sleep(100);
+check('ningun confirm() del navegador se disparo', (await ev("window.__nativeConfirm")) === false);
+check('no queda ningun modal abierto', (await ev("document.querySelectorAll('.app-modal-overlay').length")) === 0);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
