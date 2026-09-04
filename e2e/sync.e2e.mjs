@@ -526,6 +526,30 @@ check('avisa de la deuda parada', /Vieja owes you/.test(alertD), alertD.slice(0,
 check('con el verbo correcto segun la direccion', /Collect it/.test(alertD), alertD.slice(0, 300));
 check('una deuda reciente no genera aviso', !/Reciente/.test(alertD), alertD.slice(0, 300));
 
+// Los botones de una fila abierta en movil. Estaban superpuestos al monto con un
+// degradado que terminaba en var(--surface): sobre una fila con fondo propio
+// (seleccionada) eso pintaba manchas oscuras entre boton y boton, y tapaba el
+// monto. Ahora van en su propio renglon, sin fondo.
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
+await ev("showPage('wallets',null)"); await sleep(600);
+await ev("(function(){var r=[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&/Ciclo/.test(n.textContent)})[0];if(r)r.click();})()");
+await sleep(400);
+const actsM = JSON.parse(await ev(`(function(){
+  var r=document.querySelector('.wm-row.wm-sel'); if(!r) return JSON.stringify({err:'sin fila abierta'});
+  var a=r.querySelector('.wm-acts'), bal=r.querySelector('.wm-bal');
+  var cs=getComputedStyle(a), ab=a.getBoundingClientRect(), bb=bal.getBoundingClientRect();
+  var pills=[...a.querySelectorAll('.wsettle')].map(function(b){ return Math.round(b.getBoundingClientRect().width); });
+  return JSON.stringify({pos:cs.position, bg:cs.backgroundImage, tapa:!(ab.left>=bb.right||ab.right<=bb.left||ab.top>=bb.bottom||ab.bottom<=bb.top),
+    pills:pills, nb:a.querySelectorAll('.wico').length, balVis:bb.width>0});
+})()`));
+check('los botones van en la fila, no encima', actsM.pos === 'static', JSON.stringify(actsM));
+check('sin degradado que manche el fondo', actsM.bg === 'none', JSON.stringify(actsM));
+check('el monto queda visible', actsM.balVis && !actsM.tapa, JSON.stringify(actsM));
+check('las pastillas de texto no se aplastan', actsM.pills.length === 2 && actsM.pills.every(function (w) { return w >= 45; }), JSON.stringify(actsM));
+check('estan los cuatro botones', actsM.nb === 4, JSON.stringify(actsM));
+await ev("document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){r.classList.remove('wm-sel')})");
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
+
 // ── 11 · rollover de categoria ────────────────────────────────────────────
 // El sobrante del mes pasado sube el limite de este; el exceso lo baja. Se prueba
 // contra la card real, que es donde el numero importa.

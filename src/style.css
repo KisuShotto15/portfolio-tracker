@@ -825,10 +825,14 @@ input,select,textarea,button{font-family:inherit}
    angostas) el nombre se quedaba con 10px y se montaba sobre el balance apenas la
    fila sumaba un boton mas. Al aparecer tapa el balance, que es justo lo que la
    fila deja de necesitar mientras estas eligiendo que hacer con ella. */
-.wm-acts{position:absolute;right:16px;top:50%;transform:translateY(-50%);
-  display:flex;gap:4px;justify-content:flex-end;align-items:center;opacity:0;pointer-events:none;
-  transition:opacity .12s;padding-left:14px;border-radius:10px;
-  background:linear-gradient(90deg,transparent,var(--surface) 14px)}
+/* El degradado tiene que terminar en el MISMO color que la fila de atras: con
+   var(--surface) a secas se veia una franja negra detras de los botones apenas la
+   fila cambiaba de fondo (hover, o seleccionada en movil). */
+.wm-acts{--acts-bg:var(--surface);position:absolute;right:16px;top:50%;transform:translateY(-50%);
+  display:flex;gap:5px;justify-content:flex-end;align-items:center;opacity:0;pointer-events:none;
+  transition:opacity .12s;padding-left:16px;border-radius:10px;
+  background:linear-gradient(90deg,transparent,var(--acts-bg) 16px)}
+.wm-row:hover .wm-acts{--acts-bg:color-mix(in srgb,#fff 2.5%,var(--surface))}
 .wm-row:hover .wm-acts,.wm-row:focus-within .wm-acts{opacity:1;pointer-events:auto}
 .wm-add{width:calc(100% - 32px);margin:8px 16px 4px;background:none;border:1px dashed var(--line);color:var(--txt3);font-size:14px;font-weight:500;padding:11px 0;border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .wm-add:hover{color:var(--txt2);border-color:rgba(255,255,255,.2)}
@@ -1328,10 +1332,26 @@ input::placeholder{color:var(--txt3)}
   .wm-group-sum{margin-right:0}
   /* Mobile: no reserved space — amount sits at the edge; tapping the row reveals the
      edit/delete buttons which push the amount left (like transactions). */
+  /* En movil los botones van EN LA FILA, no encima: empujan el monto a la
+     izquierda igual que en transacciones. Superpuestos tapaban el monto y el
+     degradado que los despegaba del fondo se veia como una mancha oscura. */
   .wm-acts{display:none}
   .wm-row.wm-sel{background:rgba(255,255,255,.06)}
-  .wm-row.wm-sel .wm-acts{display:flex;opacity:1;pointer-events:auto}
-  .wm-acts{right:14px}
+  /* Renglon propio: con cuatro botones (Lend, Collect, editar, borrar) meterlos
+     en la misma linea aplastaba las pastillas una contra otra y cortaba la
+     etiqueta. Abajo entran siempre, sin importar el largo del nombre. */
+  .wm-row.wm-sel{flex-wrap:wrap}
+  .wm-row.wm-sel .wm-acts{display:flex;opacity:1;pointer-events:auto;
+    position:static;transform:none;background:none;padding-left:0;
+    flex:0 0 100%;justify-content:flex-end;margin-top:10px;gap:6px}
+  /* Los de la fila un poco mas grandes que los de Holdings: aca hay texto
+     adentro ("Collect", "Lend") y a 22px quedaba apretado. */
+  .wm-acts .wico{width:28px;height:28px;border-radius:9px;flex-shrink:0}
+  .wm-acts .wico svg{width:12px;height:12px}
+  /* width:auto explicito: .wm-acts .wico de arriba empata en especificidad con
+     .wico.wsettle y gana por venir despues, asi que sin esto las pastillas de
+     texto quedaban cuadradas de 28px y "Lend"/"Collect" se desbordaban pegadas. */
+  .wm-acts .wico.wsettle{width:auto;height:28px;padding:0 12px;font-size:12px;background:rgba(255,255,255,.09);color:var(--txt)}
 
   /* Budget + Holdings hero font */
   .bdg-hero-val{font-size:38px}
