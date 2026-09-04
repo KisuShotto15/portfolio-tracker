@@ -5,6 +5,7 @@ import {
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
   rollOnCore, migrateRolloverCore, histAllocPctCore, debtSinceCore, daysBetweenISO,
+  noteMemoryCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -525,5 +526,63 @@ describe('antiguedad de una deuda', () => {
     expect(daysBetweenISO('2026-03-01', '2026-04-01')).toBe(31);
     expect(daysBetweenISO('2026-09-02', '2026-09-02')).toBe(0);
     expect(daysBetweenISO(null, '2026-09-02')).toBe(null);
+  });
+});
+
+describe('autofill aprendido del historial', () => {
+  const t = (date, desc, category, wallet, extra) => Object.assign(
+    { date, desc, category, wallet, type: 'Debit', originalCurrency: 'USD', createdAt: 1 }, extra || {});
+
+  const hist = [
+    t('2026-01-10', 'Uber', 'Transport', 'Zinli'),
+    t('2026-02-15', 'Farmatodo', 'Health', 'Bs', { originalCurrency: 'VES' }),
+    t('2026-03-20', 'Uber', 'Eating Out', 'Binance'),   // le cambiaste la categoria
+  ];
+
+  it('toma la ultima vez que usaste esa descripcion', () => {
+    expect(noteMemoryCore(hist, 'Uber')).toMatchObject({ category: 'Eating Out', wallet: 'Binance', exact: true });
+  });
+
+  it('no distingue mayusculas ni espacios de sobra', () => {
+    expect(noteMemoryCore(hist, '  uBeR ')).toMatchObject({ category: 'Eating Out' });
+  });
+
+  it('trae tambien tipo y moneda', () => {
+    expect(noteMemoryCore(hist, 'Farmatodo')).toMatchObject({ type: 'Debit', currency: 'VES', wallet: 'Bs' });
+  });
+
+  it('desde 3 caracteres completa por prefijo', () => {
+    expect(noteMemoryCore(hist, 'Far')).toMatchObject({ category: 'Health', exact: false });
+  });
+
+  it('con menos de 3 no adivina por prefijo', () => {
+    expect(noteMemoryCore(hist, 'Fa')).toBe(null);
+    expect(noteMemoryCore(hist, 'U')).toBe(null);
+  });
+
+  it('la exacta le gana a la de prefijo', () => {
+    const h = hist.concat([t('2026-04-01', 'Uber Eats', 'Eating Out', 'Zinli')]);
+    expect(noteMemoryCore(h, 'Uber')).toMatchObject({ category: 'Eating Out', wallet: 'Binance', exact: true });
+  });
+
+  it('ordena por fecha, no por posicion en el array', () => {
+    const h = [t('2026-05-01', 'Pan', 'Groceries', 'Bs'), t('2026-01-01', 'Pan', 'Home', 'Zinli')];
+    expect(noteMemoryCore(h, 'Pan')).toMatchObject({ category: 'Groceries' });
+  });
+
+  it('desempata por alta cuando cae el mismo dia', () => {
+    const h = [t('2026-05-01', 'Pan', 'Home', 'Zinli', { createdAt: 10 }),
+               t('2026-05-01', 'Pan', 'Groceries', 'Bs', { createdAt: 20 })];
+    expect(noteMemoryCore(h, 'Pan')).toMatchObject({ category: 'Groceries' });
+  });
+
+  it('ignora las que no tienen nada que ensenar', () => {
+    expect(noteMemoryCore([t('2026-01-01', 'Cosa', '', '')], 'Cosa')).toBe(null);
+  });
+
+  it('sin historial ni nota devuelve null', () => {
+    expect(noteMemoryCore([], 'Uber')).toBe(null);
+    expect(noteMemoryCore(hist, '   ')).toBe(null);
+    expect(noteMemoryCore(undefined, 'Uber')).toBe(null);
   });
 });

@@ -836,6 +836,41 @@ await sleep(500);
 check('arrancar desde el atajo tambien lo abre', await ev("document.getElementById('tx-form-panel').classList.contains('open')"));
 check('y el hash queda en la pagina, no en el atajo', (await ev("location.hash")) !== '#add', await ev("location.hash"));
 
+// ── 14d · autofill aprendido del historial ──────────────────────────────────
+// Escribir una descripcion ya usada trae categoria/wallet/tipo de la ultima vez.
+// Le gana a AUTOFILL_RULES: si le cambiaste la categoria a un comercio, la app
+// respeta lo que vos hiciste y no lo que dice la lista hardcodeada.
+console.log('E2E autofill del historial');
+cloudDoc = {};
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { snapshots: [], deletedTxIds: [], manualWallets: [{ id: 71, name: 'Zinli', balance: 100 }],
+    transactions: [
+      { id: 710, createdAt: 710, seq: 0, date: '2026-01-10', desc: 'Uber', wallet: 'Zinli', type: 'Debit', category: 'Transport', amountUSD: 5, originalCurrency: 'USD', imported: false, updatedAt: 710 },
+      { id: 711, createdAt: 711, seq: 1, date: '2026-03-20', desc: 'Uber', wallet: 'Zinli', type: 'Debit', category: 'Eating Out', amountUSD: 9, originalCurrency: 'USD', imported: false, updatedAt: 711 },
+      { id: 712, createdAt: 712, seq: 2, date: '2026-02-01', desc: 'Kiosco de la esquina', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 3, originalCurrency: 'USD', imported: false, updatedAt: 712 } ],
+    manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+const typeNote = async (v) => {
+  await ev(`(function(){var i=document.getElementById('tx-desc');i.value=${JSON.stringify(v)};autofillFromNote();})()`);
+  await sleep(200);
+  return await ev("document.getElementById('tx-cat').value+'|'+document.getElementById('tx-wallet').value+'|'+document.getElementById('tx-type').value");
+};
+await ev("openTxForm()"); await sleep(400);
+// AUTOFILL_RULES manda Uber a Transport; el historial dice que la ultima vez fue
+// Eating Out. Gana el historial.
+check('el historial le gana a la lista hardcodeada', (await typeNote('Uber')).startsWith('Eating Out|Zinli|Debit'), await typeNote('Uber'));
+check('no distingue mayusculas', (await typeNote('uber')).startsWith('Eating Out'), await typeNote('uber'));
+// Un comercio que no esta en ninguna regla: antes no completaba nada.
+await ev("document.getElementById('tx-cat').value='';document.getElementById('tx-wallet').value=''"); await sleep(100);
+check('aprende un comercio que no esta en la lista', (await typeNote('Kiosco de la esquina')).startsWith('Groceries|Zinli'), await typeNote('Kiosco de la esquina'));
+check('completa por prefijo desde 3 letras', (await typeNote('Kio')).startsWith('Groceries'), await typeNote('Kio'));
+await ev("document.getElementById('tx-cat').value='';document.getElementById('tx-wallet').value=''"); await sleep(100);
+check('con menos de 3 no adivina', (await typeNote('Ki')) === '||Debit', await typeNote('Ki'));
+// Sin historial cae en las reglas de siempre.
+check('sin historial siguen valiendo las reglas', (await typeNote('farmatodo')).startsWith('Health'), await typeNote('farmatodo'));
+await ev("closeTxForm()"); await sleep(300);
+
 // ── 15 · sello de build ─────────────────────────────────────────────────────
 // Sin esto no hay forma de saber, mirando el telefono, si un deploy llego: el
 // numero de Settings tiene que ser el mismo que el que sello el service worker.

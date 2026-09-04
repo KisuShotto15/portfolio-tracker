@@ -190,6 +190,42 @@ export function debtSplitCore(manualWallets, balances) {
 // asignado arranca limpio en vez de heredar un "sobrante" igual a todo su gasto.
 // Arrastra UN mes, no encadena: el limite de marzo mira el sobrante de febrero,
 // no el de enero acumulado.
+// Que anotaste la ULTIMA vez con esta misma descripcion. Reemplaza tener que
+// mantener a mano una lista de palabras clave (AUTOFILL_RULES): cada comercio
+// nuevo se aprende solo la primera vez que lo anotas, y si le cambiaste la
+// categoria a algo, la proxima ya sale con la nueva.
+// Primero coincidencia exacta; si no hay, la mas reciente que EMPIEZA igual, y
+// solo desde 3 caracteres — con menos, escribir "u" fliparia los campos a la
+// primera tx que empiece con u mientras seguis tecleando.
+// "Mas reciente" por fecha y despues por alta, nunca por posicion en el array:
+// mergeTxArrays reordena y el orden del array no dice nada.
+export function noteMemoryCore(transactions, note) {
+  var norm = function (v) { return String(v || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+  var q = norm(note);
+  if (!q) return null;
+  var newer = function (a, b) {
+    if (!b) return true;
+    if ((a.date || '') !== (b.date || '')) return (a.date || '') > (b.date || '');
+    return (a.createdAt || 0) > (b.createdAt || 0);
+  };
+  var exact = null, pref = null;
+  (transactions || []).forEach(function (t) {
+    var d = norm(t.desc);
+    if (!d || (!t.category && !t.wallet)) return;
+    if (d === q) { if (newer(t, exact)) exact = t; return; }
+    if (q.length >= 3 && d.indexOf(q) === 0 && newer(t, pref)) pref = t;
+  });
+  var hit = exact || pref;
+  if (!hit) return null;
+  return {
+    exact: hit === exact,
+    category: hit.category || '',
+    wallet: hit.wallet || '',
+    type: hit.type || '',
+    currency: hit.originalCurrency || '',
+  };
+}
+
 // Desde cuando existe la deuda que hay HOY: la fecha en que el saldo dejo de ser
 // cero por ultima vez. No la tx mas vieja del tracker — en una wallet de ciclo
 // (prestas, te pagan, volves a prestar) esa fecha es de una deuda ya saldada y

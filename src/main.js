@@ -4,7 +4,7 @@ import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './fo
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
-  debtSinceCore, daysBetweenISO,
+  debtSinceCore, daysBetweenISO, noteMemoryCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -32,6 +32,9 @@ initAuth({ syncProxy:SYNC_PROXY, onLogin:function(){ return bootAfterAuth(true);
 
 // Autofill rules: matched against the first word of the note (case-insensitive)
 // type: 'Debit'|'Credit', category, currency: 'VES'|'USD', wallet
+// RESPALDO: primero manda tu historial (noteMemoryCore). Esta lista solo cubre la
+// primera vez que anotas algo — despues la app ya aprendio de vos. Por eso no hace
+// falta agregarle cada comercio nuevo.
 var AUTOFILL_RULES = [
   { keywords:['income','salario','cobro','pago','freelance','consulting','dividendo','ganancia','utilidad'],                                                                                                       type:'Credit', category:'Income' },
   { keywords:['patodo','madeira','rio','super','chinos','pan','botellon','viveres','abasto','bodega','mercado','automercado','central','polleria','panaderia','carneceria','charcuteria','verduras','frutas','lacteos','huevos','harina','arroz','pasta','embutidos','licoreria'], type:'Debit', category:'Groceries', currency:'VES' },
@@ -904,27 +907,36 @@ window.updateCatHint=updateCatHint;
 
 function toggleVesHint(){ var on=document.getElementById('tx-cur').value==='VES'; document.getElementById('ves-hint').style.display=on?'inline':'none'; if(on) updateVesPreview(); }
 
+// Aplica un juego de campos al formulario. Cada uno solo si viene con valor: una
+// regla que no dice nada de la moneda no tiene por que pisarte la que elegiste.
+function _applyAutofill(f){
+  if(f.type)     document.getElementById('tx-type').value=f.type;
+  if(f.category){ document.getElementById('tx-cat').value=f.category; updateCatHint(); }
+  if(f.currency){ document.getElementById('tx-cur').value=f.currency; toggleVesHint(); }
+  if(f.wallet){
+    var ws=document.getElementById('tx-wallet');
+    for(var j=0;j<ws.options.length;j++){ if(ws.options[j].value===f.wallet){ ws.value=f.wallet; break; } }
+  }
+  var hint=document.getElementById('autofill-hint');
+  if(hint){ hint.style.opacity='1'; clearTimeout(window._afTimer); window._afTimer=setTimeout(function(){hint.style.opacity='0';},2000); }
+}
 function autofillFromNote(){
   if(editingTxId) return; // never autofill while editing an existing tx
   var note=document.getElementById('tx-desc').value.trim();
   if(!note) return;
+  // Tu propio historial primero: lo que hiciste la ultima vez con esta descripcion
+  // le gana a la lista de palabras clave de abajo. Si le cambiaste la categoria a
+  // un comercio, la proxima ya sale como vos la dejaste — y un comercio que no
+  // esta en la lista se aprende solo la primera vez que lo anotas.
+  var mem=noteMemoryCore(S.transactions,note);
+  if(mem){ _applyAutofill(mem); return; }
   // Split note into individual words and check each against keywords
   var words=note.toLowerCase().split(/[\s,:]+/);
   for(var i=0;i<AUTOFILL_RULES.length;i++){
     var rule=AUTOFILL_RULES[i];
     var matched=words.some(function(w){ return rule.keywords.indexOf(w)>=0; });
     if(!matched) continue;
-    // Apply only fields defined in the rule
-    if(rule.type)     document.getElementById('tx-type').value=rule.type;
-    if(rule.category){ document.getElementById('tx-cat').value=rule.category; updateCatHint(); }
-    if(rule.currency){ document.getElementById('tx-cur').value=rule.currency; toggleVesHint(); }
-    if(rule.wallet){
-      var ws=document.getElementById('tx-wallet');
-      for(var j=0;j<ws.options.length;j++){ if(ws.options[j].value===rule.wallet){ ws.value=rule.wallet; break; } }
-    }
-    // Show subtle autofill hint
-    var hint=document.getElementById('autofill-hint');
-    if(hint){ hint.style.opacity='1'; clearTimeout(window._afTimer); window._afTimer=setTimeout(function(){hint.style.opacity='0';},2000); }
+    _applyAutofill(rule);
     return;
   }
 }
