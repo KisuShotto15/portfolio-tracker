@@ -923,6 +923,20 @@ await cancelModal(); await sleep(100);
 check('ningun confirm() del navegador se disparo', (await ev("window.__nativeConfirm")) === false);
 check('no queda ningun modal abierto', (await ev("document.querySelectorAll('.app-modal-overlay').length")) === 0);
 
+// ── 18 · un solo formato de mes ─────────────────────────────────────────────
+// El Dashboard decia "September, 2026" y el Budget "September 2026" para el mismo
+// mes, con cuatro formateadores sueltos repartidos por main.js.
+console.log('E2E formato de mes');
+await ev("showPage('summary',null);renderSummary()"); await sleep(250);
+const sumOpt = await ev("(function(){var s=document.getElementById('sum-month');return s&&s.options.length?[s.options[0].value,s.options[0].textContent]:['',''];})()");
+check('el Dashboard no lleva coma', /^[A-Z][a-z]+ \d{4}$/.test(sumOpt[1]), JSON.stringify(sumOpt));
+await ev("showPage('budget',null);renderBudget()"); await sleep(250);
+const budOpt = await ev(`(function(){var s=document.querySelector('#bud-wrap .dash-head select');if(!s)return '';for(var i=0;i<s.options.length;i++){if(s.options[i].value===${JSON.stringify(sumOpt[0])})return s.options[i].textContent;}return '';})()`);
+check('y el Budget escribe el mismo mes igual', budOpt === sumOpt[1], `budget=${budOpt} dashboard=${sumOpt[1]}`);
+await ev("showPage('transactions',null);renderTx()"); await sleep(200);
+const txOpt = await ev("(function(){var s=document.getElementById('tf-month');return s&&s.options.length>1?s.options[1].textContent:'';})()");
+check('el filtro usa la version corta', /^[A-Z][a-z]{2} \d{4}$/.test(txOpt), txOpt);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

@@ -19,3 +19,21 @@ export function fmtUSD(v){ var n=parseFloat(v); if(!isFinite(n)) n=0; return '$'
 
 // Escape for safe insertion into innerHTML (incluye atributos entre comillas simples).
 export function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Etiquetas de mes a partir de un 'YYYY-MM'. Cuatro variantes conviviendo en
+// main.js (una hasta cortaba el nombre largo con slice(0,3)) y dos formatos
+// distintos para lo mismo: "September, 2026" en el Dashboard y "September 2026"
+// en el Budget. Aca hay uno solo. El Date se arma por componentes, nunca
+// parseando el string: 'YYYY-MM-01' se lee como UTC y en UTC-4 retrocede un mes.
+function monthDate(m){ var p=String(m).split('-'); return new Date(+p[0],+p[1]-1,1); }
+// 'September' / 'Sep'
+export function monthName(m,short){ return monthDate(m).toLocaleDateString('en-US',{month:short?'short':'long'}); }
+// 'September 2026' / 'Sep 2026'
+export function monthLabel(m,short){ return monthDate(m).toLocaleDateString('en-US',{month:short?'short':'long',year:'numeric'}); }
+
+// Fechas 'YYYY-MM-DD'. Mismo cuidado: por componentes, no por string.
+function dayDate(d){ var p=String(d).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+// 'Sep 4, 2026'
+export function fmtDate(d){ return dayDate(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+// 'Fri, Sep 4' — separador de dia en la lista de transacciones
+export function fmtDateWd(d){ return dayDate(d).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }

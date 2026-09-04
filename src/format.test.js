@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
+import { monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 
 describe('monthKey (mes local, nunca UTC)', () => {
   it('devuelve YYYY-MM con padding', () => {
@@ -50,5 +50,25 @@ describe('fmtUSD', () => {
 describe('escHtml', () => {
   it('escapa comilla simple ademas de & < > "', () => {
     expect(escHtml(`O'Brien <b>"x"</b> & co`)).toBe('O&#39;Brien &lt;b&gt;&quot;x&quot;&lt;/b&gt; &amp; co');
+  });
+});
+
+describe('etiquetas de mes y fecha', () => {
+  it('monthName da el nombre solo, largo o corto', () => {
+    expect(monthName('2026-09')).toBe('September');
+    expect(monthName('2026-09', true)).toBe('Sep');
+  });
+  it('monthLabel agrega el ano, sin coma', () => {
+    expect(monthLabel('2026-09')).toBe('September 2026');
+    expect(monthLabel('2026-01', true)).toBe('Jan 2026');
+  });
+  it('no retrocede un mes por leer el string como UTC', () => {
+    // 'YYYY-MM-01' parseado como string es medianoche UTC: en UTC-4 cae en el mes anterior.
+    expect(monthLabel('2026-03')).toBe('March 2026');
+    expect(monthName('2026-01', true)).toBe('Jan');
+  });
+  it('fmtDate y fmtDateWd', () => {
+    expect(fmtDate('2026-09-04')).toBe('Sep 4, 2026');
+    expect(fmtDateWd('2026-09-04')).toBe('Fri, Sep 4');
   });
 });

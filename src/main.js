@@ -1,6 +1,6 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
-import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml } from './format.js';
+import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
@@ -1514,7 +1514,7 @@ function fmtDateHdr(d){
   var today=localToday();
   var yd=new Date(); yd.setDate(yd.getDate()-1);
   var yest=yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
-  return d===today?'Today':d===yest?'Yesterday':new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  return d===today?'Today':d===yest?'Yesterday':fmtDateWd(d);
 }
 function txSepHtml(date){
   var dayTotal=(_txDayTotals&&_txDayTotals[date])||0;
@@ -1638,9 +1638,8 @@ function renderTx(){
 }
 
 function getMonths(){ var seen={}; S.transactions.forEach(function(t){ seen[t.date.slice(0,7)]=1; }); var u=Object.keys(seen).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
-function fmtMonthLabel(m){ var p=String(m).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ',', '); }
 function dashMonths(){ return dashMonthsCore(getMonths(), S.snapshots, monthKey(new Date())); }
-function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=dashMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+fmtMonthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
+function populateSumMonth(){ var sel=document.getElementById('sum-month'); var cur=sel.value; var months=dashMonths(); sel.innerHTML=months.map(function(m){ return '<option value="'+m+'">'+monthLabel(m)+'</option>'; }).join(''); if(cur&&months.indexOf(cur)>=0) sel.value=cur; }
 function populateTxMonth(){
   var sel=document.getElementById('tf-month'); if(!sel) return;
   var cur=sel.value;
@@ -1648,8 +1647,7 @@ function populateTxMonth(){
   var nowM=monthKey(new Date());
   if(months.indexOf(nowM)<0) months.unshift(nowM); // current month always selectable
   // Labels cortos ("Jul 2026") para que el filtro quepa en la fila compacta movil.
-  var shortM=function(m){ var p=m.split('-'); return new Date(+p[0],+p[1]-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'}); };
-  sel.innerHTML='<option value="">Month</option>'+months.map(function(m){ return '<option value="'+m+'">'+shortM(m)+'</option>'; }).join('');
+  sel.innerHTML='<option value="">Month</option>'+months.map(function(m){ return '<option value="'+m+'">'+monthLabel(m,true)+'</option>'; }).join('');
   sel.value=cur; // preserve selection ("" → all months)
 }
 
@@ -1981,7 +1979,7 @@ function monthCloseData(month){
 }
 window.showMonthClose=function(month){
   var d=monthCloseData(month);
-  var lbl=fmtMonthLabel(month);
+  var lbl=monthLabel(month);
   var sgn=function(n){ return (n>=0?'+':'-')+fmtShortUSD(Math.abs(n)); };
   var cats=Object.keys(d.lim).sort(function(a,b){ return d.spent[b]-d.spent[a]; });
   var rows=cats.map(function(c){
@@ -2036,7 +2034,7 @@ window.showMonthClose=function(month){
     +'</div>'
     +recHtml
     +(d.big?'<div class="mc-big">Movimiento mas grande · <b>'+escHtml(d.big.desc)+'</b> '+fmtUSD(d.big.amountUSD)+' en '+d.big.category+'</div>':'')
-    +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span><span class="mc-num">vs '+fmtMonthLabel(prevMonth(month)).slice(0,3)+'</span></div><div class="mc-rows">'+rows+'</div>'
+    +(rows?'<div class="mc-head"><span>Categoria</span><span class="mc-num">Real</span><span class="mc-num">Plan</span><span class="mc-num">Dif</span><span class="mc-num">vs '+monthName(prevMonth(month),true)+'</span></div><div class="mc-rows">'+rows+'</div>'
           :'<div class="mc-big">Sin gasto registrado en '+lbl+'.</div>')
     +'</div>'
     +'<div class="modal-actions"><button class="btn btnp" id="_mcok">Listo</button></div>'
@@ -2467,7 +2465,7 @@ function renderInsights(month){
     .slice(0,4);
   var isCurrent=month===localToday().slice(0,7);
   var prevSpent=catNetSpend(prev, EXPENSE_CATS_DASH);
-  var prevLabel=new Date(prev+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'});
+  var prevLabel=monthName(prev,true);
   function tile(lbl,val,col,sub){ return '<div class="ins-stat"><span class="ins-stat-lbl">'+lbl+'</span><span class="ins-stat-val"'+(col?' style="color:'+col+'"':'')+'>'+val+'</span><span class="ins-stat-sub">'+sub+'</span></div>'; }
   // vs last month total
   var vsCol=prevSpent<=0?'var(--txt3)':(spent>prevSpent?'#E24B4A':'#5DCAA5');
@@ -2491,7 +2489,7 @@ function renderInsights(month){
       +tile('Projected spend', fmtUSD(projected), overBudget?'#E24B4A':'#5DCAA5', overBudget?'over by '+fmtUSD(projected-budget):'under by '+fmtUSD(budget-projected))
       +vsTile;
   }else{
-    blocks=tile('Spent', fmtUSD(spent), '', 'in '+new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'long'}))+vsTile;
+    blocks=tile('Spent', fmtUSD(spent), '', 'in '+monthName(month))+vsTile;
   }
   var moverRows=movers.length?movers.map(function(m){
     var up=m.delta>0;
@@ -2502,7 +2500,7 @@ function renderInsights(month){
       +'<span class="ins-cur">'+fmtUSD(m.cur)+'</span>'
       +'<span class="ins-delta" style="color:'+col+'">'+arrow+' '+deltaTxt+'</span></div>';
   }).join(''):'<div style="font-size:13px;color:var(--txt3);padding:6px 2px">No expenses this month.</div>';
-  el.innerHTML='<div class="ins-head"><span class="cleg" style="margin:0">Insights</span><span class="ins-head-sub">vs '+new Date(prev+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'})+'</span></div>'
+  el.innerHTML='<div class="ins-head"><span class="cleg" style="margin:0">Insights</span><span class="ins-head-sub">vs '+monthName(prev,true)+'</span></div>'
     +(blocks?'<div class="ins-stats">'+blocks+'</div>':'')
     +'<div class="ins-list">'+moverRows+'</div>';
 }
@@ -3075,7 +3073,7 @@ function renderBudget(){
   var canPace=isCurMonth&&dayNum>=3;
   var projTotal=canPace&&spent>0?spent/dayNum*dimP:null;
 
-  var monthLabel=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'';
+  var monthLbl=month?monthLabel(month):'';
   // ¿el total de este mes es un override o hereda el default?
   var totOvr=(S.budgetTotalByMonth||{})[month]!=null;
   var remColor=remaining>=0?'#4ED9A4':'#E24B4A';
@@ -3087,18 +3085,18 @@ function renderBudget(){
   html+='<div class="dash-head">'
     +'<span class="dash-eyebrow">Budget</span>'
     +'<select onchange="window._budMonthSel(this.value)">'
-    +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+fmtMonthLabel(m)+'</option>'; }).join('')
+    +months.map(function(m){ return '<option value="'+m+'"'+(m===month?' selected':'')+'>'+monthLabel(m)+'</option>'; }).join('')
     +'</select>'
     +'</div>';
 
   // Top band — hero + donut
   html+='<div class="bdg-top">'
     +'<div class="bdg-hero">'
-      +'<div class="bdg-hero-lbl">Remaining'+(monthLabel?' · '+monthLabel:'')+'</div>'
+      +'<div class="bdg-hero-lbl">Remaining'+(monthLbl?' · '+monthLbl:'')+'</div>'
       +'<div class="bdg-hero-val" style="color:'+remColor+'">'+fmtUSD(Math.abs(remaining))+(remaining<0?' over':'')+'</div>'
       +'<div class="bdg-pb"><div class="bdg-pf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
       +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '
-        +'<span class="bdg-total-view'+(totOvr?' is-ovr':'')+'" title="'+(totOvr?monthLabel+' only — tap to edit':'Tap to set the budget for '+monthLabel)+'" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(budTotal)+'</span>'
+        +'<span class="bdg-total-view'+(totOvr?' is-ovr':'')+'" title="'+(totOvr?monthLbl+' only — tap to edit':'Tap to set the budget for '+monthLbl)+'" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(budTotal)+'</span>'
         // onblur guardaba y cerraba el modo edicion; tocar el chip "+" hacia
         // justamente eso. sumChipTap cancela el blur con preventDefault, pero se
         // deja el chip dentro del wrap para que el foco nunca salga del input.
@@ -3124,7 +3122,7 @@ function renderBudget(){
   html+='<div class="cw bdg-insights" id="insights-wrap"></div>';
 
   // Categories grid — header con scope de edicion (default vs solo este mes)
-  var mShort=month?new Date(month+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}):'';
+  var mShort=month?monthName(month,true):'';
   var monthOvr=(S.categoryBudgetPctsByMonth||{})[month]||null;
   var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length)||totOvr;
   // Medidor de asignacion total: cuanto % del presupuesto esta repartido entre
@@ -3164,7 +3162,7 @@ function renderBudget(){
   if(_rolloverUI){
     var allOn=rollN===BUDGET_CATS.length;
     html+='<div class="bdg-roll-row">'
-      +'<span class="bdg-roll-hint">Suma a '+mShort+' lo que sobro en '+fmtMonthLabel(prevMonth(month))+' y resta lo que te pasaste. Vale solo para '+mShort+': cada mes se enciende aparte.</span>'
+      +'<span class="bdg-roll-hint">Suma a '+mShort+' lo que sobro en '+monthLabel(prevMonth(month))+' y resta lo que te pasaste. Vale solo para '+mShort+': cada mes se enciende aparte.</span>'
       +'<span class="bdg-scope">'
         +'<button class="bdg-scope-btn roll-all" onclick="toggleRolloverAll(\''+month+'\')">'+(allOn?'Ninguna':'Todas')+'</button>'
         +BUDGET_CATS.map(function(c){
@@ -3240,7 +3238,7 @@ function renderBudget(){
   // Viendo un mes pasado en el selector, meses completos como siempre.
   (function(){
     var m1=prevMonth(month), m2=prevMonth(m1);          // m2=mas viejo, month=mas nuevo
-    var lbl=function(m){ return new Date(m+'-01T00:00:00').toLocaleDateString('en-US',{month:'short'}); };
+    var lbl=function(m){ return monthName(m,true); };
     var cut=isCurMonth?dayNum:32;                       // dia de corte (32 = mes completo)
     var per={}, wanted={}; wanted[m2]=1; wanted[m1]=1; wanted[month]=1;
     S.transactions.forEach(function(t){
@@ -3273,7 +3271,7 @@ function renderBudget(){
   // Al pie de la pagina: el resumen del mes se abre solo cuando cambia el mes, y
   // este es el modo de volver a verlo (o de mirar otro mes). Va ultimo porque es
   // un cierre, no un control del budget que estas editando arriba.
-  html+='<div class="bdg-close-row"><button class="btn btns" onclick="showMonthClose(\''+month+'\')">Ver cierre de '+fmtMonthLabel(month)+'</button></div>';
+  html+='<div class="bdg-close-row"><button class="btn btns" onclick="showMonthClose(\''+month+'\')">Ver cierre de '+monthLabel(month)+'</button></div>';
 
   // (la config del Monthly Total vive en el hero: 'of $X' tap-to-edit)
 
@@ -3962,7 +3960,6 @@ function renderHistory(view){
     +'</div>';
   }
 
-  function fmtMd(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
   function fmtTime(id){ return new Date(id).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); }
   html+='<div class="snap-list">';
   html+='<div class="snap-row snap-head-row">'
@@ -3984,7 +3981,7 @@ function renderHistory(view){
     }
     var cumCell='<span class="snap-cum '+cls(r.cumDelta)+'">'+sgn(r.cumDelta)+fmtUSD(Math.abs(r.cumDelta))+' <span class="snap-cum-pct">('+sgn(r.cumPct)+Math.abs(r.cumPct).toFixed(1)+'%)</span></span>';
     html+='<div class="snap-row">'
-      +'<div class="snap-col-date"><span class="snap-d">'+fmtMd(r.s.date)+' <span class="snap-time">'+fmtTime(r.s.id)+'</span></span>'+adjLine(r)+'</div>'
+      +'<div class="snap-col-date"><span class="snap-d">'+fmtDate(r.s.date)+' <span class="snap-time">'+fmtTime(r.s.id)+'</span></span>'+adjLine(r)+'</div>'
       +'<div class="snap-col-nw"><span class="snap-total">'+fmtUSD(r.s.total)+'</span></div>'
       +'<div class="snap-col-pnl">'+pnlCell+'</div>'
       +'<div class="snap-col-pct">'+pctCell+'</div>'
