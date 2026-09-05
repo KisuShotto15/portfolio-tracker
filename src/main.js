@@ -2,7 +2,7 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore,
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
   debtSinceCore, daysBetweenISO, noteMemoryCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
@@ -1026,7 +1026,10 @@ async function _uploadReceipt(){
 }
 window.retryReceipt=function(){ _uploadReceipt(); };
 
-function addTx(){
+// Ventana del aviso de duplicado. Tres dias: cubre "lo anote hoy y ya estaba" sin
+// convertir un gasto que de verdad se repite cada semana en una pregunta.
+var DUP_DAYS=3;
+async function addTx(){
   var date=document.getElementById('tx-date').value;
   var desc=document.getElementById('tx-desc').value.trim();
   var wallet=document.getElementById('tx-wallet').value;
@@ -1038,6 +1041,16 @@ function addTx(){
   var amtUSD=amt, amtVES=null;
   var _vr=vesTxRate();
   if(cur==='VES'){ if(!_vr){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=vesToUsd(amt,_vr); }
+  // Con reglas recurrentes anotando solas es facil cargar a mano algo que la app
+  // ya cargo, y eso recien se ve cuadrando el mes. Pregunta, no bloquea.
+  var dup=dupTxCore(S.transactions,{desc:desc,amountUSD:amtUSD,date:date},DUP_DAYS);
+  if(dup){
+    var okDup=await appConfirm('Possible duplicate',
+      escHtml(dup.desc)+' <b style="color:#fff">'+fmtUSD(dup.amountUSD)+'</b> is already logged on '+fmtDate(dup.date)
+        +(dup.auto?' by a recurring rule':'')+'.',
+      'Add anyway');
+    if(!okDup) return;
+  }
   snapshot();
   var _now=Date.now(), _ut=stamp();
   S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
@@ -1099,9 +1112,16 @@ function cancelEditTx(){
   if(_editingRecId){ cancelEditRecurring(); return; }
   closeTxForm();
 }
+// Arranca en el wallet de tu ultima transaccion, con Binance de respaldo para el
+// estreno. Estaba clavado en Binance: cada tx nueva salia de ahi aunque llevaras
+// meses gastando con otra, y eso solo se nota cuando ya la anotaste mal.
 function setDefaultWallet(){
   var ws=document.getElementById('tx-wallet'); if(!ws) return;
-  for(var i=0;i<ws.options.length;i++){ if(ws.options[i].value==='Binance'){ ws.value='Binance'; return; } }
+  var pref=[lastWalletCore(S.transactions),'Binance'];
+  for(var p=0;p<pref.length;p++){
+    if(!pref[p]) continue;
+    for(var i=0;i<ws.options.length;i++){ if(ws.options[i].value===pref[p]){ ws.value=pref[p]; return; } }
+  }
   ws.value='';
 }
 // Web: en Chromium desktop, clickear el texto de un input[type=date] solo enfoca un
@@ -1738,6 +1758,9 @@ function getMonthlyKPIs(month){
   var monthEnd=month+'-31';
   var snapsBefore=snaps.filter(function(s){ return s.date<=monthEnd; });
   var netWorth=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].total:null;
+  // La fecha del snapshot que da ESE numero. El subtitulo imprimia la del snapshot
+  // mas reciente de todos, asi que mirando agosto leias "as of <fecha de hoy>".
+  var netWorthDate=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].date:null;
   var expenses=catNetSpend(month, EXPENSE_CATS_DASH);
   // Net Profit: snapshot periods ending in month
   var pnls=getSnapshotPnL();
@@ -1747,7 +1770,7 @@ function getMonthlyKPIs(month){
   var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?(monthlyReturn/lastPnl.snap1)*100:null;
   // Goal Progress
   var goalPct=(S.dashGoal>0&&netWorth!==null)?Math.min(100,(netWorth/S.dashGoal)*100):null;
-  return {netWorth:netWorth,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,goalPct:goalPct};
+  return {netWorth:netWorth,netWorthDate:netWorthDate,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,goalPct:goalPct};
 }
 
 function fmtDelta(cur,prev,opts){
@@ -1774,6 +1797,19 @@ function renderKPIStrip(month){
   var snapsDesc=(S.snapshots||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   // Display net worth: prefer monthly snapshot, fallback to latest snapshot, fallback to live
   var nwDisplay=cur.netWorth!==null?cur.netWorth:(snapsDesc.length>0?snapsDesc[0].total:getTotalBalance());
+  var nwDate=cur.netWorth!==null?cur.netWorthDate:(snapsDesc.length>0?snapsDesc[0].date:null);
+  // Net Worth sale de un snapshot; Liquid, justo al lado, se calcula al instante.
+  // Cuando el snapshot ya tiene dias, decir solo la fecha no alcanza: al lado va
+  // la estimacion en vivo, que la app ya tiene. Solo en el mes en curso — en un
+  // mes cerrado "en vivo" no significa nada.
+  var nwSub=nwDate?'as of '+nwDate:'live estimate';
+  if(nwDate&&month===monthKey(new Date())){
+    var _age=daysBetweenISO(nwDate,localToday());
+    if(_age!=null&&_age>=NW_STALE_DAYS){
+      var _live=getTotalBalance();
+      if(Math.abs(_live-nwDisplay)>=1) nwSub+=' · live '+fmtUSD(_live);
+    }
+  }
   function kpi(label,val,sub,color,delta){
     return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+(delta?' '+delta:'')+'</div></div>';
   }
@@ -1789,7 +1825,7 @@ function renderKPIStrip(month){
   if(bal.owed>0) _liqBits.push(fmtUSD(bal.owed)+' owed');
   var liqSub=_liqBits.length?_liqBits.join(' · '):'no debts';
   var kHtml='<div class="kpi-strip">'
-    +kpi('Net Worth',fmtUSD(nwDisplay),snapsDesc.length>0?'as of '+snapsDesc[0].date:'live estimate','#fff',fmtDelta(cur.netWorth,prev.netWorth))
+    +kpi('Net Worth',fmtUSD(nwDisplay),nwSub,'#fff',fmtDelta(cur.netWorth,prev.netWorth))
     +kpi('Net Profit',retVal,retSub,retColor,fmtDelta(cur.monthlyReturn,prev.monthlyReturn,{abs:true}))
     +kpi('Liquid',fmtUSD(bal.liquid),liqSub,'#fff',null)
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
@@ -3363,6 +3399,9 @@ function trackerTxBalances(){
 // A partir de dos meses el aviso salta y la etiqueta pasa a meses: "hace 74 dias"
 // no se lee, "hace 2 meses" si.
 var DEBT_STALE_DAYS=60;
+// Dias tras los cuales el Net Worth del snapshot ya merece ir acompanado de la
+// estimacion en vivo. Diez: mas corto y el subtitulo cambia todo el tiempo.
+var NW_STALE_DAYS=10;
 function debtAgeLabel(d){
   if(d<=0) return 'today';
   if(d===1) return '1 day';

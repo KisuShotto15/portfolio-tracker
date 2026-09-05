@@ -4,6 +4,7 @@ import {
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
   uncategorizedCore,
+  lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
   rollOnCore, migrateRolloverCore, histAllocPctCore, debtSinceCore, daysBetweenISO,
   noteMemoryCore,
@@ -606,5 +607,48 @@ describe('uncategorizedCore', () => {
   });
   it('sin transacciones no explota', () => {
     expect(uncategorizedCore(null, '2026-09')).toEqual({ n: 0, debit: 0 });
+  });
+});
+
+describe('lastWalletCore', () => {
+  it('toma el wallet de la tx mas reciente', () => {
+    expect(lastWalletCore([
+      { date: '2026-09-01', createdAt: 1, wallet: 'Binance' },
+      { date: '2026-09-04', createdAt: 2, wallet: 'OKX Card' },
+      { date: '2026-08-30', createdAt: 3, wallet: 'Zinli' },
+    ])).toBe('OKX Card');
+  });
+  it('desempata por alta dentro del mismo dia', () => {
+    expect(lastWalletCore([
+      { date: '2026-09-04', createdAt: 10, wallet: 'Binance' },
+      { date: '2026-09-04', createdAt: 20, wallet: 'Zinli' },
+    ])).toBe('Zinli');
+  });
+  it('ignora importadas y recurrentes automaticas', () => {
+    expect(lastWalletCore([
+      { date: '2026-09-01', createdAt: 1, wallet: 'Binance' },
+      { date: '2026-09-09', createdAt: 2, wallet: 'Provincial', auto: true },
+      { date: '2026-09-10', createdAt: 3, wallet: 'Otra', imported: true },
+    ])).toBe('Binance');
+  });
+  it('sin historial no inventa', () => {
+    expect(lastWalletCore([])).toBe(null);
+    expect(lastWalletCore([{ date: '2026-09-01', wallet: '' }])).toBe(null);
+  });
+});
+
+describe('dupTxCore', () => {
+  var T = [{ id: 1, date: '2026-09-09', desc: 'Netflix', amountUSD: 5.99, wallet: 'OKX Card' }];
+  it('caza el mismo cargo dentro de la ventana', () => {
+    expect(dupTxCore(T, { desc: 'netflix ', amountUSD: 5.99, date: '2026-09-10' }, 3).id).toBe(1);
+  });
+  it('fuera de la ventana no es duplicado', () => {
+    expect(dupTxCore(T, { desc: 'Netflix', amountUSD: 5.99, date: '2026-09-20' }, 3)).toBe(null);
+  });
+  it('otro monto no es duplicado', () => {
+    expect(dupTxCore(T, { desc: 'Netflix', amountUSD: 12.49, date: '2026-09-09' }, 3)).toBe(null);
+  });
+  it('no se compara consigo misma al editar', () => {
+    expect(dupTxCore(T, { id: 1, desc: 'Netflix', amountUSD: 5.99, date: '2026-09-09' }, 3)).toBe(null);
   });
 });

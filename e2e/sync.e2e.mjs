@@ -1082,6 +1082,66 @@ check('el badge cuenta los dos filtros', listaU.badge === '2', JSON.stringify(li
 await ev("clearTxFilters()"); await sleep(200);
 check('al limpiar vuelven las dos', (await ev("document.querySelectorAll('#tx-wrap .tx-row').length")) === 2);
 
+// ── 21 · Net Worth con fecha propia, wallet por defecto y duplicados ────────
+console.log('E2E snapshot, default y duplicados');
+cloudDoc = {};
+const dU = (n) => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - n);
+  return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+const hoy21 = dU(0), viejo21 = dU(40), medio21 = dU(15), ayer21 = dU(1);
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { deletedTxIds: [], recurring: [], recurringLog: [],
+    manualWallets: [ { id: 91, name: 'OKX Card', trackerOnly: true, balance: 200 },
+                     { id: 92, name: 'Provincial', trackerOnly: true, balance: 100 } ],
+    snapshots: [ { id: 9001, date: '${viejo21}', total: 900 }, { id: 9002, date: '${medio21}', total: 1200 } ],
+    transactions: [
+      { id: 2001, createdAt: 2001, seq: 0, date: '${viejo21}', desc: 'viejo', wallet: 'Provincial', type: 'Debit', category: 'Groceries', amountUSD: 10, originalCurrency: 'USD', imported: false, updatedAt: 2001 },
+      { id: 2002, createdAt: 2002, seq: 1, date: '${ayer21}', desc: 'Netflix', wallet: 'OKX Card', type: 'Debit', category: 'Discretionary', amountUSD: 5.99, originalCurrency: 'USD', imported: false, updatedAt: 2002 },
+      { id: 2003, createdAt: 2003, seq: 2, date: '${hoy21}', desc: 'la genero una regla', wallet: 'Provincial', type: 'Debit', category: 'Home', amountUSD: 7, originalCurrency: 'USD', imported: false, auto: true, recurringId: 77, updatedAt: 2003 } ],
+    snapshotsUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('summary',null);renderSummary()"); await sleep(600);
+const nwSub = () => ev("[...document.querySelectorAll('.kpi-card')].filter(c=>c.textContent.includes('Net Worth')).map(c=>c.querySelector('.kpi-sub').textContent)[0]||''");
+const subAct = await nwSub();
+check('el mes en curso usa su propio snapshot', subAct.includes('as of ' + medio21), subAct);
+// Net Worth sale de un snapshot de hace 15 dias; Liquid, al lado, es en vivo.
+check('y con dias encima muestra la estimacion viva', /· live \$/.test(subAct), subAct);
+// El bug: mirando un mes pasado el subtitulo imprimia la fecha del snapshot MAS
+// RECIENTE, no la del que da el numero que estas viendo.
+const mes21 = viejo21.slice(0, 7);
+await ev(`document.getElementById('sum-month').value='${mes21}';renderSummary()`); await sleep(500);
+const subViejo = await nwSub();
+check('un mes pasado lleva la fecha de SU snapshot', subViejo.includes('as of ' + viejo21), subViejo);
+check('y ahi no se habla de "live"', !/live/.test(subViejo), subViejo);
+
+// El default del form: el wallet de tu ultima tx, ignorando las que genero una regla.
+await ev("showPage('transactions',null);openTxForm()"); await sleep(500);
+check('el form arranca en el wallet que venis usando', (await ev("document.getElementById('tx-wallet').value")) === 'OKX Card');
+
+// Duplicado: 'Netflix' 5.99 ya esta anotado ayer.
+const nTx21 = () => ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length");
+const antes21 = await nTx21();
+const cargaNetflix = () => ev(`document.getElementById('tx-date').value='${hoy21}';document.getElementById('tx-desc').value='netflix';document.getElementById('tx-amount').value='5.99';document.getElementById('tx-cat').value='Discretionary';addTxOrUpdate()`);
+await cargaNetflix();
+await waitFor(async () => (await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('h3').textContent:'';})()")) === 'Possible duplicate', 3000, 60, 'el modal de duplicado');
+check('avisa del duplicado antes de anotarlo', true);
+const cuerpoDup = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('.modal-info').textContent:'';})()");
+// La fecha va formateada ("Sep 4, 2026"), no en ISO: es la que vas a reconocer.
+check('y dice cual es', /Netflix/.test(cuerpoDup) && /\$5\.99/.test(cuerpoDup)
+  && cuerpoDup.includes(String(Number(ayer21.slice(-2))) + ', ' + ayer21.slice(0, 4)), cuerpoDup);
+await ev("document.querySelectorAll('.app-modal-overlay')[document.querySelectorAll('.app-modal-overlay').length-1].querySelector('#_amc').click()"); await sleep(400);
+check('cancelar no la anota', (await nTx21()) === antes21);
+// Pero no bloquea: si insistis, entra.
+await cargaNetflix();
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de duplicado otra vez');
+await ev("document.querySelectorAll('.app-modal-overlay')[document.querySelectorAll('.app-modal-overlay').length-1].querySelector('#_amo').click()"); await sleep(500);
+check('confirmar la anota igual', (await nTx21()) === antes21 + 1);
+// Y algo que no se parece a nada no pregunta nada.
+await ev("openTxForm()"); await sleep(350);
+await ev(`document.getElementById('tx-date').value='${hoy21}';document.getElementById('tx-desc').value='algo nuevo';document.getElementById('tx-amount').value='3.21';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+await sleep(500);
+check('sin parecido no pregunta', (await ev("document.querySelectorAll('.app-modal-overlay').length")) === 0 && (await nTx21()) === antes21 + 2);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

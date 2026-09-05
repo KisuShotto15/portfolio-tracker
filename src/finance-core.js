@@ -369,3 +369,39 @@ export function uncategorizedCore(transactions, month) {
   });
   return { n: n, debit: parseFloat(debit.toFixed(2)) };
 }
+
+
+// Wallet de la ultima transaccion tuya. El default del form estaba clavado en
+// 'Binance', asi que cada tx nueva arrancaba ahi aunque llevaras meses gastando
+// con otra. Se ignoran las importadas y las que genera una regla recurrente: no
+// son un gesto tuyo y arrastrarian el default al wallet de la regla.
+export function lastWalletCore(transactions) {
+  var best = null;
+  (transactions || []).forEach(function (t) {
+    if (!t || !t.wallet || t.imported || t.auto) return;
+    if (!best) { best = t; return; }
+    if ((t.date || '') !== (best.date || '')) { if ((t.date || '') > (best.date || '')) best = t; return; }
+    if ((t.createdAt || 0) > (best.createdAt || 0)) best = t;
+  });
+  return best ? best.wallet : null;
+}
+
+// Posible duplicado: misma descripcion y mismo monto dentro de una ventana de
+// dias. Con reglas recurrentes generando txs solas es facil anotar a mano algo
+// que la app ya anoto, y eso solo se descubre cuadrando el mes.
+export function dupTxCore(transactions, tx, days) {
+  var norm = function (v) { return String(v || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+  var q = norm(tx && tx.desc);
+  if (!q || !tx || !(tx.amountUSD > 0) || !tx.date) return null;
+  var win = (days == null ? 3 : days);
+  var found = null;
+  (transactions || []).forEach(function (t) {
+    if (found || !t || t.id === tx.id) return;
+    if (norm(t.desc) !== q) return;
+    if (Math.abs((t.amountUSD || 0) - tx.amountUSD) >= 0.005) return;
+    var d = daysBetweenISO(t.date, tx.date);
+    if (d == null || Math.abs(d) > win) return;
+    found = t;
+  });
+  return found;
+}
