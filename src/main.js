@@ -1828,7 +1828,7 @@ function renderHealthScore(){
     +'</div>';
   }
   var RR=42, CIRC=2*Math.PI*RR, dash=((total||0)/100)*CIRC;
-  var hHtml='<div class="cleg">Salud Financiera</div>'
+  var hHtml='<div class="cleg">Financial Health</div>'
     +'<div class="health-ring-wrap">'
       +'<div class="health-ring"><svg width="100%" height="100%" viewBox="0 0 100 100">'
         +'<circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"></circle>'
@@ -1875,7 +1875,7 @@ function renderHealthScore(){
     var mHtml='<div class="hbm-row">'
       +'<button class="hbm-pill" onclick="toggleHealthDrop()">'
         +'<span class="hbm-dot" style="background:'+color+'"></span>'
-        +'<span class="hbm-txt">Salud: <b style="color:'+color+'">'+totalTxt+'</b></span>'
+        +'<span class="hbm-txt">Health: <b style="color:'+color+'">'+totalTxt+'</b></span>'
         +chevSvg
       +'</button>'
       +alertPill
@@ -2107,7 +2107,7 @@ function getActiveAlerts(){
       alerts.push({
         sev:daysSince>45?'crit':'warn',
         msg:'Last snapshot '+daysSince+' days ago',
-        action:'Registra snapshot ahora',
+        action:'Record one now',
         onClick:'recordSnapshot()'
       });
     }
@@ -3536,11 +3536,11 @@ window.addExchangeWallet=async function(){
     // Las credenciales van SOLO al almacen local del dispositivo, nunca a S.
     var _k=(document.getElementById('xw-key').value||'').trim();
     var _s=(document.getElementById('xw-secret').value||'').trim();
-    if(!_k||!_s){ if(st) st.textContent='Faltan key/secret'; return; }
+    if(!_k||!_s){ if(st) st.textContent='Key and secret are required'; return; }
     var _p='';
     if(type==='okx'){
       _p=(document.getElementById('xw-pass').value||'').trim();
-      if(!_p){ if(st) st.textContent='OKX necesita passphrase'; return; }
+      if(!_p){ if(st) st.textContent='OKX needs its passphrase'; return; }
     }
     xkSet(w.id,{key:_k,secret:_s,passphrase:_p});
   }
@@ -4576,7 +4576,7 @@ function canAutoReload(){
 // termina de bajar a un dispositivo.
 window.forceUpdate=function(){
   var st=document.getElementById('build-status');
-  if(st) st.textContent='Limpiando cache...';
+  if(st) st.textContent='Clearing cache...';
   var jobs=[];
   if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }));
   if(navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }));
