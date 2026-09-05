@@ -352,3 +352,20 @@ export function dashMonthsCore(txMonths, snapshots, nowMonth) {
     });
   return out.sort().reverse();
 }
+
+
+// Transacciones sin categoria de un mes. Una tx asi baja el patrimonio pero no
+// aparece en el budget, ni en Spent, ni en el donut, ni en la tabla del cierre:
+// las metricas de gasto suman por lista de categorias, y la vacia no esta en
+// ninguna. El unico rastro es la linea "Unexplained" del cierre, que dice cuanto
+// falta pero no cual fue. Contarlas es el primer paso para poder arreglarlas.
+export function uncategorizedCore(transactions, month) {
+  var n = 0, debit = 0;
+  (transactions || []).forEach(function (t) {
+    if (!t || !t.date || t.date.slice(0, 7) !== month) return;
+    if (t.category) return;
+    n++;
+    if (t.type === 'Debit') debit += t.amountUSD || 0;
+  });
+  return { n: n, debit: parseFloat(debit.toFixed(2)) };
+}

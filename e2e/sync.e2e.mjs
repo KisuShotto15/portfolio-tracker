@@ -1012,13 +1012,75 @@ check('el dia se mantiene', reglaR.dayOfMonth === 9, JSON.stringify(reglaR));
 check('y el resto de la regla tambien', reglaR.id === 900 && reglaR.amount === 5.99 && reglaR.category === 'Discretionary', JSON.stringify(reglaR));
 check('no se anota ninguna transaccion suelta', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === nTxAntes,
   await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.desc+'/'+t.date}))"));
-await ev("closeTxForm()"); await sleep(300);
+
+// Encender el modo recurrente tiene que mostrar lo que ya hay cargado: antes
+// veias un form vacio y habia que tocar otro boton para saberlo.
+await ev("closeTxForm()"); await sleep(350);
+await ev("openTxForm()"); await sleep(350);
+const listaVis = () => ev("getComputedStyle(document.getElementById('tx-rec-list')).display!=='none'");
+check('al abrir el form la lista esta cerrada', (await listaVis()) === false);
+await ev("document.getElementById('tx-recurring').checked=true;toggleTxRecurring()"); await sleep(300);
+check('encender el modo recurrente la abre sola', await listaVis());
+// El wallet es el campo que decide de donde sale la plata, y era el unico que no
+// se podia ver sin abrir la regla.
+const filaR = await ev("(document.querySelector('.rec-lrow')||{}).textContent||''");
+check('la fila de la regla dice el wallet', /OKX Card/.test(filaR), filaR);
+check('y sigue diciendo dia, monto y categoria', /Day 9/.test(filaR) && /5\.99/.test(filaR) && /Discretionary/.test(filaR), filaR);
+check('sin lapiz: la fila entera edita', (await ev("document.querySelectorAll('.rec-lrow .wico').length")) === 1);
+await ev("document.querySelector('.rec-lrow').click()"); await sleep(300);
+check('tocar la fila abre la regla', (await ev("document.getElementById('tx-desc').value+'|'+document.getElementById('tx-rec-day').value+'|'+(document.querySelector('.btn-add')||{}).textContent")) === 'Netflix|9|Save rule');
+await ev("cancelEditRecurring();closeTxForm()"); await sleep(300);
 
 // El logo sale del mapa exacto y, si no esta, del match por marca: "OKX Card" no
 // esta en WALLET_LOGOS pero lleva OKX en el nombre.
 await ev("showPage('wallets',null)"); await sleep(500);
 const logoR = await ev("(function(){var r=[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&n.textContent.trim()==='OKX Card'})[0];if(!r)return 'sin fila';var i=r.querySelector('.wm-logo');return i?i.getAttribute('src'):'sin logo';})()");
 check('OKX Card sale con el logo de OKX', /logo-okx/.test(logoR), logoR);
+// Manual no tiene wallets en este escenario: la tarjeta no puede ocupar lo mismo
+// que una con filas adentro.
+const grupoM = JSON.parse(await ev(`(function(){
+  var g=[...document.querySelectorAll('.wm-group')];
+  var f=function(t){ return g.filter(function(e){var h=e.querySelector('.wm-group-title');return h&&h.textContent===t})[0]; };
+  var m=f('Manual'), t=f('Trackers');
+  if(!m||!t) return JSON.stringify({err:'sin grupos'});
+  return JSON.stringify({vacio:m.className.indexOf('is-empty')>=0, lleno:t.className.indexOf('is-empty')>=0,
+    hM:Math.round(m.getBoundingClientRect().height), hT:Math.round(t.getBoundingClientRect().height)});})()`));
+check('el grupo vacio se marca', grupoM.vacio === true && grupoM.lleno === false, JSON.stringify(grupoM));
+check('y ocupa bastante menos alto', grupoM.hM < grupoM.hT * 0.6, JSON.stringify(grupoM));
+
+// ── 20 · gastos sin categoria ───────────────────────────────────────────────
+// Un Debit sin categoria baja el patrimonio pero no entra en el budget, ni en
+// Spent, ni en el donut, ni en la tabla del cierre — y hasta ahora tampoco habia
+// forma de listarlos para arreglarlos.
+console.log('E2E sin categoria');
+cloudDoc = {};
+const hoyU = (function () { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { snapshots: [], deletedTxIds: [], recurring: [], recurringLog: [], manualWallets: [],
+    transactions: [
+      { id: 1001, createdAt: 1001, seq: 0, date: '${hoyU}', desc: 'con categoria', wallet: 'Binance', type: 'Debit', category: 'Groceries', amountUSD: 30, originalCurrency: 'USD', imported: false, updatedAt: 1001 },
+      { id: 1002, createdAt: 1002, seq: 1, date: '${hoyU}', desc: 'huerfana', wallet: 'Binance', type: 'Debit', category: '', amountUSD: 12.5, originalCurrency: 'USD', imported: false, updatedAt: 1002 } ],
+    recurringUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('summary',null);renderSummary()"); await sleep(500);
+const alertU = await ev("[...document.querySelectorAll('.alert-item')].map(e=>e.textContent).join(' ~ ')");
+check('avisa de la transaccion sin categoria', /1 transaction with no category/.test(alertU), alertU.slice(0, 200));
+check('y dice cuanto se pierde el budget', /\$12\.50 missing from the budget/.test(alertU), alertU.slice(0, 200));
+// La alerta lleva a la lista con el filtro ya armado.
+await ev("showUncategorized()"); await sleep(500);
+const listaU = JSON.parse(await ev(`(function(){
+  var c=document.getElementById('tf-cat');
+  return JSON.stringify({pagina:!!document.getElementById('page-transactions').classList.contains('active'),
+    opcion:c.selectedOptions.length?c.selectedOptions[0].textContent:'',
+    filas:[...document.querySelectorAll('#tx-wrap .tx-row .td-desc-txt')].map(function(e){return e.textContent}),
+    badge:(document.getElementById('tf-badge')||{}).textContent});})()`));
+check('la alerta lleva a Transactions', listaU.pagina === true, JSON.stringify(listaU));
+check('con el filtro "No category" puesto', listaU.opcion === '— No category', JSON.stringify(listaU));
+check('y lista solo la huerfana', listaU.filas.length === 1 && listaU.filas[0] === 'huerfana', JSON.stringify(listaU));
+check('el badge cuenta los dos filtros', listaU.badge === '2', JSON.stringify(listaU));
+await ev("clearTxFilters()"); await sleep(200);
+check('al limpiar vuelven las dos', (await ev("document.querySelectorAll('#tx-wrap .tx-row').length")) === 2);
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

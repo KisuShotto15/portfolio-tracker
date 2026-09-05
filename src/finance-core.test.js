@@ -3,6 +3,7 @@ import {
   monthCatTotalsCore, catNetSpendCore, monthIncomeCore, isExtFlow,
   investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, snapDerivedIncomeCore,
   holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
+  uncategorizedCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
   rollOnCore, migrateRolloverCore, histAllocPctCore, debtSinceCore, daysBetweenISO,
   noteMemoryCore,
@@ -586,5 +587,24 @@ describe('autofill aprendido del historial', () => {
     expect(noteMemoryCore([], 'Uber')).toBe(null);
     expect(noteMemoryCore(hist, '   ')).toBe(null);
     expect(noteMemoryCore(undefined, 'Uber')).toBe(null);
+  });
+});
+
+describe('uncategorizedCore', () => {
+  var T = [
+    { date: '2026-09-03', category: 'Groceries', type: 'Debit', amountUSD: 30 },
+    { date: '2026-09-04', category: '', type: 'Debit', amountUSD: 12.5 },
+    { date: '2026-09-05', type: 'Debit', amountUSD: 7.5 },          // sin el campo siquiera
+    { date: '2026-09-06', category: '', type: 'Credit', amountUSD: 100 },
+    { date: '2026-08-30', category: '', type: 'Debit', amountUSD: 999 }, // otro mes
+  ];
+  it('cuenta las del mes y suma solo los debits', () => {
+    expect(uncategorizedCore(T, '2026-09')).toEqual({ n: 3, debit: 20 });
+  });
+  it('un mes limpio da cero', () => {
+    expect(uncategorizedCore(T, '2026-07')).toEqual({ n: 0, debit: 0 });
+  });
+  it('sin transacciones no explota', () => {
+    expect(uncategorizedCore(null, '2026-09')).toEqual({ n: 0, debit: 0 });
   });
 });

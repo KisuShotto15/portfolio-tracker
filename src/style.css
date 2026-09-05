@@ -618,7 +618,9 @@ input,select,textarea,button{font-family:inherit}
 .tx-form-panel .tx-rec-check input{accent-color:var(--accent);width:16px;height:16px;flex:0 0 16px;padding:0;cursor:pointer;appearance:auto;-webkit-appearance:auto}
 .tx-form-panel .tx-rec-toggle{font-size:12px;padding:5px 12px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;margin-left:auto}
 #tx-rec-list{margin-top:8px;max-height:180px;overflow-y:auto}
-.rec-lrow{display:flex;align-items:center;gap:10px;padding:6px 2px;border-bottom:0.5px solid var(--line-soft);min-width:0}
+.rec-lrow{display:flex;align-items:center;gap:10px;padding:6px 2px;border-bottom:0.5px solid var(--line-soft);min-width:0;cursor:pointer;border-radius:8px;transition:background .12s}
+.rec-lrow:hover{background:rgba(255,255,255,.04)}
+.rec-lrow:active{background:rgba(255,255,255,.07)}
 .rec-lrow:last-child{border-bottom:none}
 .rec-lrow.editing .rec-lname{color:var(--accent)}
 .rec-lname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38%}
@@ -834,6 +836,12 @@ input,select,textarea,button{font-family:inherit}
   background:linear-gradient(90deg,transparent,var(--acts-bg) 16px)}
 .wm-row:hover .wm-acts{--acts-bg:color-mix(in srgb,#fff 2.5%,var(--surface))}
 .wm-row:hover .wm-acts,.wm-row:focus-within .wm-acts{opacity:1;pointer-events:auto}
+/* Un grupo sin wallets no necesita una tarjeta entera: se queda en el titulo y un
+   boton chico. Debts no entra aca: su vacio lleva un texto que si explica algo. */
+.wm-group.is-empty{padding:4px 8px 6px}
+.wm-group.is-empty .wm-group-head{padding:10px 16px 2px}
+.wm-group.is-empty .wm-rows{display:none}
+.wm-group.is-empty .wm-add{margin:2px 16px 4px;padding:7px 0;font-size:13px}
 .wm-add{width:calc(100% - 32px);margin:8px 16px 4px;background:none;border:1px dashed var(--line);color:var(--txt3);font-size:14px;font-weight:500;padding:11px 0;border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .wm-add:hover{color:var(--txt2);border-color:rgba(255,255,255,.2)}
 

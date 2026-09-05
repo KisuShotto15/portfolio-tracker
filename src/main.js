@@ -2,7 +2,7 @@ import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
-import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore,
+import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
   debtSinceCore, daysBetweenISO, noteMemoryCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
@@ -1608,7 +1608,7 @@ function renderTx(){
   if(tF||cF||wF||mF||sF){
     data=data.filter(function(t){
       if(tF&&t.type!==tF) return false;
-      if(cF&&t.category!==cF) return false;
+      if(cF&&(cF===NO_CAT?!!t.category:t.category!==cF)) return false;
       if(wF&&t.wallet!==wF) return false;
       if(mF&&!t.date.startsWith(mF)) return false;
       if(sF&&!((t.desc||'').toLowerCase().indexOf(sF)>=0||(t.wallet||'').toLowerCase().indexOf(sF)>=0||(t.category||'').toLowerCase().indexOf(sF)>=0||(t.date||'').indexOf(sF)>=0||String(t.amountUSD).indexOf(sF)>=0||(t.amountVES!=null&&String(t.amountVES).indexOf(sF)>=0))) return false;
@@ -2150,6 +2150,20 @@ function getActiveAlerts(){
     }
   }
 
+  // 6. Gastos sin categoria del mes en curso. Bajan el patrimonio pero no entran
+  // en el budget ni en ninguna metrica de gasto (todas suman por lista de
+  // categorias, y la vacia no esta en ninguna). Sin este aviso el unico rastro es
+  // la linea "Unexplained" del cierre, cuando ya no te acuerdas cual fue.
+  var _unc=uncategorizedCore(S.transactions,curMonth);
+  if(_unc.n>0){
+    alerts.push({
+      sev:'warn',
+      msg:_unc.n+' transaction'+(_unc.n===1?'':'s')+' with no category',
+      action:_unc.debit>0?fmtUSD(_unc.debit)+' missing from the budget · tap to review':'Tap to review',
+      onClick:'showUncategorized()'
+    });
+  }
+
   // 5. Transacciones recurrentes auto-agregadas (info, descartable)
   (S.recurringLog||[]).forEach(function(a){
     if(a.seen) return;
@@ -2187,7 +2201,7 @@ function renderAlerts(){
     return '<div class="alert-item alert-'+a.sev+'"'+clickAttr+'><div class="alert-icon">'+icon+'</div><div class="alert-body"><div class="alert-msg">'+a.msg+'</div><div class="alert-action">'+a.action+'</div></div></div>';
   }).join('');
   var hasCrit=alerts.some(function(a){ return a.sev==='crit'; });
-  var label=alerts.length===1?'1 alerta':alerts.length+' alertas';
+  var label=alerts.length===1?'1 alert':alerts.length+' alerts';
   el.innerHTML=hdr+'<div class="alerts-pop-wrap">'
     +'<button class="alerts-trigger '+(hasCrit?'crit':'warn')+'" onclick="toggleAlertsPopup(event)">'
       +'<span class="alerts-dot"></span>'+label
@@ -2298,6 +2312,9 @@ var _editingRecId=null;
 var _txRecListOpen=false; // lista colapsada por defecto: no roba espacio al sheet
 function toggleTxRecurring(){
   var on=document.getElementById('tx-recurring').checked;
+  // Al encender el modo, mostrar las reglas que ya tenes: si no, ves un form
+  // vacio y hay que tocar otro boton para saber que hay cargado.
+  if(on&&!_txRecListOpen&&(S.recurring||[]).length) _txRecListOpen=true;
   // el "Dia del mes" ocupa el mismo slot que Date en el grid (swap 1:1)
   var df=document.getElementById('tx-date-field'); if(df) df.style.display=on?'none':'';
   var dayF=document.getElementById('tx-rec-day-field'); if(dayF) dayF.style.display=on?'':'none';
@@ -2327,10 +2344,13 @@ function renderTxRecList(){
   if(!n){ _txRecListOpen=false; wrap.style.display='none'; wrap.innerHTML=''; return; }
   wrap.innerHTML=S.recurring.slice().sort(function(a,b){ return (a.dayOfMonth||0)-(b.dayOfMonth||0); }).map(function(r){
     var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
-    return '<div class="rec-lrow'+(_editingRecId===r.id?' editing':'')+'">'
+    // El wallet va en la linea: es el campo que decide de donde sale la plata y
+    // el unico que no se podia ver sin abrir la regla. Toda la fila edita — el
+    // lapiz era un target de 22px pegado al de borrar.
+    return '<div class="rec-lrow'+(_editingRecId===r.id?' editing':'')+'" onclick="editRecurringRule('+r.id+')">'
       +'<span class="rec-lname">'+escHtml(r.label)+'</span>'
-      +'<span class="rec-lmeta">Day '+r.dayOfMonth+' · '+amt+(r.category?' · '+escHtml(r.category):'')+'</span>'
-      +'<span class="rec-lacts"><button class="wico" onclick="editRecurringRule('+r.id+')" title="Edit">✎</button><button class="wico del" onclick="deleteRecurringRule('+r.id+')">✕</button></span>'
+      +'<span class="rec-lmeta">Day '+r.dayOfMonth+' · '+amt+(r.wallet?' · '+escHtml(r.wallet):'')+(r.category?' · '+escHtml(r.category):'')+'</span>'
+      +'<span class="rec-lacts"><button class="wico del" onclick="event.stopPropagation();deleteRecurringRule('+r.id+')" title="Delete">✕</button></span>'
       +'</div>';
   }).join('');
 }
@@ -3704,9 +3724,9 @@ function renderWallets(){
       +'</div>'
     +'</div>'
     +'<div class="wm-cols wm-cols-'+((showEx?1:0)+3)+'">'
-      +(showEx?'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div><button class="wm-add" onclick="openExchangeForm()">+ Add exchange</button></div>':'')
-      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
-      +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
+      +(showEx?'<div class="wm-group'+(exRows?'':' is-empty')+'"><div class="wm-group-head"><span class="wm-group-title">Exchanges</span><span class="wm-group-sum">'+fmtUSD(apiTotal)+'</span></div><div class="wm-rows">'+exRows+'</div><button class="wm-add" onclick="openExchangeForm()">+ Add exchange</button></div>':'')
+      +'<div class="wm-group'+(trRows?'':' is-empty')+'"><div class="wm-group-head"><span class="wm-group-title">Trackers</span><span class="wm-group-sum">'+fmtUSD(trackerTotal)+'</span></div><div class="wm-rows">'+trRows+'</div><button class="wm-add" onclick="openWalletForm(\'tracker\')">+ Add wallet</button></div>'
+      +'<div class="wm-group'+(mnRows?'':' is-empty')+'"><div class="wm-group-head"><span class="wm-group-title">Manual</span><span class="wm-group-sum">'+fmtUSD(manualNormal)+'</span></div><div class="wm-rows">'+mnRows+'</div><button class="wm-add" onclick="openWalletForm(\'normal\')">+ Add wallet</button></div>'
       +'<div class="wm-group"><div class="wm-group-head"><span class="wm-group-title">Debts</span><span class="wm-group-sum"'+(debtNet<0?' style="color:#E24B4A"':'')+'>'+(debtNet<0?'-':'')+fmtUSD(Math.abs(debtNet))+'</span></div><div class="wm-rows">'+(dbRows||'<p class="hint" style="padding:8px 4px">Who owes you and who you owe, in one list.</p>')+'</div><div class="wm-add-pair"><button class="wm-add" onclick="openWalletForm(\'lent\')">+ Owed to me</button><button class="wm-add" onclick="openWalletForm(\'debt\')">+ I owe</button></div></div>'
     +'</div>';
   // Skip re-render when unchanged → no flicker / re-animation on tab return.
@@ -3723,12 +3743,19 @@ function drawWalletDonut(data, grand){
 }
 
 
+// NO_CAT: valor centinela del filtro. Un gasto sin categoria no aparece en el
+// budget ni en ninguna metrica de gasto, y hasta que existio esta opcion tampoco
+// habia forma de listarlos para arreglarlos.
+// El centinela viaja como value de un <option>, asi que tiene que sobrevivir al
+// parser de HTML (un \u0000 se convierte en U+FFFD y deja de matchear). Ninguna
+// categoria se llama asi.
+var NO_CAT='__none__';
 function populateCatSelects(){
   var opts=FORM_CATS.map(function(c){ return '<option>'+c+'</option>'; }).join('');
   var tx=document.getElementById('tx-cat');
   if(tx) tx.innerHTML='<option value="">\u2014</option>'+opts;
   var tf=document.getElementById('tf-cat');
-  if(tf){ var cur=tf.value; tf.innerHTML='<option value="">Category</option>'+opts; tf.value=cur; }
+  if(tf){ var cur=tf.value; tf.innerHTML='<option value="">Category</option>'+opts+'<option value="'+NO_CAT+'">\u2014 No category</option>'; tf.value=cur; }
 }
 function populateWalletSelects(){
   var names=['Binance','Cash'];
@@ -4031,6 +4058,17 @@ function syncTxFilterState(cF,wF,mF){
   var c=document.getElementById('tf-clear');
   if(c) c.style.display=n?'':'none';
 }
+// Salta a la lista con el filtro ya puesto. La alerta dice cuantas son; esto te
+// deja verlas y arreglarlas sin tener que armar el filtro a mano.
+function showUncategorized(){
+  setAlertsPopup(false);
+  showPage('transactions',null);
+  var c=document.getElementById('tf-cat'); if(c) c.value=NO_CAT;
+  var m=document.getElementById('tf-month'); if(m) m.value=monthKey(new Date());
+  var x=document.getElementById('tx-filters-extra'); if(x) x.classList.add('open');
+  renderTx();
+}
+window.showUncategorized=showUncategorized;
 function clearTxFilters(){
   ['tf-cat','tf-wallet','tf-month'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   renderTx();
