@@ -1054,7 +1054,7 @@ function showTxToast(){
   var t=document.getElementById('tx-toast');
   if(!t){
     t=document.createElement('div'); t.id='tx-toast'; t.className='action-toast';
-    t.innerHTML='<span>Transaccion agregada</span><button onclick="doUndo();hideTxToast()">Deshacer</button>';
+    t.innerHTML='<span>Transaction added</span><button onclick="doUndo();hideTxToast()">Undo</button>';
     document.body.appendChild(t);
   }
   t.classList.add('show');
@@ -2156,7 +2156,7 @@ function getActiveAlerts(){
     var amtTxt=a.currency==='VES'?('Bs '+a.amount):('$'+a.amount);
     alerts.unshift({
       sev:'info',
-      msg:'Auto-agregado: '+a.label+' · '+amtTxt,
+      msg:'Auto-added: '+a.label+' · '+amtTxt,
       action:'Tap to dismiss · '+a.date,
       onClick:'dismissRecurringAlert('+a.id+')'
     });
