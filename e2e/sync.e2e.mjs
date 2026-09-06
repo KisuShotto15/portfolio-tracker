@@ -1192,6 +1192,68 @@ await ev("document.querySelectorAll('.app-modal-overlay')[document.querySelector
 check('confirmar lo borra', (await nH()) === antesH - 1);
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
+// ── 23 · Rate Converter: un monto, tres monedas ────────────────────────────
+console.log('E2E rate converter');
+cloudDoc = {};
+await ev("localStorage.setItem('ft13_usdt', JSON.stringify({rate:1000,at:Date.now()}))");
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { rate: 800, rateUpdatedAt: Date.now(), bcvCalc: {}, bcvCalcUpdatedAt: Date.now(),
+    toolFees: { bpay: 4.1, wally: 3.745, zinli: 3.75, emily: 10 }, toolFeesUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('tools',null)"); await sleep(500);
+const rc = () => ev("JSON.stringify({usd:document.getElementById('be-usd').value,bs:document.getElementById('be-bs').value,usdt:document.getElementById('be-usdt').value,cards:[...document.querySelectorAll('#be-cards .tcalc-card')].map(function(c){return c.textContent})})");
+const escribir = (id, v) => ev(`(function(){var e=document.getElementById('${id}');e.value='${v}';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+
+// La tasa efectiva de USDT: 1000 del monitor menos el 10% configurado = 900.
+const c23 = JSON.parse(await rc());
+check('muestra la tasa BCV', /BCV/.test(c23.cards[0]) && /800\.00/.test(c23.cards[0]), JSON.stringify(c23.cards));
+check('y la USDT con la comision aplicada', /−10%/.test(c23.cards[1]) && /900\.00/.test(c23.cards[1]) && /market 1,000\.00/.test(c23.cards[1]), JSON.stringify(c23.cards));
+
+await escribir('be-usd', '20'); await sleep(250);
+const desdeUsd = JSON.parse(await rc());
+check('20 USD son 16000 Bs al BCV', desdeUsd.bs === '16000.00', JSON.stringify(desdeUsd));
+check('y 17.78 USDT a la tasa con fee', desdeUsd.usdt === '17.78', JSON.stringify(desdeUsd));
+
+await escribir('be-bs', '18000'); await sleep(250);
+const desdeBs = JSON.parse(await rc());
+check('18000 Bs son 22.50 USD', desdeBs.usd === '22.50', JSON.stringify(desdeBs));
+check('y 20 USDT', desdeBs.usdt === '20.00', JSON.stringify(desdeBs));
+
+await escribir('be-usdt', '10'); await sleep(250);
+const desdeUsdt = JSON.parse(await rc());
+check('10 USDT son 9000 Bs', desdeUsdt.bs === '9000.00', JSON.stringify(desdeUsdt));
+check('y 11.25 USD al BCV', desdeUsdt.usd === '11.25', JSON.stringify(desdeUsdt));
+
+// Cual de los tres escribio el usuario se guarda: si no, al volver a la tab el
+// monto derivado pasaria a ser el dato y el resultado cambiaria solo.
+check('recuerda cual campo es el dato', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').bcvCalc||{}).src")) === 'usdt');
+await ev("showPage('summary',null)"); await sleep(200);
+await ev("showPage('tools',null)"); await sleep(400);
+const vuelta = JSON.parse(await rc());
+check('y al volver no se mueve nada', vuelta.usdt === '10' && vuelta.bs === '9000.00' && vuelta.usd === '11.25', JSON.stringify(vuelta));
+
+// Vaciar el campo que manda deja los tres en blanco: sin dato no hay conversion.
+await escribir('be-usdt', ''); await sleep(250);
+const vacio = JSON.parse(await rc());
+check('vaciarlo limpia los tres', vacio.usd === '' && vacio.bs === '' && vacio.usdt === '', JSON.stringify(vacio));
+
+// Mobile: la tool entra sin scroll horizontal y las cards no se apilan.
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
+await sleep(400);
+// El scrollWidth de la card entera miente: cuenta el globo del "?" , que es
+// absoluto y esta capado al viewport. Se miden las dos filas reales.
+const m23 = JSON.parse(await ev("(function(){var t=document.getElementById('tc-bcvemily');var f=[document.querySelector('#tc-bcvemily .rc-inputs'),document.getElementById('be-cards')];var cs=[...document.querySelectorAll('#be-cards .tcalc-card')];var ins=[...document.querySelectorAll('#tc-bcvemily .rc-inputs input')];return JSON.stringify({desborda:Math.max.apply(null,f.map(function(e){return Math.max(e.scrollWidth-e.clientWidth,Math.round(e.getBoundingClientRect().width)-t.clientWidth)})),pagina:document.documentElement.scrollWidth-window.innerWidth,cardLineas:new Set(cs.map(function(c){return Math.round(c.getBoundingClientRect().top)})).size,inpLineas:new Set(ins.map(function(c){return Math.round(c.getBoundingClientRect().top)})).size,alto:Math.round(t.getBoundingClientRect().height)});})()"));
+check('mobile: las filas entran en la card', m23.desborda <= 1, JSON.stringify(m23));
+check('mobile: y la pagina no scrollea de lado', m23.pagina <= 1, JSON.stringify(m23));
+check('mobile: los 3 inputs en una linea', m23.inpLineas === 1, JSON.stringify(m23));
+check('mobile: las 2 tasas en una linea', m23.cardLineas === 1, JSON.stringify(m23));
+// margin:0 auto en un flex item apaga el stretch: las cards quedaban a la mitad
+// del ancho de la fila de inputs, centradas y flotando en el medio de la card.
+const anchos = JSON.parse(await ev("(function(){var a=document.querySelector('#tc-bcvemily .rc-inputs').getBoundingClientRect().width,b=document.getElementById('be-cards').getBoundingClientRect().width;return JSON.stringify({inputs:Math.round(a),cards:Math.round(b)});})()"));
+check('mobile: las tasas alinean con los inputs', Math.abs(anchos.inputs - anchos.cards) <= 3, JSON.stringify(anchos));
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

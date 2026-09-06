@@ -976,19 +976,10 @@ input::placeholder{color:var(--txt3)}
 .tcalc-sm .tcalc-lbl{font-size:11px}
 .tcalc-sm .tcalc-sub{font-size:11px}
 
-/* Las 3 cards de Rate Converter van en una sola fila, asi que el aire lateral se
-   recorta: con 3 columnas cada una queda en ~1/3 del ancho de la tool. Received
-   y From Bs bajan un toque de tamano para no verse desproporcionadas contra
-   Total Bs, que ya no lleva subtitulo. */
-#be-cards .tcalc-card{padding:12px 6px}
-#be-cards .tcalc-card:nth-child(2) .tcalc-val,
-#be-cards .tcalc-card:nth-child(3) .tcalc-val{font-size:17px}
-/* "From Bs": el numero y el subtitulo pesan lo mismo, asi que comparten tamano
-   y color en vez de que el subtitulo quede atenuado como un dato secundario.
-   nowrap por la misma razon que .tcalc-val (ver arriba): sin esto fitCalcVals
-   no detecta que no entra y el texto se parte en 2 lineas en vez de encogerse. */
-.tcalc-sub-eq{font-size:17px;font-weight:500;color:var(--txt2);line-height:1.1;white-space:nowrap}
-
+/* #tc-bcvemily es flex column sin stretch, asi que sus hijos miden lo que su
+   contenido: sin width:100% las dos cards de tasas quedaban a la mitad del
+   ancho de la fila de inputs, centradas y flotando. */
+#be-result{width:100%}
 /* P2P spread chip compact so the card matches Profit Calculator's height */
 #p2p-cards .tcalc-card{padding:8px 8px}
 #p2p-cards .tcalc-val{font-size:16px}

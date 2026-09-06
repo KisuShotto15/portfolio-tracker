@@ -400,24 +400,24 @@
     <div id="tc-bcvemily" class="tool-card">
       <div class="tool-title" style="margin-bottom:.75rem">
         <h2 style="margin:0">Rate Converter</h2>
-        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Converts USD to Bs at the BCV rate, then buys USDT 10% below market price.</span></span>
+        <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">The same amount in three currencies: USD at the BCV rate, USDT at the market rate minus your fee. Type in any field.</span></span>
       </div>
       <div class="rc-inputs" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD</span>
-          <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true)"/>
-        </div>
-        <div class="field">
-          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
-          <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true)"/>
+          <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true,'usd')"/>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BS</span>
-          <input type="number" id="be-bs" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true)"/>
+          <input type="number" id="be-bs" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true,'bs')"/>
+        </div>
+        <div class="field">
+          <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
+          <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true,'usdt')"/>
         </div>
       </div>
       <div id="be-result" style="max-width:520px;margin:0 auto">
-        <div id="be-cards" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:520px"></div>
+        <div id="be-cards" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:520px"></div>
       </div>
     </div>
 

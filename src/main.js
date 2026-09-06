@@ -554,6 +554,8 @@ async function fetchUsdtRate(){
       renderUsdtRate();
       // Los wallets VES se valoran con esta tasa: refrescar si la pagina esta visible.
       if(_activePageId()==='wallets') renderWallets();
+      // Rate Converter convierte a USDT con esta tasa: sin esto muestra la vieja.
+      if(_activePageId()==='tools') calcBCVEmily();
     }
   }catch(e){}
 }
@@ -4480,7 +4482,7 @@ function runMigrations(){
 
 async function init(){
   loadLocal();
-  initTools({ getState:function(){ return S; }, save:save, stamp:stamp });
+  initTools({ getState:function(){ return S; }, save:save, stamp:stamp, usdtRate:function(){ return _usdtRate||0; } });
   // Restaurar la tab del hash YA, con los datos locales: antes se hacia recien en
   // bootAfterAuth (despues del pull) y el Dashboard parpadeaba unos segundos.
   // OJO: no tocar el hash de login (#access_token=...) — showPage lo reescribiria

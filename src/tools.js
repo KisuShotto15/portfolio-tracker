@@ -7,7 +7,8 @@
 let _getState = function(){ return {}; };
 let _save = function(){};
 let _stamp = null;
-export function initTools(o){ _getState = o.getState; _save = o.save; _stamp = o.stamp || null; }
+let _usdtMkt = function(){ return 0; };
+export function initTools(o){ _getState = o.getState; _save = o.save; _stamp = o.stamp || null; if(o.usdtRate) _usdtMkt = o.usdtRate; }
 
 // Comisiones ajustables (la tuerca de cada tool). Default = valor real actual;
 // se persisten/sincronizan via S.toolFees + toolFeesUpdatedAt (LWW por convencion).
@@ -21,7 +22,7 @@ function feeOf(key){
 function renderCalcCards(cardsId, resultId, cards, small){
   document.getElementById(cardsId).innerHTML = cards.map(function(c){
     var cls = c.green ? ' g' : c.red ? ' r' : '';
-    var subHtml = c.sub!=null ? '<div class="tcalc-sub'+(c.equalSize?' tcalc-sub-eq':'')+'">'+c.sub+'</div>' : '';
+    var subHtml = c.sub!=null ? '<div class="tcalc-sub">'+c.sub+'</div>' : '';
     return '<div class="tcalc-card'+(small?' tcalc-sm':'')+'">'
       +'<div class="tcalc-lbl">'+c.label+'</div>'
       +'<div class="tcalc-val'+cls+'">'+c.value+'</div>'
@@ -52,20 +53,7 @@ function shrinkToFit(v){
 }
 function fitCalcVals(wrap){
   if(!wrap) return;
-  wrap.querySelectorAll('.tcalc-card').forEach(function(card){
-    var val=card.querySelector('.tcalc-val');
-    var subEq=card.querySelector('.tcalc-sub-eq');
-    if(!val) return;
-    if(!subEq){ shrinkToFit(val); return; }
-    // .tcalc-sub-eq (ej: "From Bs") pesa lo mismo que .tcalc-val: si cada uno se
-    // encoge por su cuenta, dos strings de distinto largo terminan en tamanos
-    // apenas distintos entre si. Se mide el encogido que le hace falta a cada
-    // uno y se aplica a AMBOS el mas chico de los dos, para que compartan tamano.
-    var sVal=shrinkToFit(val), sSub=shrinkToFit(subEq);
-    if(sVal==null||sSub==null) return;
-    var min=Math.min(sVal,sSub)+'px';
-    val.style.fontSize=min; subEq.style.fontSize=min;
-  });
+  wrap.querySelectorAll('.tcalc-val').forEach(shrinkToFit);
 }
 
 var TOOLS = [
@@ -168,38 +156,51 @@ export function calcSpread(fromUser){
 }
 window.calcSpread = calcSpread;
 
-export function calcBCVEmily(fromUser){
-  var usd      = parseFloat(document.getElementById('be-usd').value)||0;
-  var usdtRate = parseFloat(document.getElementById('be-usdt').value)||0;
-  var bs       = parseFloat(document.getElementById('be-bs').value)||0;
+// Rate Converter: un solo monto en tres monedas. Bs es el eje — USD lo valora a
+// la tasa BCV y USDT a la tasa del monitor menos la comision configurada (la
+// tuerca 'emily'). Se edita cualquiera de los tres y los otros dos se recalculan,
+// por eso hace falta saber cual escribio el usuario: _beSrc. Sin eso, un re-render
+// (cambio de tab, tasa nueva) no sabria cual es el dato y cual el derivado.
+var _beSrc = 'usd';
+function beRates(){
+  var mkt = _usdtMkt() || 0;
+  return { bcv: _getState().rate || 0, mkt: mkt, eff: mkt * (1 - feeOf('emily') / 100) };
+}
+function beSet(id, v){
+  var el = document.getElementById(id);
+  if(!el || el === document.activeElement) return;
+  var txt = v > 0 ? v.toFixed(2) : '';
+  if(el.value !== txt) el.value = txt;
+}
+export function calcBCVEmily(fromUser, src){
+  if(src) _beSrc = src;
+  else if((_getState().bcvCalc||{}).src) _beSrc = _getState().bcvCalc.src;
+  var r = beRates();
+  var amt = parseFloat(document.getElementById('be-'+_beSrc).value) || 0;
+
+  // Todo pasa por Bs: es la unica moneda que las dos tasas comparten.
+  var bs = _beSrc === 'bs' ? amt : (_beSrc === 'usd' ? amt * r.bcv : amt * r.eff);
+  if(_beSrc !== 'bs')  beSet('be-bs', bs);
+  if(_beSrc !== 'usd') beSet('be-usd', r.bcv > 0 ? bs / r.bcv : 0);
+  if(_beSrc !== 'usdt')beSet('be-usdt', r.eff > 0 ? bs / r.eff : 0);
+
   if(fromUser===true){
     var S=_getState();
-    var vals={usd:document.getElementById('be-usd').value, usdt:document.getElementById('be-usdt').value, bs:document.getElementById('be-bs').value};
+    var vals={usd:document.getElementById('be-usd').value, usdt:document.getElementById('be-usdt').value, bs:document.getElementById('be-bs').value, src:_beSrc};
     var prev=S.bcvCalc||{};
-    if(vals.usd!==(prev.usd||'')||vals.usdt!==(prev.usdt||'')||vals.bs!==(prev.bs||'')){
+    if(vals.usd!==(prev.usd||'')||vals.usdt!==(prev.usdt||'')||vals.bs!==(prev.bs||'')||vals.src!==prev.src){
       S.bcvCalc=vals;
       if(_stamp) S.bcvCalcUpdatedAt=_stamp();
       _save();
     }
   }
-  var bcvRate  = _getState().rate || 0;
 
-  var totalBs       = usd * bcvRate;
-  var effectiveRate = usdtRate * (1 - feeOf('emily') / 100);
-  var usdtOut       = (totalBs > 0 && effectiveRate > 0) ? totalBs / effectiveRate : 0;
-
-  // Camino inverso: un monto en Bs valuado con las dos tasas que ya usa la tool
-  // — la del BCV (da USD) y la efectiva de Emily del subtitulo de Received (da USDT).
-  var bsToUsd  = (bs > 0 && bcvRate > 0)       ? bs / bcvRate       : 0;
-  var bsToUsdt = (bs > 0 && effectiveRate > 0) ? bs / effectiveRate : 0;
-
+  var f2 = function(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
   renderCalcCards('be-cards','be-result',[
-    { label:'Total Bs', value: totalBs > 0 ? totalBs.toFixed(2) : '—' },
-    { label:'Received', value: usdtOut > 0 ? usdtOut.toFixed(2)+' USDT' : '—', sub: effectiveRate > 0 ? 'rate '+effectiveRate.toFixed(2) : '—', green: usdtOut > 0 },
-    { label:'From Bs',
-      value: bsToUsd > 0 ? bsToUsd.toFixed(2)+' BCV' : '—',
-      sub: bsToUsdt > 0 ? bsToUsdt.toFixed(2)+' USDT' : (bs > 0 ? 'rate N/A' : '—'), equalSize:true },
-  ]);
+    { label:'BCV', value: r.bcv > 0 ? f2(r.bcv) : '—', sub:'Bs per USD' },
+    { label:'USDT −'+feeOf('emily')+'%', value: r.eff > 0 ? f2(r.eff) : '—',
+      sub: r.mkt > 0 ? 'market '+f2(r.mkt) : 'no rate', green: r.eff > 0 },
+  ], true);
 }
 window.calcBCVEmily = calcBCVEmily;
 
