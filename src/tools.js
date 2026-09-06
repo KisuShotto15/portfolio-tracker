@@ -178,33 +178,7 @@ function fitBeInputs(){
     var el=document.getElementById(id); if(el) shrinkToFit(el);
   });
 }
-// El campo que estas escribiendo tambien lleva separador, pero reescribir el
-// value mueve el cursor al final: se cuenta cuantos DIGITOS quedaban a la
-// izquierda del cursor y se lo devuelve a esa misma altura despues de agrupar.
-// Se agrupa solo la parte entera y con regex, no con toLocaleString: hay que
-// respetar el punto decimal a medio escribir ("1234." o "1234.5") y los ceros
-// a la izquierda, que Number() se comeria.
-function beFormatTyped(el){
-  var v = el.value;
-  if(!v) return;
-  var m = v.replace(/,/g,'').match(/^(-?)(\d*)(\.\d*)?$/);
-  if(!m) return; // cualquier otra cosa (dos puntos, letras): se deja como esta
-  var out = m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (m[3] || '');
-  if(out === v) return;
-  var caret = el.selectionStart;
-  var digits = caret == null ? -1 : (v.slice(0, caret).match(/\d/g) || []).length;
-  el.value = out;
-  if(digits < 0) return;
-  var pos = out.length, seen = 0;
-  for(var i = 0; i < out.length; i++){
-    if(/\d/.test(out[i])) seen++;
-    if(seen === digits){ pos = i + 1; break; }
-  }
-  if(digits === 0) pos = m[1].length;
-  try{ el.setSelectionRange(pos, pos); }catch(e){}
-}
 export function calcBCVEmily(fromUser, src){
-  if(src) beFormatTyped(document.getElementById('be-'+src));
   if(src) _beSrc = src;
   else if((_getState().bcvCalc||{}).src) _beSrc = _getState().bcvCalc.src;
   var r = beRates();
@@ -238,6 +212,17 @@ export function calcBCVEmily(fromUser, src){
   fitBeInputs();
 }
 window.calcBCVEmily = calcBCVEmily;
+// Al salir del campo se lo deja con el mismo formato que los otros dos. Mientras
+// escribis no se toca a proposito: reescribir el value en cada tecla obliga a
+// reponer el cursor a mano, y ahi es donde fallan los teclados de mobile.
+window.beBlurFmt = function(el){
+  var raw = (el.value || '').replace(/,/g, '').trim();
+  if(!raw || !/^-?\d*\.?\d*$/.test(raw)) return; // vacio o algo que no es numero: como esta
+  var txt = fmtNum(raw);
+  if(el.value === txt) return;
+  el.value = txt;
+  calcBCVEmily(true);
+};
 
 // --- Tuerca de comisiones por tool -----------------------------------------
 var GEAR_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';

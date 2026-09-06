@@ -1264,25 +1264,30 @@ await escribir('be-usd', '1234.5'); await sleep(300);
 const miles = JSON.parse(await rc());
 check('los miles llevan coma', miles.bs === '987,600.00', JSON.stringify(miles));
 
-// Tecleo real: un caracter por vez en la posicion del cursor. El campo que se
-// escribe tambien se agrupa, y el cursor tiene que quedar donde estaba.
+// Tecleo real: un caracter por vez en la posicion del cursor. Mientras escribis
+// el campo queda como lo tecleas; al salir se agrupa igual que los otros dos.
 const teclear = (id, txt) => ev(`(function(){var e=document.getElementById('${id}');e.focus();${JSON.stringify(txt)}.split('').forEach(function(c){var a=e.selectionStart==null?e.value.length:e.selectionStart;e.value=e.value.slice(0,a)+c+e.value.slice(a);try{e.setSelectionRange(a+1,a+1);}catch(_){}e.dispatchEvent(new Event('input',{bubbles:true}));});return e.value+'|'+e.selectionStart;})()`);
 const limpiar = (id) => ev(`(function(){var e=document.getElementById('${id}');e.focus();e.value='';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+const salir = (id) => ev(`(function(){var e=document.getElementById('${id}');e.blur();e.dispatchEvent(new Event('blur'));return e.value;})()`);
 
 await limpiar('be-bs');
 const t1 = await teclear('be-bs', '20000');
-check('escribiendo 20000 sale 20,000', t1 === '20,000|6', t1);
-const t2 = await teclear('be-bs', '.55');
-check('y el decimal a medio escribir no estorba', t2 === '20,000.55|9', t2);
+check('mientras escribis el campo no se toca', t1 === '20000|5', t1);
+check('al salir queda agrupado', (await salir('be-bs')) === '20,000.00');
+const t2 = JSON.parse(await rc());
+check('y las otras dos monedas siguen bien', t2.usd === '25.00' && t2.usdt === '22.22', JSON.stringify(t2));
 
-// Editar en el medio: el cursor vuelve al mismo digito, no al final.
+// Un decimal a medio escribir ("1234." antes del "5") no se puede pisar: por eso
+// el formato va al salir y no en cada tecla.
 await limpiar('be-bs');
-await teclear('be-bs', '1234567');
-const t3 = await ev("(function(){var e=document.getElementById('be-bs');e.setSelectionRange(5,5);e.value=e.value.slice(0,5)+'9'+e.value.slice(5);e.setSelectionRange(6,6);e.dispatchEvent(new Event('input',{bubbles:true}));return e.value+'|'+e.selectionStart;})()");
-check('editando en el medio el cursor no salta al final', t3 === '12,349,567|6', t3);
-// 12,349,567 Bs / 800 = 15,437.0 USD: el numero agrupado se sigue leyendo bien.
-const t4 = JSON.parse(await rc());
-check('y el valor agrupado se lee igual', t4.usd === '15,436.96', JSON.stringify(t4));
+const t3 = await teclear('be-bs', '1234.5');
+check('el decimal a medio escribir sobrevive', t3 === '1234.5|6', t3);
+check('y al salir se completa', (await salir('be-bs')) === '1,234.50');
+
+// Texto que no es un numero se deja como esta en vez de convertirlo en 0.00.
+await limpiar('be-bs');
+await teclear('be-bs', '12..3');
+check('lo que no es numero no se pisa', (await salir('be-bs')) === '12..3');
 await limpiar('be-bs');
 
 // ── 24 · P2P Spread en 2x2 ─────────────────────────────────────────────────

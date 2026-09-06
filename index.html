@@ -403,17 +403,17 @@
       <div class="rc-inputs">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD BCV</span>
-          <input type="text" inputmode="decimal" id="be-usd" placeholder="0.00" oninput="calcBCVEmily(true,'usd')"/>
+          <input type="text" inputmode="decimal" id="be-usd" placeholder="0.00" oninput="calcBCVEmily(true,'usd')" onblur="beBlurFmt(this)"/>
           <span class="rc-rate" id="be-usd-rate"></span>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BS</span>
-          <input type="text" inputmode="decimal" id="be-bs" placeholder="0.00" oninput="calcBCVEmily(true,'bs')"/>
+          <input type="text" inputmode="decimal" id="be-bs" placeholder="0.00" oninput="calcBCVEmily(true,'bs')" onblur="beBlurFmt(this)"/>
           <span class="rc-rate"></span>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
-          <input type="text" inputmode="decimal" id="be-usdt" placeholder="0.00" oninput="calcBCVEmily(true,'usdt')"/>
+          <input type="text" inputmode="decimal" id="be-usdt" placeholder="0.00" oninput="calcBCVEmily(true,'usdt')" onblur="beBlurFmt(this)"/>
           <span class="rc-rate" id="be-usdt-rate"></span>
         </div>
       </div>
