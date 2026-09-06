@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
+import { monthKey, prevMonth, parseAmt, fmtUSD, fmtNum, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 
 describe('monthKey (mes local, nunca UTC)', () => {
   it('devuelve YYYY-MM con padding', () => {
@@ -70,5 +70,25 @@ describe('etiquetas de mes y fecha', () => {
   it('fmtDate y fmtDateWd', () => {
     expect(fmtDate('2026-09-04')).toBe('Sep 4, 2026');
     expect(fmtDateWd('2026-09-04')).toBe('Fri, Sep 4');
+  });
+});
+
+describe('fmtNum', () => {
+  it('separa los miles con coma', () => {
+    expect(fmtNum(87654321.55)).toBe('87,654,321.55');
+    expect(fmtNum(1206000, 0)).toBe('1,206,000');
+  });
+  it('respeta los decimales pedidos', () => {
+    expect(fmtNum(950)).toBe('950.00');
+    expect(fmtNum(950, 0)).toBe('950');
+    expect(fmtNum(1234.567, 0)).toBe('1,235');
+  });
+  it('no finito es cero', () => {
+    expect(fmtNum(undefined)).toBe('0.00');
+    expect(fmtNum(NaN, 0)).toBe('0');
+    expect(fmtNum(Infinity)).toBe('0.00');
+  });
+  it('el negativo conserva el signo', () => {
+    expect(fmtNum(-5972.73)).toBe('-5,972.73');
   });
 });

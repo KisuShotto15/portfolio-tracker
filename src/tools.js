@@ -4,6 +4,8 @@
 // S.rate (read). Those come in via initTools() as a live getter — never capture
 // S by value, it gets reassigned on every cloud merge.
 
+import { fmtUSD, fmtNum, parseAmt } from './format.js';
+
 let _getState = function(){ return {}; };
 let _save = function(){};
 let _stamp = null;
@@ -56,7 +58,6 @@ var TOOLS = [
   { id:'profit',   label:'Profit Calc'    },
   { id:'p2p',      label:'P2P Spread'     },
   { id:'bcvemily', label:'Rate Converter' },
-  { id:'bdvlimits',label:'BDV Limits'    },
 ];
 
 export function renderToolToggles(){
@@ -117,9 +118,10 @@ export function calcProfit(fromUser){
   var isPos = profit >= 0;
   var bsNeeded = spent * buyRate; // total en Bs a pagar (Bank × Buy)
   renderCalcCards('pc-cards','pc-result',[
-    { label:'Invest', value: bsNeeded > 0 ? Math.round(bsNeeded).toLocaleString('es-VE') : '—', sub:'Bs needed' },
-    { label:'Recharge', value:'$'+bpayRecharge.toFixed(2), sub:'$'+bpayReceived.toFixed(2) },
-    { label:'Profit',   value:(isPos?'+':'')+'$'+profit.toFixed(2), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
+    { label:'Invest', value: bsNeeded > 0 ? fmtNum(bsNeeded,0) : '—', sub:'Bs needed' },
+    { label:'Recharge', value:fmtUSD(bpayRecharge), sub:fmtUSD(bpayReceived) },
+    // El signo va antes del $ (−$5,972.73): '$-5972.73' se lee como un precio raro.
+    { label:'Profit',   value:(isPos?'+':'−')+fmtUSD(Math.abs(profit)), sub:(isPos?'+':'')+profitPct.toFixed(2)+'%', green:isPos, red:!isPos },
   ], true);
 }
 window.calcProfit = calcProfit;
@@ -147,7 +149,7 @@ export function calcSpread(fromUser){
   var netPct   = sellRate && buyRate ? ((sellRate / buyRate) * (1 - comm / 100) - 1) * 100 : 0;
   var pct = function(n){ return (n>=0?'+':'')+n.toFixed(2)+'%'; };
   renderCalcCards('p2p-cards','p2p-result',[
-    { label:'Spread', value:pct(netPct), sub: sellRate&&buyRate ? sellRate+' → '+buyRate : '—', green:netPct>0, red:netPct<0 },
+    { label:'Spread', value:pct(netPct), sub: sellRate&&buyRate ? fmtNum(sellRate)+' → '+fmtNum(buyRate) : '—', green:netPct>0, red:netPct<0 },
   ]);
 }
 window.calcSpread = calcSpread;
@@ -165,7 +167,7 @@ function beRates(){
 function beSet(id, v){
   var el = document.getElementById(id);
   if(!el || el === document.activeElement) return;
-  var txt = v > 0 ? v.toFixed(2) : '';
+  var txt = v > 0 ? fmtNum(v) : '';
   if(el.value !== txt) el.value = txt;
 }
 // Un monto en Bs de 8 digitos no entra en su campo con la fuente normal. Mismo
@@ -180,7 +182,9 @@ export function calcBCVEmily(fromUser, src){
   if(src) _beSrc = src;
   else if((_getState().bcvCalc||{}).src) _beSrc = _getState().bcvCalc.src;
   var r = beRates();
-  var amt = parseFloat(document.getElementById('be-'+_beSrc).value) || 0;
+  // parseAmt, no parseFloat: los campos derivados llevan separador de miles y
+  // parseFloat('87,654,321.55') corta en la primera coma y devuelve 87.
+  var amt = parseAmt(document.getElementById('be-'+_beSrc).value);
 
   // Todo pasa por Bs: es la unica moneda que las dos tasas comparten.
   var bs = _beSrc === 'bs' ? amt : (_beSrc === 'usd' ? amt * r.bcv : amt * r.eff);

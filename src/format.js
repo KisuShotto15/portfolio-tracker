@@ -17,6 +17,11 @@ export function parseAmt(s){ return parseFloat(String(s||0).replace(/[$,\s]/g,''
 // USD with thousands separators and 2 decimals. Valores no finitos (undefined/NaN/Infinity) → 0.
 export function fmtUSD(v){ var n=parseFloat(v); if(!isFinite(n)) n=0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
+// Miles con coma y decimales fijos — el mismo formato que fmtUSD, sin el signo.
+// Un monto largo en Bs sin separador (87654321.55) no hay forma de leerlo de un
+// vistazo. dec por defecto 2; 0 para montos redondos.
+export function fmtNum(v,dec){ var n=parseFloat(v); if(!isFinite(n)) n=0; var d=(dec==null?2:dec); return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
 // Escape for safe insertion into innerHTML (incluye atributos entre comillas simples).
 export function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 

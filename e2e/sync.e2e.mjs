@@ -1212,7 +1212,7 @@ check('y la USDT con la comision aplicada', c23.rUsdt === '900.00 −10%', JSON.
 
 await escribir('be-usd', '20'); await sleep(250);
 const desdeUsd = JSON.parse(await rc());
-check('20 USD son 16000 Bs al BCV', desdeUsd.bs === '16000.00', JSON.stringify(desdeUsd));
+check('20 USD son 16000 Bs al BCV', desdeUsd.bs === '16,000.00', JSON.stringify(desdeUsd));
 check('y 17.78 USDT a la tasa con fee', desdeUsd.usdt === '17.78', JSON.stringify(desdeUsd));
 
 await escribir('be-bs', '18000'); await sleep(250);
@@ -1222,7 +1222,7 @@ check('y 20 USDT', desdeBs.usdt === '20.00', JSON.stringify(desdeBs));
 
 await escribir('be-usdt', '10'); await sleep(250);
 const desdeUsdt = JSON.parse(await rc());
-check('10 USDT son 9000 Bs', desdeUsdt.bs === '9000.00', JSON.stringify(desdeUsdt));
+check('10 USDT son 9000 Bs', desdeUsdt.bs === '9,000.00', JSON.stringify(desdeUsdt));
 check('y 11.25 USD al BCV', desdeUsdt.usd === '11.25', JSON.stringify(desdeUsdt));
 
 // Cual de los tres escribio el usuario se guarda: si no, al volver a la tab el
@@ -1236,7 +1236,7 @@ await ev("showPage('summary',null)"); await sleep(200);
 await ev("showPage('tools',null)"); await sleep(400);
 const vuelta = JSON.parse(await rc());
 check('abrir la tab llena las tasas sin esperar el pull', vuelta.rUsd === '800.00', JSON.stringify(vuelta));
-check('y al volver no se mueve nada', vuelta.usdt === '10' && vuelta.bs === '9000.00' && vuelta.usd === '11.25', JSON.stringify(vuelta));
+check('y al volver no se mueve nada', vuelta.usdt === '10' && vuelta.bs === '9,000.00' && vuelta.usd === '11.25', JSON.stringify(vuelta));
 
 // Vaciar el campo que manda deja los tres en blanco: sin dato no hay conversion.
 await escribir('be-usdt', ''); await sleep(250);
@@ -1260,6 +1260,12 @@ await escribir('be-bs', '87654321.55'); await sleep(300);
 const largo = JSON.parse(await ev("(function(){var e=document.getElementById('be-bs');if(!e)return '{}';return JSON.stringify({corta:e.scrollWidth-e.clientWidth,fs:Math.round(parseFloat(getComputedStyle(e).fontSize)),val:e.value});})()"));
 check('mobile: 8 digitos en Bs no se cortan', largo.corta <= 1, JSON.stringify(largo));
 check('y siguen siendo legibles', largo.fs >= 11, JSON.stringify(largo));
+// El campo derivado lleva separador de miles; el que se escribe queda como se
+// tecleo (reformatearlo bajo el cursor mueve el caret mientras escribis).
+await escribir('be-usd', '1234.5'); await sleep(300);
+const miles = JSON.parse(await rc());
+check('los miles llevan coma', miles.bs === '987,600.00', JSON.stringify(miles));
+check('y el campo que escribis no se toca', miles.usd === '1234.5', JSON.stringify(miles));
 
 // ── 24 · P2P Spread en 2x2 ─────────────────────────────────────────────────
 console.log('E2E p2p spread 2x2');
@@ -1279,6 +1285,10 @@ const tools24 = JSON.parse(await ev("(function(){var n=function(id){var e=docume
 check('Profit Calculator sigue entero', tools24.profitInp === 4 && tools24.profitCards === 3 && /[0-9]/.test(tools24.profitVal||''), JSON.stringify(tools24));
 check('P2P sigue entero', tools24.p2pInp === 3 && tools24.p2pCards === 1, JSON.stringify(tools24));
 check('Rate Converter sigue entero', tools24.rcInp === 3, JSON.stringify(tools24));
+// BDV Limits salio de produccion: ni la card ni su boton en Manage tools.
+const bdv24 = JSON.parse(await ev("(function(){return JSON.stringify({card:!!document.getElementById('tc-bdvlimits'),lista:!!document.getElementById('bdvl-list'),toggles:[...document.querySelectorAll('.tool-toggle')].map(function(b){return b.textContent.trim()})});})()"));
+check('BDV Limits ya no esta', bdv24.card === false && bdv24.lista === false, JSON.stringify(bdv24));
+check('ni en Manage tools', bdv24.toggles.length === 3 && !bdv24.toggles.some(function(t){ return /BDV/.test(t); }), JSON.stringify(bdv24));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
 ws.close();

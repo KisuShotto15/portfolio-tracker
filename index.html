@@ -403,30 +403,19 @@
       <div class="rc-inputs">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD BCV</span>
-          <input type="number" id="be-usd" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true,'usd')"/>
+          <input type="text" inputmode="decimal" id="be-usd" placeholder="0.00" oninput="calcBCVEmily(true,'usd')"/>
           <span class="rc-rate" id="be-usd-rate"></span>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BS</span>
-          <input type="number" id="be-bs" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true,'bs')"/>
+          <input type="text" inputmode="decimal" id="be-bs" placeholder="0.00" oninput="calcBCVEmily(true,'bs')"/>
           <span class="rc-rate"></span>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
-          <input type="number" id="be-usdt" placeholder="0.00" step="0.01" oninput="calcBCVEmily(true,'usdt')"/>
+          <input type="text" inputmode="decimal" id="be-usdt" placeholder="0.00" oninput="calcBCVEmily(true,'usdt')"/>
           <span class="rc-rate" id="be-usdt-rate"></span>
         </div>
-      </div>
-    </div>
-
-    <div id="tc-bdvlimits" class="tool-card tool-wide">
-      <div class="tool-title" style="margin-bottom:16px">
-        <h2 style="margin:0">BDV Monthly Limits</h2>
-      </div>
-      <div id="bdvl-list" class="bdvl-grid"></div>
-      <div class="bdvl-actions">
-        <button class="wm-add" onclick="addBdvLimit()">+ Add name</button>
-        <button class="wm-add bdvl-reset" onclick="resetBdvLimits()">Reset all</button>
       </div>
     </div>
 

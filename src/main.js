@@ -112,6 +112,8 @@ var S = {
   rateUpdatedAt:null, rateEur:null, rateEurUpdatedAt:null,
   presets:[], presetsUpdatedAt:null, // legacy (plantillas eliminadas; docs viejos lo traen)
   notePins:[], notePinsUpdatedAt:null, // notas fijadas con estrella: siempre primero en sugerencias
+  // BDV Limits salio de produccion (la tool ya no existe). El campo se queda:
+  // la data sigue en la nube y el LWW generico la sincroniza sin tocarla.
   bdvLimits:[], bdvLimitsUpdatedAt:null,
   recurring:[], recurringUpdatedAt:null,
   recurringLog:[], recurringLogUpdatedAt:null,
@@ -248,7 +250,7 @@ async function pushToCloud(){
       var before=JSON.stringify(S);
       S=Object.assign({},S,res.data);
       if(JSON.stringify(S)!==before){
-        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects(); renderBdvLimits();
+        saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects();
       }
     }
     syncFailed=false; _pushFailCount=0; showSyncBanner(false);
@@ -348,7 +350,7 @@ function afterPull(){
     case 'budget': renderBudget(); break;
     case 'wallets': renderWallets(); break;
     case 'holdings': renderOnchainWallets(); renderWalletHoldings(); break;
-    case 'tools': renderBdvLimits(); restoreProfitCalc(); calcProfit(); calcSpread(); calcBCVEmily(); break;
+    case 'tools': restoreProfitCalc(); calcProfit(); calcSpread(); calcBCVEmily(); break;
     case 'history': renderHistory(window._historyView||'snapshots'); break;
   }
 }
@@ -2772,7 +2774,7 @@ async function recordSnapshot(){
   var hasPrev=S.snapshots&&S.snapshots.length>0;
   var res=await appPrompt(
     'Record portfolio snapshot',
-    'Auto-sum from wallets: <b style="color:#fff">$'+auto.toFixed(2)+'</b>',
+    'Auto-sum from wallets: <b style="color:#fff">'+fmtUSD(auto)+'</b>',
     auto.toFixed(2),
     // Ya no crea ninguna transaccion: decide si se le atribuye income al periodo
     // (se guarda en el snapshot como derivedIncome/netProfit).
@@ -3986,7 +3988,7 @@ function showPage(id,btn,arg){
   // Las calculadoras se llenaban recien en bootAfterAuth (o sea, despues del
   // login y del pull): al recargar con la tab abierta las tasas tardaban segundos
   // en aparecer. Todo lo que necesitan ya esta en localStorage.
-  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); restoreProfitCalc(); calcProfit(); calcSpread(); calcBCVEmily(); }
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); restoreProfitCalc(); calcProfit(); calcSpread(); calcBCVEmily(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; renderPasskeys(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
@@ -4376,43 +4378,6 @@ window.handleCSV = handleCSV;
 window.save = save;
 
 
-// ── BDV Monthly Limits ───────────────────────────────────────────────
-function bdvLimitsState(){ if(!Array.isArray(S.bdvLimits)) S.bdvLimits=[]; return S.bdvLimits; }
-function bdvInitVirtual(){ return 10000; }
-function bdvInitFisica(name){ return String(name).trim().toLowerCase()==='jesusg'?10000:5000; }
-function _bdvFind(id){ return bdvLimitsState().filter(function(n){ return n.id===id; })[0]; }
-function renderBdvLimits(){
-  var wrap=document.getElementById('bdvl-list'); if(!wrap) return;
-  var list=bdvLimitsState();
-  if(!list.length){ wrap.innerHTML='<div class="bdvl-empty">No names yet. Add one below.</div>'; return; }
-  function stepper(id,key,val,on){
-    if(!on) return '<span class="bdvl-off">Off</span>';
-    return '<div class="bdvl-step">'
-      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',-500)">&#8722;</button>'
-      +'<input class="bdvl-amt" type="number" step="500" value="'+(val||0)+'" onchange="bdvSet('+id+',\''+key+'\',this.value)">'
-      +'<button class="bdvl-pm" onclick="bdvAdj('+id+',\''+key+'\',500)">+</button>'
-    +'</div>';
-  }
-  wrap.innerHTML=list.map(function(n){
-    return '<div class="bdvl-card">'
-      +'<div class="bdvl-card-head"><span class="bdvl-name" onclick="renameBdvLimit('+n.id+')">'+escHtml(n.name)+'</span>'
-        +'<button class="wico del" onclick="deleteBdvLimit('+n.id+')" title="Delete">&#10005;</button></div>'
-      +'<div class="bdvl-opt"><span class="bdvl-opt-lbl">Virtual</span>'+stepper(n.id,'virtual',n.virtual,true)+'</div>'
-      +'<div class="bdvl-opt"><button class="bdvl-toggle'+(n.fisicaOn?' on':'')+'" onclick="toggleBdvFisica('+n.id+')">Fisica</button>'+stepper(n.id,'fisica',n.fisica,!!n.fisicaOn)+'</div>'
-    +'</div>';
-  }).join('');
-}
-window.renderBdvLimits=renderBdvLimits;
-// Every mutation stamps bdvLimitsUpdatedAt so cloud sync does correct last-writer-wins.
-function bdvSave(){ S.bdvLimitsUpdatedAt=stamp(); save(); renderBdvLimits(); }
-window.bdvAdj=function(id,key,delta){ var n=_bdvFind(id); if(!n) return; n[key]=Math.max(0,(n[key]||0)+delta); bdvSave(); };
-window.bdvSet=function(id,key,val){ var n=_bdvFind(id); if(!n) return; var v=parseFloat(val); n[key]=isNaN(v)?0:Math.max(0,v); bdvSave(); };
-window.toggleBdvFisica=function(id){ var n=_bdvFind(id); if(!n) return; n.fisicaOn=!n.fisicaOn; bdvSave(); };
-window.addBdvLimit=async function(){ var r=await appPrompt('Add name','Name for the new entry','',{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; var nm=r.value.trim(); bdvLimitsState().push({id:Date.now(),name:nm,virtual:bdvInitVirtual(),fisica:bdvInitFisica(nm),fisicaOn:true}); bdvSave(); };
-window.resetBdvLimits=async function(){ var list=bdvLimitsState(); if(!list.length) return; var ok=await appConfirm('Reset all limits?','Sets every Virtual to '+fmtUSD(bdvInitVirtual())+' and Fisica to its initial amount.','Reset'); if(!ok) return; list.forEach(function(n){ n.virtual=bdvInitVirtual(); n.fisica=bdvInitFisica(n.name); }); bdvSave(); };
-window.renameBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var r=await appPrompt('Rename',escHtml(n.name),n.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()) return; n.name=r.value.trim(); bdvSave(); };
-window.deleteBdvLimit=async function(id){ var n=_bdvFind(id); if(!n) return; var ok=await appConfirm('Delete name?',escHtml(n.name),'Delete'); if(!ok) return; S.bdvLimits=bdvLimitsState().filter(function(x){ return x.id!==id; }); bdvSave(); };
-
 window.autofillFromNote = autofillFromNote;
 window.recordSnapshot = recordSnapshot;
 window.saveGoal = saveGoal;
@@ -4562,7 +4527,7 @@ async function bootAfterAuth(firstLogin){
   // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
   restoreProfitCalc(); // de nuevo tras el pull: la nube puede traer valores mas nuevos
   applyRecurring();
-  renderToolToggles(); renderToolGears(); renderBdvLimits(); calcProfit(); calcSpread(); calcBCVEmily();
+  renderToolToggles(); renderToolGears(); calcProfit(); calcSpread(); calcBCVEmily();
   autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay; re-entrante, hace clearTimeout)
   // Timers y listeners globales: SOLO una vez por pestana. bootAfterAuth vuelve a
