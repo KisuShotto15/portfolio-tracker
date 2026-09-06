@@ -845,6 +845,12 @@ await ev("document.getElementById('bud-total').value='1000';saveBudget()"); awai
 // y despues re-renderizar dispara el blur, que commitea y pisaria los valores.
 const inpFx = await ev(`(function(){var i=[...document.querySelectorAll('.bdg-cat')].filter(function(e){var t=e.querySelector('.bdg-cat-txt');return t&&t.textContent==='Groceries'})[0].querySelector('.bdg-amt-inp');i.focus();var c=getComputedStyle(i);var r=c.boxShadow+'|'+c.borderRadius+'|'+c.borderTopWidth;i.blur();return r;})()`);
 check('enfocarlo no dibuja ningun halo', /^none\|0px\|0px$/.test(inpFx), inpFx);
+// El total del mes: mismo trato. Ademas sin chip "+" — en 76px de ancho el chip
+// y el hueco que hay que reservarle tapaban el numero que estabas escribiendo.
+await ev("document.querySelector('.bdg-total-view').click()"); await sleep(250);
+const totFx = await ev("(function(){var i=document.getElementById('bud-total');if(!i)return 'sin input';i.focus();var c=getComputedStyle(i);var r=c.boxShadow+'|'+c.borderRadius+'|'+document.querySelectorAll('.bdg-total-edit .sum-chip').length+'|'+Math.round(i.getBoundingClientRect().width-parseFloat(c.paddingRight));i.blur();return r;})()");
+check('el total del mes tampoco dibuja halo', /^none\|0px\|/.test(totFx), totFx);
+check('y no lleva chip que le coma el ancho', /\|0\|/.test(totFx) && parseInt(totFx.split('|')[3], 10) >= 70, totFx);
 await sleep(300);
 
 // ── 14c · atajos de la PWA ──────────────────────────────────────────────────

@@ -1606,7 +1606,10 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 .bdg-total-view.is-ovr:hover{color:#D9C6FF;border-bottom-color:rgba(155,112,240,.75)}
 .bdg-total-edit{display:inline-flex;align-items:center;gap:2px;color:var(--txt2)}
 .bdg-total-edit input{width:76px;background:transparent;border:none;border-bottom:1px dashed var(--accent);color:#fff;font-family:var(--font-num);font-size:inherit;padding:0 2px;text-align:center}
-.bdg-total-edit input:focus{outline:none}
+/* El halo global de input:focus (box-shadow + radius 12px) dibujaba un ovalo
+   alrededor del numero. Mismo apagado que .bdg-lim-inp: esto se lee como texto
+   editable, no como un campo de formulario. */
+.bdg-total-edit input:focus{outline:none;box-shadow:none;border-radius:0;color:#fff}
 
 /* Pantallas muy angostas (<=400px): los montos de las KPIs no entran a 26px. */
 @media(max-width:400px){

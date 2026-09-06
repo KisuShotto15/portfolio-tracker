@@ -3161,10 +3161,10 @@ function renderBudget(){
       +'<div class="bdg-pb"><div class="bdg-pf" style="width:'+pct+'%;background:'+bc+'"></div></div>'
       +'<div class="bdg-hero-sub"><span>'+fmtUSD(spent)+' spent of '
         +'<span class="bdg-total-view'+(totOvr?' is-ovr':'')+'" title="'+(totOvr?monthLbl+' only — tap to edit':'Tap to set the budget for '+monthLbl)+'" onclick="this.style.display=\'none\';var w=this.nextElementSibling;w.style.display=\'inline-flex\';w.querySelector(\'input\').focus()">'+fmtUSD(budTotal)+'</span>'
-        // onblur guardaba y cerraba el modo edicion; tocar el chip "+" hacia
-        // justamente eso. sumChipTap cancela el blur con preventDefault, pero se
-        // deja el chip dentro del wrap para que el foco nunca salga del input.
-        +'<span class="bdg-total-edit" style="display:none">$<span class="sum-wrap"><input type="text" inputmode="decimal" id="bud-total" value="'+budTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"><span class="sum-chip" role="button" aria-label="Add a plus sign" onpointerdown="sumChipTap(event,\'bud-total\')">+</span></span></span>'
+        // Sin chip "+" aca: el campo mide 76px y el chip mas el hueco que hay que
+        // reservarle se comian el ancho del numero — en movil escribias detras del
+        // boton. Escribir la suma a mano sigue valiendo (evalMath en saveBudget).
+        +'<span class="bdg-total-edit" style="display:none">$<input type="text" inputmode="decimal" id="bud-total" value="'+budTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"></span>'
         +'</span><span class="bdg-pct">'+pct+'%</span></div>'
       +'<div class="bdg-stats">'
         +bstat('Income',fmtUSD(income),'#5DCAA5')
