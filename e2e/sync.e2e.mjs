@@ -1202,13 +1202,13 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
     toolFees: { bpay: 4.1, wally: 3.745, zinli: 3.75, emily: 10 }, toolFeesUpdatedAt: Date.now() })))`);
 await boot();
 await ev("showPage('tools',null)"); await sleep(500);
-const rc = () => ev("JSON.stringify({usd:document.getElementById('be-usd').value,bs:document.getElementById('be-bs').value,usdt:document.getElementById('be-usdt').value,cards:[...document.querySelectorAll('#be-cards .tcalc-card')].map(function(c){return c.textContent})})");
+const rc = () => ev("(function(){var t=function(id){var e=document.getElementById(id);return e?(e.textContent||''):'(no existe)';};return JSON.stringify({usd:document.getElementById('be-usd').value,bs:document.getElementById('be-bs').value,usdt:document.getElementById('be-usdt').value,rUsd:t('be-usd-rate'),rUsdt:t('be-usdt-rate')});})()");
 const escribir = (id, v) => ev(`(function(){var e=document.getElementById('${id}');e.value='${v}';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
 
 // La tasa efectiva de USDT: 1000 del monitor menos el 10% configurado = 900.
 const c23 = JSON.parse(await rc());
-check('muestra la tasa BCV', /BCV/.test(c23.cards[0]) && /800\.00/.test(c23.cards[0]), JSON.stringify(c23.cards));
-check('y la USDT con la comision aplicada', /−10%/.test(c23.cards[1]) && /900\.00/.test(c23.cards[1]) && /market 1,000\.00/.test(c23.cards[1]), JSON.stringify(c23.cards));
+check('la tasa BCV va de subtitulo del campo USD', c23.rUsd === '800.00', JSON.stringify(c23));
+check('y la USDT con la comision aplicada', c23.rUsdt === '900.00 −10%', JSON.stringify(c23));
 
 await escribir('be-usd', '20'); await sleep(250);
 const desdeUsd = JSON.parse(await rc());
@@ -1228,9 +1228,14 @@ check('y 11.25 USD al BCV', desdeUsdt.usd === '11.25', JSON.stringify(desdeUsdt)
 // Cual de los tres escribio el usuario se guarda: si no, al volver a la tab el
 // monto derivado pasaria a ser el dato y el resultado cambiaria solo.
 check('recuerda cual campo es el dato', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').bcvCalc||{}).src")) === 'usdt');
+// Abrir la tab tiene que llenar las tasas por si misma: antes eso pasaba solo en
+// bootAfterAuth, o sea despues del login y del pull, y al recargar la pagina las
+// tasas tardaban segundos en aparecer aunque ya estuvieran en localStorage.
+await ev("document.getElementById('be-usd-rate').textContent='';document.getElementById('be-usd').value='';document.getElementById('be-bs').value=''");
 await ev("showPage('summary',null)"); await sleep(200);
 await ev("showPage('tools',null)"); await sleep(400);
 const vuelta = JSON.parse(await rc());
+check('abrir la tab llena las tasas sin esperar el pull', vuelta.rUsd === '800.00', JSON.stringify(vuelta));
 check('y al volver no se mueve nada', vuelta.usdt === '10' && vuelta.bs === '9000.00' && vuelta.usd === '11.25', JSON.stringify(vuelta));
 
 // Vaciar el campo que manda deja los tres en blanco: sin dato no hay conversion.
@@ -1242,16 +1247,19 @@ check('vaciarlo limpia los tres', vacio.usd === '' && vacio.bs === '' && vacio.u
 await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
 await sleep(400);
 // El scrollWidth de la card entera miente: cuenta el globo del "?" , que es
-// absoluto y esta capado al viewport. Se miden las dos filas reales.
-const m23 = JSON.parse(await ev("(function(){var t=document.getElementById('tc-bcvemily');var f=[document.querySelector('#tc-bcvemily .rc-inputs'),document.getElementById('be-cards')];var cs=[...document.querySelectorAll('#be-cards .tcalc-card')];var ins=[...document.querySelectorAll('#tc-bcvemily .rc-inputs input')];return JSON.stringify({desborda:Math.max.apply(null,f.map(function(e){return Math.max(e.scrollWidth-e.clientWidth,Math.round(e.getBoundingClientRect().width)-t.clientWidth)})),pagina:document.documentElement.scrollWidth-window.innerWidth,cardLineas:new Set(cs.map(function(c){return Math.round(c.getBoundingClientRect().top)})).size,inpLineas:new Set(ins.map(function(c){return Math.round(c.getBoundingClientRect().top)})).size,alto:Math.round(t.getBoundingClientRect().height)});})()"));
-check('mobile: las filas entran en la card', m23.desborda <= 1, JSON.stringify(m23));
+// absoluto y esta capado al viewport. Se mide la fila de inputs.
+const m23 = JSON.parse(await ev("(function(){var t=document.getElementById('tc-bcvemily');var f=document.querySelector('#tc-bcvemily .rc-inputs');var ins=[...document.querySelectorAll('#tc-bcvemily .rc-inputs input')];return JSON.stringify({desborda:Math.max(f.scrollWidth-f.clientWidth,Math.round(f.getBoundingClientRect().width)-t.clientWidth),pagina:document.documentElement.scrollWidth-window.innerWidth,inpLineas:new Set(ins.map(function(c){return Math.round(c.getBoundingClientRect().top)})).size,bsMasAncho:Math.round(ins[1].getBoundingClientRect().width)-Math.round(ins[0].getBoundingClientRect().width),alto:Math.round(t.getBoundingClientRect().height)});})()"));
+check('mobile: la fila entra en la card', m23.desborda <= 1, JSON.stringify(m23));
 check('mobile: y la pagina no scrollea de lado', m23.pagina <= 1, JSON.stringify(m23));
 check('mobile: los 3 inputs en una linea', m23.inpLineas === 1, JSON.stringify(m23));
-check('mobile: las 2 tasas en una linea', m23.cardLineas === 1, JSON.stringify(m23));
-// margin:0 auto en un flex item apaga el stretch: las cards quedaban a la mitad
-// del ancho de la fila de inputs, centradas y flotando en el medio de la card.
-const anchos = JSON.parse(await ev("(function(){var a=document.querySelector('#tc-bcvemily .rc-inputs').getBoundingClientRect().width,b=document.getElementById('be-cards').getBoundingClientRect().width;return JSON.stringify({inputs:Math.round(a),cards:Math.round(b)});})()"));
-check('mobile: las tasas alinean con los inputs', Math.abs(anchos.inputs - anchos.cards) <= 3, JSON.stringify(anchos));
+check('mobile: Bs es el campo mas ancho', m23.bsMasAncho >= 20, JSON.stringify(m23));
+
+// 8 digitos en Bs: el numero no se puede cortar. Sin el encogido medido el texto
+// queda tapado por el borde del input y no hay forma de leer el monto completo.
+await escribir('be-bs', '87654321.55'); await sleep(300);
+const largo = JSON.parse(await ev("(function(){var e=document.getElementById('be-bs');if(!e)return '{}';return JSON.stringify({corta:e.scrollWidth-e.clientWidth,fs:Math.round(parseFloat(getComputedStyle(e).fontSize)),val:e.value});})()"));
+check('mobile: 8 digitos en Bs no se cortan', largo.corta <= 1, JSON.stringify(largo));
+check('y siguen siendo legibles', largo.fs >= 11, JSON.stringify(largo));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
 ws.close();

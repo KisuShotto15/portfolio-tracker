@@ -34,14 +34,10 @@ function renderCalcCards(cardsId, resultId, cards, small){
 }
 
 // Ajuste medido: cada valor conserva su fuente normal y SOLO se encoge lo justo
-// si de verdad no entra en su card (depende del ancho real del dispositivo y de
-// la escala de fuente del sistema — nada de reglas por cantidad de digitos).
-// Medir las 3 calculadoras SIN reconstruirlas (para al abrir la tab Tools:
-// las cards renderizadas con la tab oculta no se pudieron medir).
-export function fitAllCalcVals(){
-  ['pc-cards','p2p-cards','be-cards'].forEach(function(id){ fitCalcVals(document.getElementById(id)); });
-}
-window.fitAllCalcVals=fitAllCalcVals;
+// si de verdad no entra (depende del ancho real del dispositivo y de la escala de
+// fuente del sistema — nada de reglas por cantidad de digitos). Con la tab oculta
+// clientWidth es 0 y no se puede medir: por eso showPage('tools') vuelve a correr
+// las tres calculadoras al abrirla, que re-renderizan y re-miden.
 function shrinkToFit(v){
   v.style.fontSize='';
   if(!v.clientWidth) return null; // tab oculta: se re-ajusta al abrirla
@@ -157,7 +153,7 @@ export function calcSpread(fromUser){
 window.calcSpread = calcSpread;
 
 // Rate Converter: un solo monto en tres monedas. Bs es el eje — USD lo valora a
-// la tasa BCV y USDT a la tasa del monitor menos la comision configurada (la
+// la tasa BCV y USDT a la del monitor P2P menos la comision configurada (la
 // tuerca 'emily'). Se edita cualquiera de los tres y los otros dos se recalculan,
 // por eso hace falta saber cual escribio el usuario: _beSrc. Sin eso, un re-render
 // (cambio de tab, tasa nueva) no sabria cual es el dato y cual el derivado.
@@ -171,6 +167,14 @@ function beSet(id, v){
   if(!el || el === document.activeElement) return;
   var txt = v > 0 ? v.toFixed(2) : '';
   if(el.value !== txt) el.value = txt;
+}
+// Un monto en Bs de 8 digitos no entra en su campo con la fuente normal. Mismo
+// criterio que las cards: encoger solo lo que haga falta, medido, no por cantidad
+// de digitos (depende del ancho real del dispositivo y de la escala del sistema).
+function fitBeInputs(){
+  ['be-usd','be-bs','be-usdt'].forEach(function(id){
+    var el=document.getElementById(id); if(el) shrinkToFit(el);
+  });
 }
 export function calcBCVEmily(fromUser, src){
   if(src) _beSrc = src;
@@ -195,12 +199,13 @@ export function calcBCVEmily(fromUser, src){
     }
   }
 
+  // Las tasas usadas, como subtitulo de su propio campo: son referencia, no el
+  // resultado, y ocupaban una fila entera de cards para mostrar dos numeros fijos.
   var f2 = function(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
-  renderCalcCards('be-cards','be-result',[
-    { label:'BCV', value: r.bcv > 0 ? f2(r.bcv) : '—', sub:'Bs per USD' },
-    { label:'USDT −'+feeOf('emily')+'%', value: r.eff > 0 ? f2(r.eff) : '—',
-      sub: r.mkt > 0 ? 'market '+f2(r.mkt) : 'no rate', green: r.eff > 0 },
-  ], true);
+  var setRate = function(id, txt){ var el=document.getElementById(id); if(el) el.textContent=txt; };
+  setRate('be-usd-rate', r.bcv > 0 ? f2(r.bcv) : '—');
+  setRate('be-usdt-rate', r.eff > 0 ? f2(r.eff)+' −'+feeOf('emily')+'%' : '—');
+  fitBeInputs();
 }
 window.calcBCVEmily = calcBCVEmily;
 

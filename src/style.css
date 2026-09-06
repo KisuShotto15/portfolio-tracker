@@ -976,10 +976,11 @@ input::placeholder{color:var(--txt3)}
 .tcalc-sm .tcalc-lbl{font-size:11px}
 .tcalc-sm .tcalc-sub{font-size:11px}
 
-/* #tc-bcvemily es flex column sin stretch, asi que sus hijos miden lo que su
-   contenido: sin width:100% las dos cards de tasas quedaban a la mitad del
-   ancho de la fila de inputs, centradas y flotando. */
-#be-result{width:100%}
+/* Bs es el campo que se desborda (un monto en USD de 3 cifras son 6-7 digitos en
+   Bs), asi que se lleva mas ancho que sus dos vecinos. */
+.rc-inputs{display:grid;grid-template-columns:1fr 1.45fr 1fr;gap:8px;max-width:520px;margin:0 auto}
+#tc-bcvemily .rc-inputs input{padding:10px 8px;font-size:17px}
+.rc-rate{font-size:11px;color:var(--txt3);font-family:var(--font-num);white-space:nowrap;line-height:1.2;min-height:13px}
 /* P2P spread chip compact so the card matches Profit Calculator's height */
 #p2p-cards .tcalc-card{padding:8px 8px}
 #p2p-cards .tcalc-val{font-size:16px}

@@ -1,7 +1,7 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
-import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily, fitAllCalcVals } from './tools.js';
+import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
   debtSinceCore, daysBetweenISO, noteMemoryCore,
@@ -3983,7 +3983,10 @@ function showPage(id,btn,arg){
   else if(id==='budget') renderBudget();
   else if(id==='wallets') renderWallets();
   else if(id==='holdings'){ renderOnchainWallets(); renderWalletHoldings(); }
-  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); fitAllCalcVals(); }
+  // Las calculadoras se llenaban recien en bootAfterAuth (o sea, despues del
+  // login y del pull): al recargar con la tab abierta las tasas tardaban segundos
+  // en aparecer. Todo lo que necesitan ya esta en localStorage.
+  else if(id==='tools'){ renderToolToggles(); renderToolGears(); renderBdvLimits(); restoreProfitCalc(); calcProfit(); calcSpread(); calcBCVEmily(); }
   else if(id==='history') renderHistory(arg||'snapshots');
   else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; renderPasskeys(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
