@@ -178,11 +178,37 @@ function fitBeInputs(){
     var el=document.getElementById(id); if(el) shrinkToFit(el);
   });
 }
+// El campo que estas escribiendo tambien lleva separador, pero reescribir el
+// value mueve el cursor al final: se cuenta cuantos DIGITOS quedaban a la
+// izquierda del cursor y se lo devuelve a esa misma altura despues de agrupar.
+// Se agrupa solo la parte entera y con regex, no con toLocaleString: hay que
+// respetar el punto decimal a medio escribir ("1234." o "1234.5") y los ceros
+// a la izquierda, que Number() se comeria.
+function beFormatTyped(el){
+  var v = el.value;
+  if(!v) return;
+  var m = v.replace(/,/g,'').match(/^(-?)(\d*)(\.\d*)?$/);
+  if(!m) return; // cualquier otra cosa (dos puntos, letras): se deja como esta
+  var out = m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (m[3] || '');
+  if(out === v) return;
+  var caret = el.selectionStart;
+  var digits = caret == null ? -1 : (v.slice(0, caret).match(/\d/g) || []).length;
+  el.value = out;
+  if(digits < 0) return;
+  var pos = out.length, seen = 0;
+  for(var i = 0; i < out.length; i++){
+    if(/\d/.test(out[i])) seen++;
+    if(seen === digits){ pos = i + 1; break; }
+  }
+  if(digits === 0) pos = m[1].length;
+  try{ el.setSelectionRange(pos, pos); }catch(e){}
+}
 export function calcBCVEmily(fromUser, src){
+  if(src) beFormatTyped(document.getElementById('be-'+src));
   if(src) _beSrc = src;
   else if((_getState().bcvCalc||{}).src) _beSrc = _getState().bcvCalc.src;
   var r = beRates();
-  // parseAmt, no parseFloat: los campos derivados llevan separador de miles y
+  // parseAmt, no parseFloat: los campos llevan separador de miles y
   // parseFloat('87,654,321.55') corta en la primera coma y devuelve 87.
   var amt = parseAmt(document.getElementById('be-'+_beSrc).value);
 

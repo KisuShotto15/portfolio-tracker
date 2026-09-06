@@ -1260,12 +1260,30 @@ await escribir('be-bs', '87654321.55'); await sleep(300);
 const largo = JSON.parse(await ev("(function(){var e=document.getElementById('be-bs');if(!e)return '{}';return JSON.stringify({corta:e.scrollWidth-e.clientWidth,fs:Math.round(parseFloat(getComputedStyle(e).fontSize)),val:e.value});})()"));
 check('mobile: 8 digitos en Bs no se cortan', largo.corta <= 1, JSON.stringify(largo));
 check('y siguen siendo legibles', largo.fs >= 11, JSON.stringify(largo));
-// El campo derivado lleva separador de miles; el que se escribe queda como se
-// tecleo (reformatearlo bajo el cursor mueve el caret mientras escribis).
 await escribir('be-usd', '1234.5'); await sleep(300);
 const miles = JSON.parse(await rc());
 check('los miles llevan coma', miles.bs === '987,600.00', JSON.stringify(miles));
-check('y el campo que escribis no se toca', miles.usd === '1234.5', JSON.stringify(miles));
+
+// Tecleo real: un caracter por vez en la posicion del cursor. El campo que se
+// escribe tambien se agrupa, y el cursor tiene que quedar donde estaba.
+const teclear = (id, txt) => ev(`(function(){var e=document.getElementById('${id}');e.focus();${JSON.stringify(txt)}.split('').forEach(function(c){var a=e.selectionStart==null?e.value.length:e.selectionStart;e.value=e.value.slice(0,a)+c+e.value.slice(a);try{e.setSelectionRange(a+1,a+1);}catch(_){}e.dispatchEvent(new Event('input',{bubbles:true}));});return e.value+'|'+e.selectionStart;})()`);
+const limpiar = (id) => ev(`(function(){var e=document.getElementById('${id}');e.focus();e.value='';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+
+await limpiar('be-bs');
+const t1 = await teclear('be-bs', '20000');
+check('escribiendo 20000 sale 20,000', t1 === '20,000|6', t1);
+const t2 = await teclear('be-bs', '.55');
+check('y el decimal a medio escribir no estorba', t2 === '20,000.55|9', t2);
+
+// Editar en el medio: el cursor vuelve al mismo digito, no al final.
+await limpiar('be-bs');
+await teclear('be-bs', '1234567');
+const t3 = await ev("(function(){var e=document.getElementById('be-bs');e.setSelectionRange(5,5);e.value=e.value.slice(0,5)+'9'+e.value.slice(5);e.setSelectionRange(6,6);e.dispatchEvent(new Event('input',{bubbles:true}));return e.value+'|'+e.selectionStart;})()");
+check('editando en el medio el cursor no salta al final', t3 === '12,349,567|6', t3);
+// 12,349,567 Bs / 800 = 15,437.0 USD: el numero agrupado se sigue leyendo bien.
+const t4 = JSON.parse(await rc());
+check('y el valor agrupado se lee igual', t4.usd === '15,436.96', JSON.stringify(t4));
+await limpiar('be-bs');
 
 // ── 24 · P2P Spread en 2x2 ─────────────────────────────────────────────────
 console.log('E2E p2p spread 2x2');
