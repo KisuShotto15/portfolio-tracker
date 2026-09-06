@@ -1260,6 +1260,25 @@ await escribir('be-bs', '87654321.55'); await sleep(300);
 const largo = JSON.parse(await ev("(function(){var e=document.getElementById('be-bs');if(!e)return '{}';return JSON.stringify({corta:e.scrollWidth-e.clientWidth,fs:Math.round(parseFloat(getComputedStyle(e).fontSize)),val:e.value});})()"));
 check('mobile: 8 digitos en Bs no se cortan', largo.corta <= 1, JSON.stringify(largo));
 check('y siguen siendo legibles', largo.fs >= 11, JSON.stringify(largo));
+
+// ── 24 · P2P Spread en 2x2 ─────────────────────────────────────────────────
+console.log('E2E p2p spread 2x2');
+await ev("document.getElementById('p2p-sell').value='950';document.getElementById('p2p-sell').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('p2p-buy').value='940';document.getElementById('p2p-buy').dispatchEvent(new Event('input',{bubbles:true}))");
+await sleep(300);
+const p24 = JSON.parse(await ev("(function(){var g=document.querySelector('.p2p-grid');if(!g)return '{}';var r=function(e){var b=e.getBoundingClientRect();return {t:Math.round(b.top),l:Math.round(b.left),b:Math.round(b.bottom),w:Math.round(b.width)};};var sell=r(document.getElementById('p2p-sell')),buy=r(document.getElementById('p2p-buy')),fee=r(document.getElementById('p2p-comm')),card=r(document.querySelector('#p2p-cards .tcalc-card'));var t=document.getElementById('tc-p2p').getBoundingClientRect();return JSON.stringify({sellBuyMismaFila:sell.t===buy.t,feeCardMismaFila:Math.abs(fee.t-card.t)<70,feeIzq:fee.l<card.l,cardDer:card.l>fee.l,alineanAbajo:Math.abs(fee.b-card.b)<=2,abajoDeSell:fee.t>sell.b,anchoTool:Math.round(t.height)});})()"));
+check('Sell y Buy comparten fila', p24.sellBuyMismaFila === true, JSON.stringify(p24));
+check('Fee queda a la izquierda y el spread a la derecha', p24.feeIzq === true && p24.cardDer === true, JSON.stringify(p24));
+check('los dos en la segunda fila', p24.abajoDeSell === true, JSON.stringify(p24));
+check('y terminan a la misma altura', p24.alineanAbajo === true, JSON.stringify(p24));
+
+// Smoke de la tab entera: al reacomodar el P2P se borro sin querer el cuerpo de
+// Profit Calculator y la suite no dijo nada — nadie miraba esa tool.
+await ev("document.getElementById('pc-sell').value='950';document.getElementById('pc-sell').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('pc-amount').value='100';document.getElementById('pc-amount').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('pc-buy').value='940';document.getElementById('pc-buy').dispatchEvent(new Event('input',{bubbles:true}))");
+await sleep(300);
+const tools24 = JSON.parse(await ev("(function(){var n=function(id){var e=document.getElementById(id);return e?[...e.querySelectorAll('input')].filter(function(i){return !i.closest('.tool-gear');}).length:-1;};var c=function(id){var e=document.getElementById(id);return e?e.querySelectorAll('.tcalc-card').length:-1;};return JSON.stringify({profitInp:n('tc-profit'),profitCards:c('pc-cards'),p2pInp:n('tc-p2p'),p2pCards:c('p2p-cards'),rcInp:n('tc-bcvemily'),profitVal:(document.querySelector('#pc-cards .tcalc-val')||{}).textContent});})()"));
+check('Profit Calculator sigue entero', tools24.profitInp === 4 && tools24.profitCards === 3 && /[0-9]/.test(tools24.profitVal||''), JSON.stringify(tools24));
+check('P2P sigue entero', tools24.p2pInp === 3 && tools24.p2pCards === 1, JSON.stringify(tools24));
+check('Rate Converter sigue entero', tools24.rcInp === 3, JSON.stringify(tools24));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
 ws.close();

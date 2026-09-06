@@ -981,7 +981,11 @@ input::placeholder{color:var(--txt3)}
 .rc-inputs{display:grid;grid-template-columns:1fr 1.45fr 1fr;gap:8px;max-width:520px;margin:0 auto}
 #tc-bcvemily .rc-inputs input{padding:10px 8px;font-size:17px}
 .rc-rate{font-size:11px;color:var(--txt3);font-family:var(--font-num);white-space:nowrap;line-height:1.2;min-height:13px}
-/* P2P spread chip compact so the card matches Profit Calculator's height */
+/* 2x2: Sell/Buy arriba, Fee% y el resultado abajo. La fila de abajo alinea por
+   el borde inferior, asi el chip del spread termina a la misma altura que el
+   input del fee en vez de flotar a media altura. */
+.p2p-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 8px;align-items:end;max-width:520px;margin:0 auto}
+#p2p-cards{display:grid;grid-template-columns:1fr}
 #p2p-cards .tcalc-card{padding:8px 8px}
 #p2p-cards .tcalc-val{font-size:16px}
 
