@@ -791,7 +791,7 @@ function renderOnchainWallets(){
     var c=w.chain||'evm'; var cc=chainColor[c]||'#888'; var cl=chainLabel[c]||c.toUpperCase();
     var addr=w.address.length>20?w.address.slice(0,8)+'…'+w.address.slice(-5):w.address;
     var tot=totals[w.label]||0;
-    return '<div class="hld-wrow">'
+    return '<div class="hld-wrow" onclick="selectHldRow(this)">'
       +'<span class="hld-wbadge" style="--nc:'+cc+'">'+cl+'</span>'
       +'<span class="hld-wlabel">'+escHtml(w.label)+'</span>'
       +'<span class="hld-waddr">'+addr+'</span>'
@@ -817,8 +817,12 @@ function saveOnchainWallet(){
   document.getElementById('ow-addr').value='';
   save(); renderOnchainWallets();
 }
-function deleteOnchainWallet(id){
-  S.onchainWallets=(S.onchainWallets||[]).filter(function(w){ return w.id!==id; });
+async function deleteOnchainWallet(id){
+  var w=(S.onchainWallets||[]).find(function(x){ return x.id===id; });
+  if(!w) return;
+  var ok=await appConfirm('Delete wallet?',escHtml(w.label),'Delete');
+  if(!ok) return;
+  S.onchainWallets=(S.onchainWallets||[]).filter(function(x){ return x.id!==id; });
   S.onchainWalletsUpdatedAt=stamp();
   save(); renderOnchainWallets();
 }
@@ -865,7 +869,7 @@ function renderManualHoldings(){
   var prices=S.coinPrices||{};
   wrap.innerHTML=list.map(function(h){
     var p=prices[h.coin]||0; var val=(h.qty||0)*p;
-    return '<div class="hld-wrow">'
+    return '<div class="hld-wrow" onclick="selectHldRow(this)">'
       +'<span class="hld-wbadge" style="--nc:#9B70F0">'+escHtml(h.coin)+'</span>'
       +'<span class="hld-wlabel">'+escHtml(h.label)+'</span>'
       +'<span class="hld-waddr">'+fmtBal(h.qty||0)+' '+escHtml(h.coin)+'</span>'
@@ -887,8 +891,12 @@ window.addManualHolding=function(){
   renderManualHoldings(); renderWalletHoldings();
   fetchCoinPrices(true).then(function(){ renderManualHoldings(); renderWalletHoldings(); }).catch(function(){});
 };
-window.removeManualHolding=function(id){
-  S.manualHoldings=(S.manualHoldings||[]).filter(function(h){ return h.id!==id; });
+window.removeManualHolding=async function(id){
+  var h=(S.manualHoldings||[]).find(function(x){ return x.id===id; });
+  if(!h) return;
+  var ok=await appConfirm('Delete holding?',escHtml(h.label)+' · '+fmtBal(h.qty||0)+' '+escHtml(h.coin),'Delete');
+  if(!ok) return;
+  S.manualHoldings=(S.manualHoldings||[]).filter(function(x){ return x.id!==id; });
   S.manualHoldingsUpdatedAt=stamp(); save(); renderManualHoldings(); renderWalletHoldings();
 };
 
@@ -4132,6 +4140,16 @@ window.selectTxRow = function(el){
 if(!window._txSelListener){
   window._txSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
+}
+// Mobile: las acciones de una fila de holdings solo aparecen con la fila
+// seleccionada, igual que en Wallets. En desktop mandan :hover/:focus-within.
+window.selectHldRow = function(el){
+  document.querySelectorAll('.hld-wrow.hld-sel').forEach(function(r){ if(r!==el) r.classList.remove('hld-sel'); });
+  el.classList.toggle('hld-sel');
+};
+if(!window._hldSelListener){
+  window._hldSelListener=true;
+  document.addEventListener('click',function(e){ if(!e.target.closest('.hld-wrow')) document.querySelectorAll('.hld-sel').forEach(function(r){ r.classList.remove('hld-sel'); }); });
 }
 window.selectWmRow = function(el){
   document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){ if(r!==el) r.classList.remove('wm-sel'); });

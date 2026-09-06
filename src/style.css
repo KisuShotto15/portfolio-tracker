@@ -737,7 +737,8 @@ input,select,textarea,button{font-family:inherit}
 .hld-wlabel{font-size:14px;font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0}
 .hld-waddr{font-size:12px;color:var(--txt3);font-family:var(--font-num);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hld-wval{font-size:14px;font-weight:600;font-family:var(--font-num);color:var(--txt2);margin-right:4px;flex-shrink:0;white-space:nowrap;margin-left:auto}
-.hld-wbtn{background:none;border:none;color:var(--txt3);cursor:pointer;padding:5px 7px;border-radius:8px;font-size:13px;transition:color .15s,background .15s}
+.hld-wbtn{background:none;border:none;color:var(--txt3);cursor:pointer;padding:5px 7px;border-radius:8px;font-size:13px;flex-shrink:0;opacity:0;pointer-events:none;transition:opacity .15s,color .15s,background .15s}
+.hld-wrow:hover .hld-wbtn,.hld-wrow:focus-within .hld-wbtn{opacity:1;pointer-events:auto}
 .hld-wbtn:hover{color:var(--txt2);background:rgba(255,255,255,.05)}
 .hld-wbtn.del:hover{color:var(--red)}
 .hld-add{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:16px}
@@ -748,6 +749,14 @@ input,select,textarea,button{font-family:inherit}
 @media(max-width:720px){
   .hld-wrow{flex-wrap:wrap;row-gap:3px;padding:9px 0}
   .hld-wrow .hld-waddr{flex-basis:100%;order:10;padding-left:2px}
+  /* flex-basis:0 en la etiqueta: con su ancho de contenido como tamano
+     hipotetico, un label largo ("Binance BTC Earn") empujaba los botones a una
+     segunda linea antes de que el flexbox llegara a encogerlo. */
+  .hld-wrow .hld-wlabel{flex:1 1 0}
+  /* Sin hover en tactil: las acciones salen al seleccionar la fila. */
+  .hld-wrow .hld-wbtn{display:none}
+  .hld-wrow.hld-sel{background:rgba(255,255,255,.04)}
+  .hld-wrow.hld-sel .hld-wbtn{display:inline-flex;opacity:1;pointer-events:auto}
 }
 
 /* Wallets redesign */

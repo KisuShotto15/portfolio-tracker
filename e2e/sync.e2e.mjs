@@ -1148,6 +1148,50 @@ await ev(`document.getElementById('tx-date').value='${hoy21}';document.getElemen
 await sleep(500);
 check('sin parecido no pregunta', (await ev("document.querySelectorAll('.app-modal-overlay').length")) === 0 && (await nTx21()) === antes21 + 2);
 
+// ── 22 · La X de holdings: a la derecha, oculta y con confirmacion ─────────
+console.log('E2E holdings: borrar');
+cloudDoc = {};
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { manualHoldings: [ { id: 5501, label: 'Binance BTC Earn', coin: 'BTC', qty: 0.02699 },
+                      { id: 5502, label: 'UNI Bybit', coin: 'UNI', qty: 44.82 } ],
+    manualHoldingsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('holdings',null);document.getElementById('hld-manual').classList.add('open')"); await sleep(400);
+const filaH = () => ev("(function(){var r=[...document.querySelectorAll('#mh-list .hld-wrow')].filter(function(e){return e.textContent.includes('Binance BTC Earn')})[0];if(!r)return '{}';var b=r.querySelector('.hld-wbtn.del');if(!b)return '{\"nob\":1}';var rr=r.getBoundingClientRect(),bb=b.getBoundingClientRect(),lr=r.querySelector('.hld-wlabel').getBoundingClientRect();return JSON.stringify({vis:getComputedStyle(b).display!=='none'&&getComputedStyle(b).opacity!=='0',derecha:Math.round(rr.right-bb.right),mismaLinea:Math.abs(bb.top-lr.top)<12,alto:Math.round(rr.height)});})()");
+
+// Desktop: la X existe pero recien aparece con el mouse encima.
+await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+await sleep(300);
+const hD = JSON.parse(await filaH());
+check('desktop: la X esta escondida hasta el hover', hD.vis === false, JSON.stringify(hD));
+
+// Mobile: sin fila seleccionada no hay X; el bug era que estaba siempre y encima
+// caida a una segunda linea por el label largo.
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
+await sleep(300);
+const hM = JSON.parse(await filaH());
+check('mobile: la X no se muestra sola', hM.vis === false, JSON.stringify(hM));
+await ev("selectHldRow([...document.querySelectorAll('#mh-list .hld-wrow')].filter(function(e){return e.textContent.includes('Binance BTC Earn')})[0])"); await sleep(300);
+const hS = JSON.parse(await filaH());
+check('mobile: al tocar la fila aparece', hS.vis === true, JSON.stringify(hS));
+check('mobile: y queda pegada a la derecha', hS.derecha <= 8, JSON.stringify(hS));
+check('mobile: en la misma linea que el nombre', hS.mismaLinea === true, JSON.stringify(hS));
+
+// Y borrar pregunta antes.
+const nH = () => ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualHoldings||[]).length");
+const antesH = await nH();
+await ev("removeManualHolding(5501)");
+await waitFor(async () => (await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('h3').textContent:'';})()")) === 'Delete holding?', 3000, 60, 'el modal de borrado');
+const cuerpoH = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('.modal-info').textContent:'';})()");
+check('borrar un holding pregunta primero', /Binance BTC Earn/.test(cuerpoH) && /BTC/.test(cuerpoH), cuerpoH);
+await ev("document.querySelectorAll('.app-modal-overlay')[document.querySelectorAll('.app-modal-overlay').length-1].querySelector('#_amc').click()"); await sleep(400);
+check('cancelar lo deja donde estaba', (await nH()) === antesH);
+await ev("removeManualHolding(5501)"); await sleep(300);
+await ev("document.querySelectorAll('.app-modal-overlay')[document.querySelectorAll('.app-modal-overlay').length-1].querySelector('#_amo').click()"); await sleep(400);
+check('confirmar lo borra', (await nH()) === antesH - 1);
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
