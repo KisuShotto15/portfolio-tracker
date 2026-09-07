@@ -343,12 +343,12 @@
       <span class="dash-eyebrow">Tools</span>
     </div>
 
-    <div id="tc-profit" class="tool-card" style="padding-bottom:.6rem">
+    <div id="tc-profit" class="tool-card">
       <div class="tool-title" style="margin-bottom:.75rem">
         <h2 style="margin:0">Profit Calculator</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Profit from selling USDT after card commission (buy side) and the Bpay fee (sell side, adjustable via the gear).</span></span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:.625rem;max-width:520px;margin-left:auto;margin-right:auto">
+      <div class="pc-inputs">
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">Sell</span>
           <input type="number" id="pc-sell" autocomplete="off" placeholder="0.00" step="0.001" oninput="calcProfit(true)"/>
@@ -366,12 +366,12 @@
           <input type="number" id="pc-card" autocomplete="off" placeholder="0.00" step="0.1" oninput="calcProfit(true)"/>
         </div>
       </div>
-      <div id="pc-result" style="max-width:520px;margin:0 auto">
-        <div id="pc-cards" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:520px"></div>
+      <div id="pc-result">
+        <div id="pc-cards"></div>
       </div>
     </div>
 
-    <div id="tc-p2p" class="tool-card" style="padding-bottom:.6rem">
+    <div id="tc-p2p" class="tool-card">
       <div class="tool-title" style="margin-bottom:.75rem">
         <h2 style="margin:0">P2P Spread</h2>
         <span class="bdv-tip" tabindex="0">?<span class="bdv-tip-box">Sell USDT → buy USD at lower rate → reconvert via BDV→Bpay. Shows raw P2P spread and effective net gain after fees.</span></span>
@@ -404,18 +404,18 @@
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USD BCV</span>
           <input type="text" inputmode="decimal" id="be-usd" placeholder="0.00" oninput="calcBCVEmily(true,'usd')" onblur="beBlurFmt(this)"/>
-          <span class="rc-rate" id="be-usd-rate"></span>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">BS</span>
           <input type="text" inputmode="decimal" id="be-bs" placeholder="0.00" oninput="calcBCVEmily(true,'bs')" onblur="beBlurFmt(this)"/>
-          <span class="rc-rate"></span>
         </div>
         <div class="field">
           <span class="field-lbl" style="min-width:0;color:rgba(155,112,240,0.75)">USDT</span>
           <input type="text" inputmode="decimal" id="be-usdt" placeholder="0.00" oninput="calcBCVEmily(true,'usdt')" onblur="beBlurFmt(this)"/>
-          <span class="rc-rate" id="be-usdt-rate"></span>
         </div>
+      </div>
+      <div id="be-result">
+        <div id="be-cards"></div>
       </div>
     </div>
 

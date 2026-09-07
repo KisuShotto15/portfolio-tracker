@@ -1202,13 +1202,13 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
     toolFees: { bpay: 4.1, wally: 3.745, zinli: 3.75, emily: 10 }, toolFeesUpdatedAt: Date.now() })))`);
 await boot();
 await ev("showPage('tools',null)"); await sleep(500);
-const rc = () => ev("(function(){var t=function(id){var e=document.getElementById(id);return e?(e.textContent||''):'(no existe)';};return JSON.stringify({usd:document.getElementById('be-usd').value,bs:document.getElementById('be-bs').value,usdt:document.getElementById('be-usdt').value,rUsd:t('be-usd-rate'),rUsdt:t('be-usdt-rate')});})()");
+const rc = () => ev("(function(){var c=[...document.querySelectorAll('#be-cards .tcalc-card')].map(function(e){return e.textContent;});return JSON.stringify({usd:document.getElementById('be-usd').value,bs:document.getElementById('be-bs').value,usdt:document.getElementById('be-usdt').value,rUsd:c[0]||'(no existe)',rUsdt:c[1]||'(no existe)'});})()");
 const escribir = (id, v) => ev(`(function(){var e=document.getElementById('${id}');e.value='${v}';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
 
 // La tasa efectiva de USDT: 1000 del monitor menos el 10% configurado = 900.
 const c23 = JSON.parse(await rc());
-check('la tasa BCV va de subtitulo del campo USD', c23.rUsd === '800.00', JSON.stringify(c23));
-check('y la USDT con la comision aplicada', c23.rUsdt === '900.00 −10%', JSON.stringify(c23));
+check('la card muestra la tasa BCV', /BCV/.test(c23.rUsd) && /800\.00/.test(c23.rUsd), JSON.stringify(c23));
+check('y la USDT con la comision aplicada', /−10%/.test(c23.rUsdt) && /900\.00/.test(c23.rUsdt) && /market 1,000\.00/.test(c23.rUsdt), JSON.stringify(c23));
 
 await escribir('be-usd', '20'); await sleep(250);
 const desdeUsd = JSON.parse(await rc());
@@ -1231,11 +1231,11 @@ check('recuerda cual campo es el dato', (await ev("(JSON.parse(localStorage.getI
 // Abrir la tab tiene que llenar las tasas por si misma: antes eso pasaba solo en
 // bootAfterAuth, o sea despues del login y del pull, y al recargar la pagina las
 // tasas tardaban segundos en aparecer aunque ya estuvieran en localStorage.
-await ev("document.getElementById('be-usd-rate').textContent='';document.getElementById('be-usd').value='';document.getElementById('be-bs').value=''");
+await ev("document.getElementById('be-cards').innerHTML='';document.getElementById('be-usd').value='';document.getElementById('be-bs').value=''");
 await ev("showPage('summary',null)"); await sleep(200);
 await ev("showPage('tools',null)"); await sleep(400);
 const vuelta = JSON.parse(await rc());
-check('abrir la tab llena las tasas sin esperar el pull', vuelta.rUsd === '800.00', JSON.stringify(vuelta));
+check('abrir la tab llena las tasas sin esperar el pull', /800\.00/.test(vuelta.rUsd), JSON.stringify(vuelta));
 check('y al volver no se mueve nada', vuelta.usdt === '10' && vuelta.bs === '9,000.00' && vuelta.usd === '11.25', JSON.stringify(vuelta));
 
 // Vaciar el campo que manda deja los tres en blanco: sin dato no hay conversion.
@@ -1318,9 +1318,13 @@ check('ni en Manage tools', bdv24.toggles.length === 3 && !bdv24.toggles.some(fu
 // de aire muerto abajo.
 await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
 await sleep(400);
-const aire = JSON.parse(await ev("(function(){var f=function(id){var e=document.getElementById(id);var r=e.getBoundingClientRect();return Math.round(r.bottom-e.lastElementChild.getBoundingClientRect().bottom);};var t=function(id){return Math.round(document.getElementById(id).getBoundingClientRect().top);};return JSON.stringify({profit:f('tc-profit'),p2p:f('tc-p2p'),rc:f('tc-bcvemily'),mismaLinea:t('tc-profit')===t('tc-p2p')&&t('tc-p2p')===t('tc-bcvemily')});})()"));
-check('desktop: ninguna card tiene aire de sobra', aire.profit <= 30 && aire.p2p <= 30 && aire.rc <= 30, JSON.stringify(aire));
-check('y las tres arrancan en la misma linea', aire.mismaLinea === true, JSON.stringify(aire));
+const aire = JSON.parse(await ev("(function(){var g=function(id){var e=document.getElementById(id);var r=e.getBoundingClientRect();return {alto:Math.round(r.height),aire:Math.round(r.bottom-e.lastElementChild.getBoundingClientRect().bottom),top:Math.round(r.top),finFila:Math.round(e.lastElementChild.getBoundingClientRect().bottom)};};return JSON.stringify({profit:g('tc-profit'),p2p:g('tc-p2p'),rc:g('tc-bcvemily')});})()"));
+check('desktop: las tres cards miden lo mismo', aire.profit.alto === aire.p2p.alto && aire.p2p.alto === aire.rc.alto, JSON.stringify(aire));
+check('y arrancan en la misma linea', aire.profit.top === aire.p2p.top && aire.p2p.top === aire.rc.top, JSON.stringify(aire));
+// Lo que sobra se reparte ENTRE las filas, no como un bloque muerto al final:
+// la ultima fila de cada card termina a la misma altura que la de sus vecinas.
+check('ninguna termina con aire de sobra', aire.profit.aire <= 30 && aire.p2p.aire <= 30 && aire.rc.aire <= 30, JSON.stringify(aire));
+check('y las tres filas de abajo cierran parejas', Math.abs(aire.profit.finFila - aire.p2p.finFila) <= 2 && Math.abs(aire.p2p.finFila - aire.rc.finFila) <= 2, JSON.stringify(aire));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
 ws.close();

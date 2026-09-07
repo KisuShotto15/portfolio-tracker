@@ -915,10 +915,12 @@ input::placeholder{color:var(--txt3)}
    encogen solas) estiraban la pagina entera y en mobile se salia de la pantalla.
    No se notaba en el barrido porque a ≤720px .main lleva overflow-x:hidden y
    recorta el desborde en vez de mostrarlo: scrollWidth mentia. */
-/* align-items:start, no stretch: con stretch las tres cards median lo que la mas
-   alta (Profit Calc, 291px) y Rate Converter, que tiene una sola fila de campos,
-   quedaba con 143px de aire muerto adentro. Cada card mide su contenido. */
-#page-tools.active{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
+/* stretch: las tres cards de una fila miden igual. Para que eso no deje aire
+   muerto, cada tool tiene que traer contenido suficiente — de ahi la fila de
+   tasas del Rate Converter y el 2x2 del P2P. Y el contenido arranca arriba en
+   las tres (nada de justify-content:space-between, que deja el hueco en el
+   medio en vez de repartirlo como padding abajo). */
+#page-tools.active{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:stretch}
 @media(max-width:1180px){#page-tools.active{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tool-head{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin:0}
 .tool-title{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px;min-height:26px}
@@ -957,7 +959,18 @@ input::placeholder{color:var(--txt3)}
    Bs), asi que se lleva mas ancho que sus dos vecinos. */
 .rc-inputs{display:grid;grid-template-columns:1fr 1.45fr 1fr;gap:8px;max-width:520px;margin:0 auto}
 #tc-bcvemily .rc-inputs input{padding:10px 8px;font-size:17px}
-.rc-rate{font-size:11px;color:var(--txt3);font-family:var(--font-num);white-space:nowrap;line-height:1.2;min-height:13px}
+/* La fila de resultados de cada tool se ancla abajo (margin-top:auto en un flex
+   column): asi el sobrante de la grilla queda ENTRE las filas y no como un
+   bloque muerto al final, y las filas de abajo de las tres cards terminan a la
+   misma altura. El P2P hace lo mismo con align-content en su 2x2. */
+#page-tools.active > .tool-card{display:flex;flex-direction:column}
+#pc-result,#be-result{width:100%;margin-top:auto;padding-top:10px}
+#pc-inputs{max-width:520px}
+.pc-inputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-width:520px;margin:0 auto}
+#pc-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#be-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#be-cards .tcalc-val{font-size:15px}
+.p2p-grid{flex:1;align-content:space-between}
 /* 2x2: Sell/Buy arriba, Fee% y el resultado abajo. La fila de abajo alinea por
    el borde inferior, asi el chip del spread termina a la misma altura que el
    input del fee en vez de flotar a media altura. */

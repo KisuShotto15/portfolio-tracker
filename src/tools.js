@@ -203,12 +203,15 @@ export function calcBCVEmily(fromUser, src){
     }
   }
 
-  // Las tasas usadas, como subtitulo de su propio campo: son referencia, no el
-  // resultado, y ocupaban una fila entera de cards para mostrar dos numeros fijos.
+  // Las tasas usadas, en la misma fila de chips que usan las otras dos tools:
+  // es lo que le da a esta card el mismo alto que sus vecinas en la grilla de
+  // desktop. Son referencia, no resultado, de ahi el tamano chico.
   var f2 = function(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
-  var setRate = function(id, txt){ var el=document.getElementById(id); if(el) el.textContent=txt; };
-  setRate('be-usd-rate', r.bcv > 0 ? f2(r.bcv) : '—');
-  setRate('be-usdt-rate', r.eff > 0 ? f2(r.eff)+' −'+feeOf('emily')+'%' : '—');
+  renderCalcCards('be-cards','be-result',[
+    { label:'BCV', value: r.bcv > 0 ? f2(r.bcv) : '—', sub:'Bs per USD' },
+    { label:'USDT −'+feeOf('emily')+'%', value: r.eff > 0 ? f2(r.eff) : '—',
+      sub: r.mkt > 0 ? 'market '+f2(r.mkt) : 'no rate', green: r.eff > 0 },
+  ], true);
   fitBeInputs();
 }
 window.calcBCVEmily = calcBCVEmily;
