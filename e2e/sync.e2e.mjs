@@ -1312,6 +1312,15 @@ check('Rate Converter sigue entero', tools24.rcInp === 3, JSON.stringify(tools24
 const bdv24 = JSON.parse(await ev("(function(){return JSON.stringify({card:!!document.getElementById('tc-bdvlimits'),lista:!!document.getElementById('bdvl-list'),toggles:[...document.querySelectorAll('.tool-toggle')].map(function(b){return b.textContent.trim()})});})()"));
 check('BDV Limits ya no esta', bdv24.card === false && bdv24.lista === false, JSON.stringify(bdv24));
 check('ni en Manage tools', bdv24.toggles.length === 3 && !bdv24.toggles.some(function(t){ return /BDV/.test(t); }), JSON.stringify(bdv24));
+
+// Desktop: ninguna card se estira mas alla de su contenido. Con align-items:
+// stretch las tres median lo que la mas alta y Rate Converter quedaba con 143px
+// de aire muerto abajo.
+await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+await sleep(400);
+const aire = JSON.parse(await ev("(function(){var f=function(id){var e=document.getElementById(id);var r=e.getBoundingClientRect();return Math.round(r.bottom-e.lastElementChild.getBoundingClientRect().bottom);};var t=function(id){return Math.round(document.getElementById(id).getBoundingClientRect().top);};return JSON.stringify({profit:f('tc-profit'),p2p:f('tc-p2p'),rc:f('tc-bcvemily'),mismaLinea:t('tc-profit')===t('tc-p2p')&&t('tc-p2p')===t('tc-bcvemily')});})()"));
+check('desktop: ninguna card tiene aire de sobra', aire.profit <= 30 && aire.p2p <= 30 && aire.rc <= 30, JSON.stringify(aire));
+check('y las tres arrancan en la misma linea', aire.mismaLinea === true, JSON.stringify(aire));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
 ws.close();

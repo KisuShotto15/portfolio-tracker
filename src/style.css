@@ -915,7 +915,10 @@ input::placeholder{color:var(--txt3)}
    encogen solas) estiraban la pagina entera y en mobile se salia de la pantalla.
    No se notaba en el barrido porque a ≤720px .main lleva overflow-x:hidden y
    recorta el desborde en vez de mostrarlo: scrollWidth mentia. */
-#page-tools.active{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:stretch}
+/* align-items:start, no stretch: con stretch las tres cards median lo que la mas
+   alta (Profit Calc, 291px) y Rate Converter, que tiene una sola fila de campos,
+   quedaba con 143px de aire muerto adentro. Cada card mide su contenido. */
+#page-tools.active{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
 @media(max-width:1180px){#page-tools.active{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tool-head{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin:0}
 .tool-title{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px;min-height:26px}
@@ -929,7 +932,6 @@ input::placeholder{color:var(--txt3)}
 /* BDV Monthly Limits (full-width tool) */
 /* min(260px,100%): sin el min(), el piso de 260px de la pista es mayor que la
    card en pantallas de 320px y la grilla se sale en vez de encoger. */
-#tc-bcvemily{display:flex;flex-direction:column;justify-content:space-between}
 
 /* Tools — calc result chips */
 .tcalc-card{
