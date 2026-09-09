@@ -975,9 +975,13 @@ input::placeholder{color:var(--txt3)}
    el borde inferior, asi el chip del spread termina a la misma altura que el
    input del fee en vez de flotar a media altura. */
 .p2p-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 8px;align-items:end;max-width:520px;margin:0 auto}
-#p2p-cards{display:grid;grid-template-columns:1fr}
-#p2p-cards .tcalc-card{padding:8px 8px}
-#p2p-cards .tcalc-val{font-size:16px}
+/* Misma caja que un input de la tool (ver `.tool-card input`), para que las dos
+   celdas de la fila de abajo sean iguales. */
+.p2p-out{background:var(--surface);border:1px solid var(--line-soft);border-radius:10px;
+  padding:8px 12px;font-size:16px;line-height:1.25;text-align:center;color:var(--txt);
+  font-family:var(--font-num);white-space:nowrap;overflow:hidden}
+.p2p-out.g{color:var(--green)}
+.p2p-out.r{color:var(--red)}
 
 /* Tools — manage toggles */
 .tool-toggle-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}

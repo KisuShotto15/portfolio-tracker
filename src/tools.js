@@ -147,10 +147,14 @@ export function calcSpread(fromUser){
     }
   }
   var netPct   = sellRate && buyRate ? ((sellRate / buyRate) * (1 - comm / 100) - 1) * 100 : 0;
-  var pct = function(n){ return (n>=0?'+':'')+n.toFixed(2)+'%'; };
-  renderCalcCards('p2p-cards','p2p-result',[
-    { label:'Spread', value:pct(netPct), sub: sellRate&&buyRate ? fmtNum(sellRate)+' → '+fmtNum(buyRate) : '—', green:netPct>0, red:netPct<0 },
-  ]);
+  // El resultado es una caja del mismo tamano que el input de al lado, con su
+  // label arriba: como chip con fondo propio rompia la simetria de la fila.
+  // Sin subtitulo con las dos tasas: son los dos campos de arriba, ahi mismo.
+  var out = document.getElementById('p2p-out');
+  if(out){
+    out.textContent = (sellRate && buyRate) ? (netPct>=0?'+':'')+netPct.toFixed(2)+'%' : '—';
+    out.className = 'p2p-out'+(sellRate&&buyRate ? (netPct>0?' g':netPct<0?' r':'') : '');
+  }
 }
 window.calcSpread = calcSpread;
 
