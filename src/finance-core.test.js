@@ -131,6 +131,14 @@ describe('categorias neutras', () => {
     });
   });
 
+  // El KPI Net Profit del Dashboard es Income - catNetSpend(EXPENSE_CATS_DASH) y
+  // el Budget muestra Income - catNetSpend(BUDGET_CATS), del mismo mes. Que los dos
+  // numeros coincidan depende de que las dos listas sean la misma: agregar una
+  // categoria a una sola desincronizaria las dos paginas en silencio.
+  it('EXPENSE_CATS_DASH y BUDGET_CATS tienen las mismas categorias', () => {
+    expect(EXPENSE_CATS_DASH.slice().sort()).toEqual(BUDGET_CATS.slice().sort());
+  });
+
   it('ninguna categoria neutra es flujo externo', () => {
     NEUTRAL_CATS.forEach((c) => expect(isExtFlow(c)).toBe(false));
   });

@@ -1346,6 +1346,32 @@ await sleep(200);
 const bpayFee = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').toolFees||{}).bpay");
 check('el campo de fee vacio guarda 0', bpayFee === 0, String(bpayFee));
 
+// ── 26 · Net Profit del Dashboard = Income - Expenses del mismo mes que Budget ──
+console.log('E2E net profit = income - expenses del mes');
+cloudDoc = {};
+const hoy26 = (() => { const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { deletedTxIds: [], recurring: [], recurringLog: [], snapshots: [], budgetTotalByMonth: {},
+    transactions: [
+      { id: 3001, createdAt: 3001, seq: 0, date: '${hoy26}', desc: 'sueldo', wallet: 'Provincial', type: 'Credit', category: 'Income', amountUSD: 500, originalCurrency: 'USD', imported: false, updatedAt: 3001 },
+      { id: 3002, createdAt: 3002, seq: 1, date: '${hoy26}', desc: 'mercado', wallet: 'Provincial', type: 'Debit', category: 'Groceries', amountUSD: 200, originalCurrency: 'USD', imported: false, updatedAt: 3002 } ],
+    transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('budget',null);renderBudget()"); await sleep(400);
+const budStats26 = JSON.parse(await ev("(function(){var g=function(l){var e=[...document.querySelectorAll('.bdg-stat')].find(function(x){return x.querySelector('.bdg-stat-l').textContent===l;});return e?e.querySelector('.bdg-stat-v').textContent:null;};return JSON.stringify({income:g('Income'),spent:g('Spent'),savRate:g('Savings rate')});})()"));
+check('Budget: Income $500.00', budStats26.income === '$500.00', JSON.stringify(budStats26));
+check('Budget: Spent $200.00', budStats26.spent === '$200.00', JSON.stringify(budStats26));
+check('Budget: Savings rate 60%', budStats26.savRate === '60%', JSON.stringify(budStats26));
+
+await ev("showPage('summary',null);renderSummary()"); await sleep(400);
+const netProfit26 = JSON.parse(await ev("(function(){var c=[...document.querySelectorAll('.kpi-card')].find(function(x){return x.querySelector('.kpi-lbl').textContent==='Net Profit';});return c?JSON.stringify({val:c.querySelector('.kpi-val').textContent,sub:c.querySelector('.kpi-sub').textContent}):'null';})()"));
+// Income - Spent, el mismo calculo y el mismo mes que Budget: $500 - $200 = $300,
+// y 300/500 = 60% (identico a la Savings rate de Budget de arriba).
+check('Dashboard: Net Profit +$300.00', netProfit26.val === '+$300.00', JSON.stringify(netProfit26));
+check('Dashboard: y +60.00%, igual que Savings rate', netProfit26.sub.indexOf('+60.00%') === 0, JSON.stringify(netProfit26));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

@@ -1728,39 +1728,6 @@ function periodLoggedIncome(prevSnap, curSnap){
   var skip={}; (S.snapshots||[]).forEach(function(s){ if(s.txId!=null) skip[s.txId]=1; });
   return periodLoggedIncomeCore(S.transactions, prevSnap, curSnap, skip);
 }
-// Memo: se llama ~5 veces por render del dashboard (KPIs actual+previo, health,
-// panel P&L) y cada computo es O(snapshots x txs). Invalida por timestamps+longitudes.
-var _pnlKey=null,_pnlVal=null;
-function getSnapshotPnL(){
-  var k=(S.transactionsUpdatedAt||0)+'|'+(S.snapshotsUpdatedAt||0)+'|'+S.transactions.length+'|'+(S.snapshots||[]).length;
-  if(_pnlVal&&_pnlKey===k) return _pnlVal;
-  _pnlKey=k; _pnlVal=_computeSnapshotPnL();
-  return _pnlVal;
-}
-function _computeSnapshotPnL(){
-  var snaps=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  if(snaps.length<2) return [];
-  var txById={}; (S.transactions||[]).forEach(function(t){ txById[t.id]=t; });
-  var results=[];
-  for(var i=1;i<snaps.length;i++){
-    var s1=snaps[i-1],s2=snaps[i];
-    var f=investmentFlow(s1,s2);
-    var computed=(s2.total-s1.total)+f.invOut-f.invIn;
-    // Si el periodo se "cerro", su ganancia quedo congelada al tomar el snapshot;
-    // usarla evita que mover flujos de Investments ese mismo dia DESPUES del snapshot
-    // desincronice el KPI Net Profit. La fuente de ese valor congelado es netProfit: el
-    // crecimiento NETO ("cuanto crecio mi capital despues de gastos"), que es lo que
-    // muestra Net Profit. La tx enlazada ya no sirve para esto porque guarda el
-    // income BRUTO; queda solo como fallback para snapshots viejos, donde si era el neto.
-    // Sin ninguno de los dos, se calcula en vivo (asi editar el snapshot lo actualiza).
-    var linked=s2.txId!=null?txById[s2.txId]:null;
-    var profit=typeof s2.netProfit==='number'?s2.netProfit
-      :(linked&&typeof linked.amountUSD==='number'?linked.amountUSD:computed);
-    results.push({ from:s1.date,to:s2.date,snap1:s1.total,snap2:s2.total,invOut:f.invOut,invIn:f.invIn,profit:profit });
-  }
-  return results;
-}
-
 // ── Dashboard render sections ──────────────────────────────────────────────
 // prevMonth / monthKey viven en ./format.js (puros, testeados).
 
@@ -1774,15 +1741,18 @@ function getMonthlyKPIs(month){
   // mas reciente de todos, asi que mirando agosto leias "as of <fecha de hoy>".
   var netWorthDate=snapsBefore.length>0?snapsBefore[snapsBefore.length-1].date:null;
   var expenses=catNetSpend(month, EXPENSE_CATS_DASH);
-  // Net Profit: snapshot periods ending in month
-  var pnls=getSnapshotPnL();
-  var monthPnls=pnls.filter(function(p){ return p.to.startsWith(month); });
-  var monthlyReturn=monthPnls.length>0?monthPnls.reduce(function(s,p){ return s+p.profit; },0):null;
-  var lastPnl=monthPnls.length>0?monthPnls[monthPnls.length-1]:null;
-  var monthlyReturnPct=lastPnl&&lastPnl.snap1>0?(monthlyReturn/lastPnl.snap1)*100:null;
+  // Net Profit = Income - Expenses del MISMO mes calendario que ve Budget (misma
+  // funcion monthIncome, mismo set de categorias: EXPENSE_CATS_DASH y BUDGET_CATS
+  // son identicas). Antes salia de sumar los periodos entre snapshots que
+  // cerraban en el mes — una ventana de fechas distinta a la del mes calendario,
+  // asi que rara vez coincidia con el Income/Spent que Budget mostraba para "ese
+  // mismo mes". Con esto los dos numeros son literalmente el mismo calculo.
+  var income=monthIncome(month);
+  var monthlyReturn=(income>0||expenses>0)?parseFloat((income-expenses).toFixed(2)):null;
+  var monthlyReturnPct=income>0?(monthlyReturn/income)*100:null;
   // Goal Progress
   var goalPct=(S.dashGoal>0&&netWorth!==null)?Math.min(100,(netWorth/S.dashGoal)*100):null;
-  return {netWorth:netWorth,netWorthDate:netWorthDate,expenses:expenses,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,lastPnl:lastPnl,goalPct:goalPct};
+  return {netWorth:netWorth,netWorthDate:netWorthDate,expenses:expenses,income:income,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,goalPct:goalPct};
 }
 
 function fmtDelta(cur,prev,opts){
@@ -1827,7 +1797,8 @@ function renderKPIStrip(month){
   }
   var retColor=cur.monthlyReturn===null?'#888':cur.monthlyReturn>0?'#1D9E75':'#E24B4A';
   var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
-  var retSub=cur.lastPnl!==null?(cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%':''):'no snapshots for '+month;
+  var retSub=cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%'
+    :cur.monthlyReturn!==null?'no income logged':'no activity in '+month;
   // Liquid: en vivo, no por mes. No lleva delta porque los snapshots solo guardan
   // el total (no el reparto liquido/por cobrar), asi que no hay mes anterior contra
   // que compararlo sin inventarlo.
@@ -2823,13 +2794,11 @@ async function recordSnapshot(){
     //   income derivado = Δ + gastos - income ya registrado
     var grossIncome=Math.round((profit+periodNetSpend(prev,cur)-periodLoggedIncome(prev,cur))*100)/100;
     if(res.checked){
-      // Los dos son campos del snapshot, no una transaccion. Antes el income derivado
-      // se inyectaba como tx en S.transactions y eso obligaba a distinguirla de las
+      // derivedIncome es un campo del snapshot, no una transaccion. Antes se
+      // inyectaba como tx en S.transactions y eso obligaba a distinguirla de las
       // reales en cada lectura (doble conteo, tx huerfana al borrar el snapshot, txs
       // de $0, y un valor que el usuario podia editar a mano y desincronizar).
-      //   netProfit    = crecimiento NETO  → KPI Net Profit
-      //   derivedIncome = income BRUTO      → grafico / Budget, via monthIncome()
-      cur.netProfit=profit;
+      // income BRUTO → grafico mensual / Budget / KPI Net Profit, todos via monthIncome().
       cur.derivedIncome=grossIncome;
     }
   }
