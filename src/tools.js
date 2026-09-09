@@ -264,7 +264,9 @@ export function renderToolGears(){
 window.renderToolGears = renderToolGears;
 
 window.setToolFee = function(key, val){
-  var v = parseFloat(val);
+  // Campo vacio = 0, no el default: borrar el input es "sin comision", no
+  // "volver al valor de fabrica".
+  var v = String(val).trim() === '' ? 0 : parseFloat(val);
   var S = _getState();
   if(!S.toolFees) S.toolFees = {};
   S.toolFees[key] = isFinite(v) ? v : TOOL_FEE_DEFAULTS[key];

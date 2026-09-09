@@ -1337,6 +1337,15 @@ check('el sobrante del P2P se reparte parejo', disparejo(huecos.p2p) <= 15, JSON
 check('y el del Rate Converter tambien', disparejo(huecos.rc) <= 20, JSON.stringify(huecos));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
+// ── 25 · Fee vacio en la tuerca de Profit Calculator es 0, no el default ───
+console.log('E2E tool-gear fee vacio');
+await ev("document.querySelector('#tc-profit .tool-gear-btn').click()");
+await sleep(200);
+await ev("(function(){var i=document.querySelector('#tc-profit input[data-fee=\"bpay\"]');i.value='';i.dispatchEvent(new Event('input',{bubbles:true}));})()");
+await sleep(200);
+const bpayFee = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').toolFees||{}).bpay");
+check('el campo de fee vacio guarda 0', bpayFee === 0, String(bpayFee));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
