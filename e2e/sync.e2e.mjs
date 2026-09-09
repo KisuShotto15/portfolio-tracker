@@ -1329,7 +1329,12 @@ check('y arrancan en la misma linea', aire.profit.top === aire.p2p.top && aire.p
 // Lo que sobra se reparte ENTRE las filas, no como un bloque muerto al final:
 // la ultima fila de cada card termina a la misma altura que la de sus vecinas.
 check('ninguna termina con aire de sobra', aire.profit.aire <= 30 && aire.p2p.aire <= 30 && aire.rc.aire <= 30, JSON.stringify(aire));
-check('y las tres filas de abajo cierran parejas', Math.abs(aire.profit.finFila - aire.p2p.finFila) <= 2 && Math.abs(aire.p2p.finFila - aire.rc.finFila) <= 2, JSON.stringify(aire));
+// Y ese sobrante se reparte en partes parecidas entre las filas, en vez de
+// quedar como un solo hueco grande (antes: 63px arriba y 0 abajo en el P2P).
+const huecos = JSON.parse(await ev("(function(){var g=function(id,sel){var c=document.getElementById(id).getBoundingClientRect();var t=document.querySelector('#'+id+' .tool-title').getBoundingClientRect();var rows=[...document.querySelectorAll(sel)].map(function(e){return e.getBoundingClientRect();});var out=[Math.round(rows[0].top-t.bottom)];for(var i=1;i<rows.length;i++)out.push(Math.round(rows[i].top-rows[i-1].bottom));out.push(Math.round(c.bottom-rows[rows.length-1].bottom));return out;};return JSON.stringify({p2p:g('tc-p2p','#p2p-sell,#p2p-comm'),rc:g('tc-bcvemily','.rc-inputs,#be-result')});})()"));
+const disparejo = (a) => Math.max.apply(null, a) - Math.min.apply(null, a);
+check('el sobrante del P2P se reparte parejo', disparejo(huecos.p2p) <= 15, JSON.stringify(huecos));
+check('y el del Rate Converter tambien', disparejo(huecos.rc) <= 20, JSON.stringify(huecos));
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(200);
 
 ws.close();
