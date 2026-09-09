@@ -405,3 +405,31 @@ export function dupTxCore(transactions, tx, days) {
   });
   return found;
 }
+
+
+// Ultimo dia de un mes 'YYYY-MM', como 'YYYY-MM-DD'. Por componentes UTC: armar
+// el Date parseando el string lo lee como UTC y en UTC-4 retrocede un dia.
+export function monthEndISO(month) {
+  var p = String(month).split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1], 0));
+  return d.toISOString().slice(0, 10);
+}
+
+// ¿Toca crear el snapshot de cierre del mes? Devuelve su fecha o null.
+//
+// Corre el ULTIMO DIA del mes, de noche (hour >= minHour): a esa hora el dia ya
+// esta cerrado, asi que el saldo no es una estimacion — es el que quedo al final
+// del mes. Por eso tampoco se rellenan meses viejos: el placeholder saldria del
+// saldo de hoy, que no se parece al que habia aquel dia.
+//
+// No mira si el mes ya tiene otros snapshots: uno del 12 no cierra nada, y el
+// del ultimo dia es el que hace que el income derivado caiga en el mes correcto.
+// Lo unico que frena es que YA exista uno con esa misma fecha.
+export function autoSnapshotDueCore(snapshots, todayISO, hour, minHour) {
+  var target = monthEndISO(String(todayISO).slice(0, 7));
+  if (todayISO !== target) return null;
+  if (!(hour >= (minHour == null ? 20 : minHour))) return null;
+  if ((snapshots || []).some(function (s) { return s && s.date === target; })) return null;
+  return target;
+}
+

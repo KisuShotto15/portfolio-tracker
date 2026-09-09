@@ -1372,6 +1372,77 @@ const netProfit26 = JSON.parse(await ev("(function(){var c=[...document.querySel
 check('Dashboard: Net Profit +$300.00', netProfit26.val === '+$300.00', JSON.stringify(netProfit26));
 check('Dashboard: y +60.00%, igual que Savings rate', netProfit26.sub.indexOf('+60.00%') === 0, JSON.stringify(netProfit26));
 
+// ── 27 · Cierre de mes automatico ──────────────────────────────────────────
+console.log('E2E snapshot automatico de cierre de mes');
+cloudDoc = {};
+// Fechas relativas a hoy: el mes en curso y su ultimo dia.
+const finMesActual = (() => { const d = new Date(); const x = new Date(Date.UTC(d.getFullYear(), d.getMonth() + 1, 0));
+  return x.toISOString().slice(0, 10); })();
+const dia05 = finMesActual.slice(0, 8) + '05';
+const idSnap05 = Date.parse(dia05 + 'T12:00:00');
+const idTx05 = Date.parse(dia05 + 'T13:00:00');
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { deletedTxIds: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [],
+    manualWallets: [ { id: 71, name: 'Efectivo', trackerOnly: false, balance: 1500 } ],
+    snapshots: [ { id: ${idSnap05}, date: '${dia05}', total: 1000 } ],
+    transactions: [
+      { id: ${idTx05}, createdAt: ${idTx05}, seq: 0, date: '${dia05}', desc: 'mercado', wallet: 'Efectivo', type: 'Debit', category: 'Groceries', amountUSD: 100, originalCurrency: 'USD', imported: false, updatedAt: ${idTx05} } ],
+    snapshotsUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+// La hora entra por parametro: sin esto el escenario solo pasaria si la suite corre
+// el ultimo dia del mes despues de las 20:00. El DIA lo sigue decidiendo la app
+// (localToday), asi que igual se prueba contra la fecha real.
+await ev("autoMonthSnapshot(22)"); await sleep(400);
+const hoyEsFinDeMes = (() => { const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') === finMesActual; })();
+const auto27 = JSON.parse(await ev("(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]);return JSON.stringify(s.map(function(x){return {date:x.date,total:x.total,auto:!!x.auto,der:x.derivedIncome,id:x.id};}));})()"));
+
+// Con la fecha real: solo cierra si HOY es el ultimo dia del mes.
+check(hoyEsFinDeMes ? 'hoy es fin de mes: lo crea' : 'fuera del ultimo dia no crea nada',
+  auto27.length === (hoyEsFinDeMes ? 2 : 1), JSON.stringify(auto27));
+
+// Y forzando el dia, se prueba como queda el snapshot creado (corra cuando corra).
+await ev(`autoMonthSnapshot(22,20,'${finMesActual}')`); await sleep(400);
+const creado27 = JSON.parse(await ev("(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]);return JSON.stringify(s[s.length-1]);})()"));
+check('el ultimo dia de noche crea el cierre', creado27.date === finMesActual, JSON.stringify(creado27));
+check('con el auto-sum de wallets ($1500)', creado27.total === 1500, JSON.stringify(creado27));
+// Δ patrimonio (1500-1000) + gasto del periodo (100) = 600.
+check('y su income derivado (500 + 100 de gasto)', creado27.derivedIncome === 600, JSON.stringify(creado27));
+// Con el id del momento de creacion, el periodo se tragaba las txs del mes siguiente.
+check('su id son las 23:59 de ese dia', creado27.id === Date.parse(finMesActual + 'T23:59:59'), JSON.stringify(creado27));
+check('queda marcado como automatico', creado27.auto === true, JSON.stringify(creado27));
+// Insistir no lo duplica: ya existe uno con esa fecha.
+await ev(`autoMonthSnapshot(22,20,'${finMesActual}')`); await sleep(300);
+check('y no lo duplica al reintentar', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).length")) === 2);
+
+// El resto no depende del calendario: se deja el cierre ya creado, con la misma
+// forma que produce autoMonthSnapshot, y se prueban alerta, edicion y recalculo.
+const idCierre = Date.parse(finMesActual + 'T23:59:59');
+await ev(`(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');
+  S.snapshots=[S.snapshots[0],{id:${idCierre},date:'${finMesActual}',total:1500,derivedIncome:600,auto:true}];
+  S.snapshotsUpdatedAt=Date.now(); localStorage.setItem('ft13',JSON.stringify(S));})()`);
+await boot(); await sleep(400);
+const nSnaps27 = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).length");
+check('un boot no lo duplica', nSnaps27 === 2, String(nSnaps27));
+
+// La alerta pide verificar el monto.
+await ev("showPage('summary',null);renderSummary()"); await sleep(400);
+const alerta27 = await ev("[...document.querySelectorAll('.alert-item')].map(e=>e.textContent).join(' ~ ')");
+check('avisa que verifiques el monto', /Month-close snapshot created/.test(alerta27) && /verify the real amount/.test(alerta27) && /\$1,500\.00/.test(alerta27), alerta27);
+
+// Editar el monto desde History recalcula el income derivado: es lo que hace que
+// "si esta mal lo corrijo despues" realmente funcione.
+await ev(`editSnapshot(${idCierre})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de editar snapshot');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var i=m[m.length-1].querySelector('input');i.value='1200';i.dispatchEvent(new Event('input',{bubbles:true}));m[m.length-1].querySelector('#_amo').click();})()");
+await sleep(500);
+const tras27 = JSON.parse(await ev("(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[])[1];return JSON.stringify({total:s.total,der:s.derivedIncome,auto:!!s.auto});})()"));
+check('editarlo corrige el total', tras27.total === 1200, JSON.stringify(tras27));
+// (1200-1000) + 100 = 300, no los 600 del monto viejo.
+check('y recalcula el income derivado', tras27.der === 300, JSON.stringify(tras27));
+check('y deja de pedir verificacion', tras27.auto === false, JSON.stringify(tras27));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

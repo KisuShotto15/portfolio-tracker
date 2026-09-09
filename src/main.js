@@ -4,7 +4,7 @@ import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, 
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
-  debtSinceCore, daysBetweenISO, noteMemoryCore,
+  debtSinceCore, daysBetweenISO, noteMemoryCore, autoSnapshotDueCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -2183,6 +2183,19 @@ function getActiveAlerts(){
     });
   }
 
+  // 7. Cierre de mes creado solo. El total sale del auto-sum de wallets de hoy,
+  // no del ultimo dia del mes, y las wallets manuales no se rastrean solas: el
+  // numero es una estimacion hasta que lo mires.
+  (S.snapshots||[]).forEach(function(s){
+    if(!s.auto) return;
+    alerts.push({
+      sev:'warn',
+      msg:'Month-close snapshot created · '+fmtDate(s.date),
+      action:'Placeholder '+fmtUSD(s.total)+' — verify the real amount in History · tap to dismiss',
+      onClick:'dismissAutoSnapshot('+s.id+')'
+    });
+  });
+
   // 5. Transacciones recurrentes auto-agregadas (info, descartable)
   (S.recurringLog||[]).forEach(function(a){
     if(a.seen) return;
@@ -2779,31 +2792,67 @@ async function recordSnapshot(){
   S.snapshots.push({id:Date.now(),date:today,total:val,holdingsValue:holdingsTotalUsd()});
   S.snapshotsUpdatedAt=stamp();
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
-  if(sorted.length>=2){
-    var prev=sorted[sorted.length-2];
+  if(sorted.length>=2&&res.checked){
     var cur=S.snapshots[S.snapshots.length-1];
-    var f=investmentFlow(prev,cur);
-    var profit=Math.round(((val-prev.total)+f.invOut-f.invIn)*100)/100;
-    // La variacion del patrimonio es NETA (ya trae los gastos descontados), asi que
-    // usarla como Income dejaba el grafico descuadrado: los gastos se restaban dos
-    // veces (una dentro del income, otra en la barra Outflows). Sumandole el gasto
-    // del periodo se reconstruye el income BRUTO, comparable contra Outflows.
-    //   patrimonio: Δ = income - gastos  →  income = Δ + gastos
-    // Se resta el income que ya esta registrado a mano en el periodo: esa plata ya
-    // hizo subir el patrimonio, derivarla otra vez la contaria dos veces.
-    //   income derivado = Δ + gastos - income ya registrado
-    var grossIncome=Math.round((profit+periodNetSpend(prev,cur)-periodLoggedIncome(prev,cur))*100)/100;
-    if(res.checked){
-      // derivedIncome es un campo del snapshot, no una transaccion. Antes se
-      // inyectaba como tx en S.transactions y eso obligaba a distinguirla de las
-      // reales en cada lectura (doble conteo, tx huerfana al borrar el snapshot, txs
-      // de $0, y un valor que el usuario podia editar a mano y desincronizar).
-      // income BRUTO → grafico mensual / Budget / KPI Net Profit, todos via monthIncome().
-      cur.derivedIncome=grossIncome;
-    }
+    // derivedIncome es un campo del snapshot, no una transaccion. Antes se
+    // inyectaba como tx en S.transactions y eso obligaba a distinguirla de las
+    // reales en cada lectura (doble conteo, tx huerfana al borrar el snapshot, txs
+    // de $0, y un valor que el usuario podia editar a mano y desincronizar).
+    cur.derivedIncome=derivedIncomeFor(sorted[sorted.length-2],cur);
   }
   save(); renderEquityChart();
 }
+
+// Income BRUTO del periodo (prevSnap, snap]. La variacion del patrimonio es NETA
+// (ya trae los gastos descontados), asi que usarla como Income dejaba el grafico
+// descuadrado: los gastos se restaban dos veces (una dentro del income, otra en la
+// barra Outflows). Sumandole el gasto del periodo se reconstruye el bruto:
+//   patrimonio: Δ = income - gastos  →  income = Δ + gastos
+// Se resta el income ya registrado a mano en el periodo: esa plata ya hizo subir
+// el patrimonio, derivarla otra vez la contaria dos veces.
+//   income derivado = Δ + gastos - income ya registrado
+// Es lo que alimenta monthIncome() → grafico mensual, Budget y KPI Net Profit.
+function derivedIncomeFor(prevSnap,snap){
+  var f=investmentFlow(prevSnap,snap);
+  var profit=Math.round(((snap.total-prevSnap.total)+f.invOut-f.invIn)*100)/100;
+  return Math.round((profit+periodNetSpend(prevSnap,snap)-periodLoggedIncome(prevSnap,snap))*100)/100;
+}
+
+// Snapshot de cierre de mes: el ULTIMO DIA del mes, de noche. Corre en el boot,
+// como applyRecurring — la app es un cliente, no hay nadie ejecutando esto a las
+// 23:59 del 31: si esa noche no la abris, ese mes no se cierra solo.
+//
+// A esa hora el dia ya esta hecho, asi que el auto-sum de wallets no es una
+// estimacion sino el saldo con el que termina el mes. Aun asi queda marcado
+// auto:true y la alerta pide verificarlo: las wallets manuales no se rastrean
+// solas. Editarlo desde History recalcula el income derivado (ver editSnapshot).
+// La hora y el dia entran por parametro (default: los reales) para que el e2e
+// pueda ejercitar la creacion sin esperar al ultimo dia del mes.
+function autoMonthSnapshot(hour,minHour,todayISO){
+  var date=autoSnapshotDueCore(S.snapshots,todayISO||localToday(),hour==null?new Date().getHours():hour,minHour);
+  if(!date) return;
+  // id = 23:59:59 de ESE dia, no Date.now(). Los periodos se arman comparando ids
+  // (txInPeriodCore): con el id del momento de creacion, un snapshot fechado el 31
+  // se tragaba dentro de su periodo las transacciones del mes siguiente.
+  var snap={id:Date.parse(date+'T23:59:59'),date:date,total:getTotalBalance(),holdingsValue:holdingsTotalUsd(),auto:true};
+  var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var prev=sorted[sorted.length-1];
+  // Sin snapshot previo no hay periodo: este es la linea base y no deriva income.
+  // Piso 0: un mes de puro gasto deriva exactamente 0 (Δ=-gasto → income=0); que
+  // de NEGATIVO significa que el patrimonio cayo mas que lo anotado — plata que se
+  // fue sin registrar, o un total mal estimado. Eso no es "income negativo": es un
+  // faltante, y el cierre de mes ya lo muestra en su linea "Unexplained".
+  if(prev) snap.derivedIncome=Math.max(0,derivedIncomeFor(prev,snap));
+  S.snapshots.push(snap);
+  S.snapshotsUpdatedAt=stamp();
+  save();
+}
+window.autoMonthSnapshot=autoMonthSnapshot;
+window.dismissAutoSnapshot=function(id){
+  var s=(S.snapshots||[]).find(function(x){ return x.id===id; });
+  if(!s||!s.auto) return;
+  s.auto=false; S.snapshotsUpdatedAt=stamp(); save(); renderAlerts(); renderSummary();
+};
 
 function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
 window.toggleHistPopup=toggleHistPopup;
@@ -2825,7 +2874,32 @@ async function deleteSnapshot(id){
   }
   save(); renderEquityChart();
 }
-async function editSnapshot(id){ var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return; var val=parseFloat(r.value); if(isNaN(val)||val<0) return; snap.total=val; S.snapshotsUpdatedAt=stamp(); save(); if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); } }
+async function editSnapshot(id){
+  var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return;
+  var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return;
+  var val=parseFloat(r.value); if(isNaN(val)||val<0) return;
+  snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; // re-fetch: un sync durante el await pudo reemplazar el array
+  snap.total=val;
+  snap.auto=false;   // revisado a mano: deja de pedir revision
+  recalcDerivedIncome(snap);
+  S.snapshotsUpdatedAt=stamp(); save();
+  if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); }
+}
+// El total de un snapshot es un extremo de DOS periodos: el que cierra y el que
+// abre. Cambiarlo sin recalcular dejaba el income derivado (y con el, el Income
+// del Budget y el Net Profit) con el valor del monto viejo — justo lo que rompia
+// el "si el monto esta mal lo edito despues". Solo toca los que YA tenian income
+// derivado: un snapshot donde se dijo que no al "Count income" sigue sin tenerlo.
+function recalcDerivedIncome(snap){
+  var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var i=sorted.findIndex(function(s){ return s.id===snap.id; });
+  if(i<0) return;
+  [i,i+1].forEach(function(k){
+    var s=sorted[k], p=sorted[k-1];
+    if(!s||!p||typeof s.derivedIncome!=='number') return;
+    s.derivedIncome=derivedIncomeFor(p,s);
+  });
+}
 window.editSnapshot=editSnapshot;
 
 function saveBudget(){
@@ -4496,6 +4570,7 @@ async function bootAfterAuth(firstLogin){
   // buy y fee NO se restauran: buy lo llena la tasa Intervencion (updateRateUI) y fee arranca vacio.
   restoreProfitCalc(); // de nuevo tras el pull: la nube puede traer valores mas nuevos
   applyRecurring();
+  autoMonthSnapshot();
   renderToolToggles(); renderToolGears(); calcProfit(); calcSpread(); calcBCVEmily();
   autoFetchExchangeWallets();
   scheduleRateRefresh(); // refresco adaptativo del rate (ver rateRefreshDelay; re-entrante, hace clearTimeout)

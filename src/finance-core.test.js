@@ -7,7 +7,7 @@ import {
   lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
   rollOnCore, migrateRolloverCore, histAllocPctCore, debtSinceCore, daysBetweenISO,
-  noteMemoryCore,
+  noteMemoryCore, monthEndISO, autoSnapshotDueCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -658,5 +658,46 @@ describe('dupTxCore', () => {
   });
   it('no se compara consigo misma al editar', () => {
     expect(dupTxCore(T, { id: 1, desc: 'Netflix', amountUSD: 5.99, date: '2026-09-09' }, 3)).toBe(null);
+  });
+});
+
+describe('snapshot automatico de cierre de mes', () => {
+  const snap = (date) => ({ id: Date.parse(date), date, total: 1000 });
+
+  it('monthEndISO da el ultimo dia, tambien en febrero y en bisiesto', () => {
+    expect(monthEndISO('2026-09')).toBe('2026-09-30');
+    expect(monthEndISO('2026-01')).toBe('2026-01-31');
+    expect(monthEndISO('2026-02')).toBe('2026-02-28');
+    expect(monthEndISO('2028-02')).toBe('2028-02-29');
+  });
+
+  it('toca el ultimo dia del mes, de noche', () => {
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-08-31', 21)).toBe('2026-08-31');
+    expect(autoSnapshotDueCore([], '2026-08-31', 23)).toBe('2026-08-31');
+  });
+
+  // De dia el mes todavia no termino: faltarian los gastos de la tarde.
+  it('no toca antes de la hora', () => {
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-08-31', 14)).toBe(null);
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-08-31', 14, 12)).toBe('2026-08-31');
+  });
+
+  it('no toca ningun otro dia del mes', () => {
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-08-30', 23)).toBe(null);
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-09-01', 23)).toBe(null);
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-09-05', 23)).toBe(null);
+  });
+
+  // Que el mes ya tenga snapshots no importa: uno del 12 no cierra agosto.
+  it('no le molesta que el mes ya tenga otros', () => {
+    expect(autoSnapshotDueCore([snap('2026-08-05'), snap('2026-08-20')], '2026-08-31', 22)).toBe('2026-08-31');
+  });
+
+  it('pero no duplica el del ultimo dia', () => {
+    expect(autoSnapshotDueCore([snap('2026-08-31')], '2026-08-31', 22)).toBe(null);
+  });
+
+  it('cruza el fin de anio', () => {
+    expect(autoSnapshotDueCore([snap('2025-12-02')], '2025-12-31', 22)).toBe('2025-12-31');
   });
 });
