@@ -264,7 +264,45 @@ function pruneTombstones(){
 // pagina (asi es como muere una PWA en movil). El push a la nube lee S en
 // memoria, no localStorage — el sync no depende de esto.
 var _slHandle=null,_slIdle=false,_slDisabled=false;
-function _saveLocalNow(){ pruneTombstones(); try{ localStorage.setItem('ft13',JSON.stringify(S)); }catch(e){} }
+// El guardado local va envuelto en un catch para no romper la app — eso esta
+// bien — pero asi un almacenamiento lleno fallaba en silencio absoluto: la app
+// sigue impecable porque trabaja desde memoria, y recien al recargar aparece el
+// estado del ultimo guardado bueno, con todo lo que no alcanzo a subir perdido.
+// Ahora se avisa, y se ofrece la unica salida real: bajar el respaldo.
+var _localSaveFailed=false;
+// QuotaExceededError segun el navegador: Firefox usa otro nombre y los viejos
+// solo traen el code.
+function isQuotaError(e){
+  return !!e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014);
+}
+function _saveLocalNow(){
+  pruneTombstones();
+  try{
+    localStorage.setItem('ft13',JSON.stringify(S));
+    if(_localSaveFailed){ _localSaveFailed=false; showStorageBanner(false); }
+  }catch(e){
+    _localSaveFailed=true; showStorageBanner(true,isQuotaError(e));
+    console.warn('local save failed:',(e&&e.name)||e);
+  }
+}
+// Aviso persistente: no se va solo, porque el problema tampoco. Sube los otros
+// dos banners (via la clase en body) para que no se pisen.
+function showStorageBanner(show,quota){
+  var b=document.getElementById('store-banner');
+  if(!b&&show){
+    b=document.createElement('div'); b.id='store-banner'; b.className='sync-banner';
+    b.innerHTML='<span></span><button onclick="window.exportAllJSON()">Export backup</button>';
+    document.body.appendChild(b);
+  }
+  if(b&&show){
+    b.querySelector('span').textContent=(quota
+      ?'\u26A0 This device\u2019s storage is full, so nothing new is being saved here.'
+      :'\u26A0 Could not save on this device.')
+      +' Your changes live in memory and in the cloud; reloading now loses whatever has not synced yet.';
+  }
+  if(b) b.classList.toggle('show', !!show);
+  document.body.classList.toggle('has-store-banner', !!show);
+}
 function saveLocal(){
   if(_slDisabled||_slHandle!=null) return;
   var run=function(){ _slHandle=null; _saveLocalNow(); };

@@ -1999,6 +1999,65 @@ await waitFor(() => (cloudDoc.transactions || []).some((t) => t.desc === 'E2E at
 check('al volver la nube, lo pendiente sube', (cloudDoc.transactions || []).some((t) => t.desc === 'E2E atasco 2'), JSON.stringify((cloudDoc.transactions || []).map((t) => t.desc)));
 check('y el aviso se va', (await ev("(function(){var b=document.getElementById('sync-banner');return !b||!b.classList.contains('show');})()")) === true);
 
+// ── escenario 36: el almacenamiento lleno ya no falla en silencio (F8) ──────
+// El bug: el guardado local va en un try/catch vacio. Con el almacenamiento
+// lleno la app sigue impecable (trabaja desde memoria) y recien al recargar
+// aparece el estado del ultimo guardado bueno — sin ninguna senal previa.
+console.log('E2E almacenamiento lleno — deja de fallar en silencio');
+cloudDoc = { transactions: [], deletedTxIds: [], snapshots: [], manualWallets: [], recurring: [] };
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+// Romper SOLO la escritura del estado (el resto de las claves siguen andando).
+await ev(`(function(){
+  var real=localStorage.setItem.bind(localStorage);
+  window.__unbreakLS=function(){ localStorage.setItem=real; };
+  window.__breakLS=function(tipo){ localStorage.setItem=function(k,v){
+    if(k!=='ft13') return real(k,v);
+    var e=new Error('full');
+    if(tipo==='quota'){ e.name='QuotaExceededError'; e.code=22; } else { e.name='SecurityError'; }
+    throw e;
+  };};
+  window.__breakLS('quota'); return 1;})()`);
+await ev('openTxForm()'); await sleep(250);
+await ev("document.getElementById('tx-desc').value='E2E sin disco';document.getElementById('tx-amount').value='11';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()");
+await waitFor(async () => (await ev("(function(){var b=document.getElementById('store-banner');return b&&b.classList.contains('show');})()")) === true,
+  6000, 150, 'el aviso de almacenamiento lleno').catch((e) => console.warn(`  ! ${e.message}`));
+const aviso36 = await ev("(function(){var b=document.getElementById('store-banner');return b?b.querySelector('span').textContent:null;})()");
+check('avisa que el almacenamiento del dispositivo esta lleno', /storage is full/.test(aviso36 || ''), String(aviso36));
+check('y que al recargar se pierde lo que no subio', /reloading now loses whatever has not synced/.test(aviso36 || ''), String(aviso36));
+check('ofrece bajar el respaldo, que es la salida real',
+  (await ev("(function(){var b=document.getElementById('store-banner');var t=b&&b.querySelector('button');return t?t.textContent+'|'+t.getAttribute('onclick'):null;})()")) === 'Export backup|window.exportAllJSON()');
+// Los otros banners se corren para no quedar uno encima del otro.
+check('sube los otros avisos para que no se pisen', (await ev("document.body.classList.contains('has-store-banner')")) === true);
+
+// La app sigue andando: la tx esta en memoria y viaja a la nube igual.
+check('la transaccion sigue en la app (trabaja desde memoria)', (await ev("document.body.textContent.indexOf('E2E sin disco')>=0")) === true);
+await waitFor(() => (cloudDoc.transactions || []).some((t) => t.desc === 'E2E sin disco'), 12000, 200, 'el push de la tx sin disco local')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('y llega a la nube igual (por eso el aviso no dice que se perdio)',
+  (cloudDoc.transactions || []).some((t) => t.desc === 'E2E sin disco'), JSON.stringify((cloudDoc.transactions || []).map((t) => t.desc)));
+
+// Si el fallo no es por espacio (modo privado, permisos), el texto lo dice.
+await ev("__breakLS('otro')");
+await ev("document.getElementById('tf-search').value='x';document.getElementById('tf-search').dispatchEvent(new Event('input',{bubbles:true}))");
+await ev('openTxForm()'); await sleep(250);
+await ev("document.getElementById('tx-desc').value='E2E sin permiso';document.getElementById('tx-amount').value='3';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()");
+await sleep(1400);
+const aviso36b = await ev("(function(){var b=document.getElementById('store-banner');return b?b.querySelector('span').textContent:null;})()");
+check('un fallo que no es por espacio no lo llama "lleno"',
+  /Could not save on this device/.test(aviso36b || '') && !/storage is full/.test(aviso36b || ''), String(aviso36b));
+
+// Y cuando vuelve a poder escribir, el aviso se va solo.
+await ev('__unbreakLS()');
+await ev('openTxForm()'); await sleep(250);
+await ev("document.getElementById('tx-desc').value='E2E con disco';document.getElementById('tx-amount').value='2';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()");
+await waitFor(async () => (await ev("(function(){var b=document.getElementById('store-banner');return !b||!b.classList.contains('show');})()")) === true,
+  6000, 150, 'el aviso desapareciendo al volver a poder guardar').catch((e) => console.warn(`  ! ${e.message}`));
+check('al poder guardar de nuevo, el aviso se va',
+  (await ev("(function(){var b=document.getElementById('store-banner');return !b||!b.classList.contains('show');})()")) === true);
+check('y el estado local vuelve a guardarse',
+  (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.desc==='E2E con disco';})")) === true);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
