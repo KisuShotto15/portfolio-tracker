@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -281,5 +281,67 @@ describe('backfillRecurringTxWallets', () => {
   it('aguanta entradas nulas y listas vacias', () => {
     expect(backfillRecurringTxWallets(null, null)).toEqual([]);
     expect(backfillRecurringTxWallets(rules, [null, undefined])).toEqual([]);
+  });
+});
+
+// Renombrar una wallet le cambia el nombre a la wallet, pero las txs la referencian
+// por ese nombre: sin reetiquetarlas, el saldo del tracker cae a su base y el
+// patrimonio cambia solo. Estos tests fijan que el renombre arrastre las referencias.
+describe('renameWalletRefsCore', () => {
+  it('reetiqueta las txs de la wallet vieja', () => {
+    const txs = [
+      { id: 1, wallet: 'Emily', amountUSD: 500 },
+      { id: 2, wallet: 'Emily', amountUSD: 120 },
+      { id: 3, wallet: 'Binance', amountUSD: 40 },
+    ];
+    const res = renameWalletRefsCore(txs, [], 'Emily', 'Emily M');
+    expect(res.txs.map((t) => t.id)).toEqual([1, 2]);
+    expect(txs.map((t) => t.wallet)).toEqual(['Emily M', 'Emily M', 'Binance']);
+  });
+
+  it('reetiqueta tambien las reglas recurrentes', () => {
+    const rules = [{ id: 1, wallet: 'Emily' }, { id: 2, wallet: 'Cash' }];
+    const res = renameWalletRefsCore([], rules, 'Emily', 'Emily M');
+    expect(res.rules).toBe(1);
+    expect(rules.map((r) => r.wallet)).toEqual(['Emily M', 'Cash']);
+  });
+
+  it('no toca nada si el nombre no cambia', () => {
+    const txs = [{ id: 1, wallet: 'Emily' }];
+    expect(renameWalletRefsCore(txs, [], 'Emily', 'Emily')).toEqual({ txs: [], rules: 0 });
+    expect(txs[0].wallet).toBe('Emily');
+  });
+
+  it('compara exacto: distinta mayuscula es otra wallet', () => {
+    const txs = [{ id: 1, wallet: 'emily' }];
+    expect(renameWalletRefsCore(txs, [], 'Emily', 'Emily M').txs).toEqual([]);
+    expect(txs[0].wallet).toBe('emily');
+  });
+
+  it('ignora nombres vacios en cualquiera de los dos lados', () => {
+    const txs = [{ id: 1, wallet: '' }, { id: 2, wallet: 'Emily' }];
+    expect(renameWalletRefsCore(txs, [], '', 'Emily M')).toEqual({ txs: [], rules: 0 });
+    expect(renameWalletRefsCore(txs, [], 'Emily', '')).toEqual({ txs: [], rules: 0 });
+    expect(txs[1].wallet).toBe('Emily');
+  });
+
+  it('aguanta listas nulas y entradas nulas', () => {
+    expect(renameWalletRefsCore(null, null, 'A', 'B')).toEqual({ txs: [], rules: 0 });
+    expect(renameWalletRefsCore([null, undefined], [null], 'A', 'B')).toEqual({ txs: [], rules: 0 });
+  });
+
+  it('el saldo del tracker sobrevive el renombre', () => {
+    // Es el bug entero en una linea: sin reetiquetar, este saldo se va a cero.
+    const txs = [
+      { id: 1, wallet: 'Emily', type: 'Credit', amountUSD: 500 },
+      { id: 2, wallet: 'Emily', type: 'Debit', amountUSD: 120 },
+    ];
+    const saldo = (nombre) => txs
+      .filter((t) => t.wallet === nombre)
+      .reduce((s, t) => s + (t.type === 'Credit' ? 1 : -1) * t.amountUSD, 0);
+    expect(saldo('Emily')).toBe(380);
+    renameWalletRefsCore(txs, [], 'Emily', 'Emily M');
+    expect(saldo('Emily')).toBe(0);
+    expect(saldo('Emily M')).toBe(380);
   });
 });

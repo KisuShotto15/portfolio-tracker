@@ -1093,7 +1093,15 @@ console.log('E2E snapshot, default y duplicados');
 cloudDoc = {};
 const dU = (n) => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - n);
   return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
-const hoy21 = dU(0), viejo21 = dU(40), medio21 = dU(15), ayer21 = dU(1);
+const hoy21 = dU(0), medio21 = dU(15), ayer21 = dU(1);
+// viejo21 tiene que caer en un mes ANTERIOR al de medio21: el chequeo de mas abajo
+// prueba que un mes pasado muestre la fecha de SU snapshot y no la del mas reciente,
+// y eso solo se puede probar si cada snapshot vive en un mes distinto. Con "hace 40
+// dias" los dos caian en el mismo mes segun el dia en que corriera la suite (el 10
+// de septiembre: 1-ago y 26-ago) y el chequeo fallaba sin que nada estuviera roto.
+const viejo21 = (() => { const p = medio21.split('-'); const x = new Date(+p[0], +p[1] - 1, 1);
+  x.setMonth(x.getMonth() - 1);
+  return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-10'; })();
 await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   JSON.parse(localStorage.getItem('ft13')||'{}'),
   { deletedTxIds: [], recurring: [], recurringLog: [],
@@ -1442,6 +1450,77 @@ check('editarlo corrige el total', tras27.total === 1200, JSON.stringify(tras27)
 // (1200-1000) + 100 = 300, no los 600 del monto viejo.
 check('y recalcula el income derivado', tras27.der === 300, JSON.stringify(tras27));
 check('y deja de pedir verificacion', tras27.auto === false, JSON.stringify(tras27));
+
+// ── 28 · Renombrar una wallet se lleva sus transacciones ───────────────────
+// Sin esto, renombrar deja las txs apuntando al nombre viejo: el saldo del
+// tracker cae a su base y el patrimonio cambia solo, sin ningun aviso.
+console.log('E2E renombrar wallet arrastra sus transacciones');
+cloudDoc = {};
+const mesAct28 = (() => { const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+const hoy28 = mesAct28 + '-0' + '1';
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
+  JSON.parse(localStorage.getItem('ft13')||'{}'),
+  { deletedTxIds: [], recurringLog: [], snapshots: [], manualHoldings: [], onchainWallets: [],
+    manualWallets: [
+      { id: 81, name: 'Emily', trackerOnly: true, balance: 0, debt: null },
+      { id: 82, name: 'Zinli', trackerOnly: true, balance: 0, debt: null } ],
+    recurring: [ { id: 91, label: 'Netflix', dayOfMonth: 1, wallet: 'Emily', type: 'Debit',
+                   category: 'Discretionary', currency: 'USD', amount: 5, lastRun: '${mesAct28}' } ],
+    transactions: [
+      { id: 4001, createdAt: 4001, seq: 0, date: '${hoy28}', desc: 'remesa', wallet: 'Emily', type: 'Credit', category: '', amountUSD: 500, originalCurrency: 'USD', imported: false, updatedAt: 4001 },
+      { id: 4002, createdAt: 4002, seq: 1, date: '${hoy28}', desc: 'retiro', wallet: 'Emily', type: 'Debit', category: '', amountUSD: 120, originalCurrency: 'USD', imported: false, updatedAt: 4002 } ],
+    snapshotsUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(),
+    recurringUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('wallets',null);renderWallets()"); await sleep(400);
+
+const saldoDe = async (nombre) => await ev(`(function(){var r=[...document.querySelectorAll('#w-grid .wm-row')].find(function(x){var n=x.querySelector('.wm-name');return n&&n.textContent===${JSON.stringify(nombre)};});return r?r.querySelector('.wm-bal').textContent:null;})()`);
+check('antes de renombrar, Emily suma $380.00', (await saldoDe('Emily')) === '$380.00', String(await saldoDe('Emily')));
+
+// Renombrar de verdad, por el mismo camino que usa la UI.
+await ev('renameManualWallet(81)');
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de renombrar');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];b.querySelector('#_ami').value='Emily M';b.querySelector('#_amo').click();})()");
+await sleep(500);
+await ev("renderWallets()"); await sleep(200);
+
+check('tras renombrar, el saldo sigue en Emily M', (await saldoDe('Emily M')) === '$380.00', String(await saldoDe('Emily M')));
+check('y la wallet vieja ya no existe', (await saldoDe('Emily')) === null);
+
+const refs28 = JSON.parse(await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify({txs:(S.transactions||[]).map(function(t){return t.wallet;}),rule:(S.recurring||[])[0].wallet,ut:(S.transactions||[]).map(function(t){return t.updatedAt;})});})()"));
+check('las txs quedaron apuntando al nombre nuevo', refs28.txs.every((w) => w === 'Emily M'), JSON.stringify(refs28.txs));
+check('la regla recurrente tambien', refs28.rule === 'Emily M', refs28.rule);
+// Sin updatedAt fresco, la copia con el nombre viejo de otro dispositivo revierte
+// el renombre en el proximo pull.
+check('y las txs llevan updatedAt nuevo para ganar el merge', refs28.ut.every((u) => u > 4002), JSON.stringify(refs28.ut));
+
+// El nombre viejo ya no puede reaparecer desde la nube.
+// Esperar a que la nube tenga el nombre NUEVO, no solo a que tenga txs: el push
+// del seed ya las habia subido con el nombre viejo y la espera pasaba de largo.
+await waitFor(async () => (cloudDoc.transactions || []).length > 0
+  && (cloudDoc.transactions || []).every((t) => t.wallet === 'Emily M'), 8000, 150, 'el push tras renombrar');
+check('la nube recibe el renombre', (cloudDoc.transactions || []).every((t) => t.wallet === 'Emily M'), JSON.stringify((cloudDoc.transactions || []).map((t) => t.wallet)));
+
+// Dos wallets con el mismo nombre comparten txs y sus saldos se fusionan sin
+// vuelta atras: renombrar encima de una existente tiene que frenar.
+await ev('renameManualWallet(81)');
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de renombrar (colision)');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];b.querySelector('#_ami').value='Zinli';b.querySelector('#_amo').click();})()");
+await sleep(400);
+const aviso28 = await ev("[...document.querySelectorAll('.app-modal-overlay')].map(e=>e.textContent).join(' ~ ')");
+check('renombrar sobre una wallet existente se rechaza', /Name already in use/.test(aviso28), aviso28);
+await ev("document.querySelectorAll('.app-modal-overlay').forEach(function(e){e.remove()})"); await sleep(150);
+const nombre28 = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).map(function(w){return w.name;}).join(',')");
+check('y la wallet conserva su nombre', nombre28 === 'Emily M,Zinli', nombre28);
+
+// Re-guardar una wallet que ya existe con otra mayuscula NO la renombra: el match
+// del formulario ignora mayusculas, pero las txs matchean exacto.
+await ev("openWalletForm('tracker')"); await sleep(250);
+await ev("document.getElementById('wm-name').value='emily m';document.getElementById('wm-type').value='tracker';saveManualWallet()");
+await sleep(400);
+await ev("renderWallets()"); await sleep(200);
+check('re-guardar con otra mayuscula no renombra ni parte el saldo', (await saldoDe('Emily M')) === '$380.00', String(await saldoDe('Emily M')));
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -1419,7 +1419,38 @@ function updateTx(){
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
 async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
-async function renameManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'}); if(!r||!r.value||!r.value.trim()||r.value.trim()===w.name) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.name=r.value.trim(); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
+// Reetiqueta las txs y las reglas que apuntaban al nombre viejo. Las txs tocadas
+// llevan updatedAt nuevo para GANAR el merge: sin eso, la copia con el nombre
+// viejo que tiene otro dispositivo revierte el renombre en el proximo pull.
+// A proposito NO pasa por snapshot()/undo: doUndo solo restaura S.transactions,
+// asi que deshacer devolveria los nombres viejos a las txs dejando la wallet con
+// el nuevo — exactamente el estado huerfano que este arreglo viene a evitar.
+function renameWalletRefs(oldName,newName){
+  var res=renameWalletRefsCore(S.transactions,S.recurring,oldName,newName);
+  var ut=stamp();
+  if(res.txs.length){ res.txs.forEach(function(t){ t.updatedAt=ut; }); S.transactionsUpdatedAt=ut; }
+  if(res.rules) S.recurringUpdatedAt=ut;
+  return res;
+}
+async function renameManualWallet(id){
+  var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return;
+  var r=await appPrompt('Rename wallet',escHtml(w.name),w.name,{inputType:'text'});
+  if(!r||!r.value||!r.value.trim()) return;
+  var next=r.value.trim();
+  w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
+  var old=w.name;
+  if(next===old) return;
+  // Dos wallets con el mismo nombre comparten sus txs: los saldos se fusionan y
+  // no hay forma de volver a separarlos. Frenar aca sale mucho mas barato.
+  if(S.manualWallets.some(function(x){ return x!==w&&x.name.toLowerCase()===next.toLowerCase(); })){
+    await appConfirm('Name already in use','Another wallet is already called '+escHtml(next)+'. Pick a different name.','OK');
+    return;
+  }
+  w.name=next;
+  renameWalletRefs(old,next);
+  S.manualWalletsUpdatedAt=stamp(); save();
+  renderWallets(); populateWalletSelects(); renderTx(); renderSummary();
+}
 window.renameManualWallet=renameManualWallet;
 async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
@@ -3418,6 +3449,11 @@ function saveManualWallet(){
     // saldar; no toca ningun numero.
     cycle:!!(cyEl&&cyEl.checked&&(type==='lent'||type==='debt')),
     currency:(type==='normal'&&curSel&&curSel.value==='VES')?'VES':'USD'};
+  // El match de arriba es insensible a mayusculas, pero las txs apuntan a la
+  // wallet por nombre EXACTO: re-guardar "emily" sobre "Emily" la renombraba y
+  // dejaba sus txs huerfanas (el saldo del tracker caia a su base). Guardar de
+  // nuevo una wallet que ya existe nunca la renombra; para eso esta renameManualWallet.
+  if(idx>=0) obj.name=S.manualWallets[idx].name;
   // Conversion Manual → Tracker (re-agregar con el mismo nombre): conservar el
   // balance mostrado. El tracker suma sus txs, asi que la base se rebasa
   // restando las txs existentes del wallet; sin esto arrancaria desde 0.
@@ -3427,13 +3463,11 @@ function saveManualWallet(){
   // 0 le borraria el saldo.
   if(idx>=0&&type!=='normal'&&S.manualWallets[idx].trackerOnly===true){
     obj.balance=S.manualWallets[idx].balance||0;
-    obj.name=S.manualWallets[idx].name;
   }
   if(idx>=0&&type!=='normal'&&S.manualWallets[idx].trackerOnly!==true){
     var _old=S.manualWallets[idx];
     var txSum=S.transactions.reduce(function(s,t){ return (t.imported||t.wallet!==_old.name)?s:s+(t.type==='Credit'?1:-1)*t.amountUSD; },0);
     obj.balance=parseFloat(((_old.balance||0)-txSum).toFixed(2));
-    obj.name=_old.name; // conservar el casing original: las txs matchean por nombre exacto
   }
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   S.manualWalletsUpdatedAt=stamp();

@@ -149,6 +149,26 @@ export function dueMonths(rule, now){
 // Un wallet vacio no es elegible en el select, asi que nunca es una eleccion
 // deliberada del usuario: esto no pisa ediciones manuales. Devuelve las txs
 // tocadas para que el caller les ponga updatedAt (y el merge las propague).
+// Una tx (y una regla recurrente) apunta a su wallet por NOMBRE, no por id: el
+// saldo de un tracker sale de sumar las txs cuyo `wallet` coincide exacto. Por eso
+// renombrar la wallet sin reetiquetarlas las deja huerfanas — el saldo cae a su
+// base y el patrimonio cambia solo, sin ningun aviso.
+// Devuelve las txs tocadas para que el caller les ponga updatedAt (y el merge
+// propague el renombre al resto de dispositivos, en vez de que una copia vieja lo
+// revierta). Compara exacto a proposito: 'emily' y 'Emily' son wallets distintas
+// para el resto del codigo, asi que aca tambien.
+export function renameWalletRefsCore(transactions, recurring, oldName, newName){
+  var out = { txs: [], rules: 0 };
+  if(!oldName || !newName || oldName === newName) return out;
+  (transactions || []).forEach(function(t){
+    if(t && t.wallet === oldName){ t.wallet = newName; out.txs.push(t); }
+  });
+  (recurring || []).forEach(function(r){
+    if(r && r.wallet === oldName){ r.wallet = newName; out.rules++; }
+  });
+  return out;
+}
+
 export function backfillRecurringTxWallets(recurring, transactions){
   var byRule = {};
   (recurring || []).forEach(function(r){ if(r && r.wallet) byRule[r.id] = r.wallet; });
