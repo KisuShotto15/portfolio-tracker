@@ -1586,6 +1586,72 @@ await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.
 await sleep(300);
 check('cancelar deja la wallet en su lugar', (await saldoDe('Emily M')) === '$380.00', String(await saldoDe('Emily M')));
 
+// ── escenario 29: snapshots creados en dos dispositivos (F2) ────────────────
+// El bug: la lista de snapshots viajaba entera con un solo timestamp. El que
+// tenia la marca mas vieja perdia el LWW y su snapshot desaparecia en silencio,
+// llevandose un punto de la curva y el income derivado de todo un periodo.
+console.log('E2E snapshots — merge por-item entre dispositivos');
+const finMes = (atras) => {
+  const d = new Date(), x = new Date(Date.UTC(d.getFullYear(), d.getMonth() - atras + 1, 0));
+  return x.toISOString().slice(0, 10);
+};
+const snapA = finMes(2), snapB = finMes(1), snapC = finMes(3);
+// La compu ya subio el de ${snapA} (marca alta). El telefono, sin conexion, tiene
+// ese mismo y ademas el de ${snapB} (marca baja).
+cloudDoc = { transactions: [], deletedTxIds: [], snapshots: [{ id: 5001, date: snapA, total: 900, updatedAt: 5001 }], snapshotsUpdatedAt: 9000 };
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  transactions: [], deletedTxIds: [], deletedSnapDates: [], recurring: [], recurringLog: [],
+  manualWallets: [], manualHoldings: [], onchainWallets: [],
+  snapshots: [ { id: 5001, date: '${snapA}', total: 900, updatedAt: 5001 },
+               { id: 5002, date: '${snapB}', total: 1200, updatedAt: 5002 } ],
+  snapshotsUpdatedAt: 5002, transactionsUpdatedAt: 5002 })))`);
+await boot();
+const snapsLocal = async () => JSON.parse(await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[])"));
+const fechasLocal = async () => (await snapsLocal()).map((s) => s.date);
+let f29 = await fechasLocal();
+check('el snapshot que el telefono anoto offline sobrevive al pull', f29.includes(snapB), JSON.stringify(f29));
+check('y el que ya estaba en la nube sigue ahi', f29.includes(snapA), JSON.stringify(f29));
+await waitFor(() => (cloudDoc.snapshots || []).some((s) => s.date === snapB), 10000, 150, 'el push del snapshot que solo tenia el telefono')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('la nube termina con los dos', (cloudDoc.snapshots || []).length === 2, JSON.stringify((cloudDoc.snapshots || []).map((s) => s.date)));
+
+// Un tercero creado en el otro dispositivo baja sin borrar los de este.
+cloudDoc.snapshots.push({ id: 5003, date: snapC, total: 700, updatedAt: 9100 });
+cloudDoc.snapshotsUpdatedAt = 9100;
+await ev('forcePull()'); await sleep(700);
+f29 = await fechasLocal();
+check('un snapshot nuevo del otro dispositivo baja sin pisar los locales',
+  [snapA, snapB, snapC].every((d) => f29.includes(d)), JSON.stringify(f29));
+
+// El MISMO dia anotado en los dos: ids distintos (Date.now de cada uno), una sola
+// fila. Mergeando por id quedarian dos con la misma fecha y un periodo de $0.
+cloudDoc.snapshots.push({ id: 7777, date: snapB, total: 1250, updatedAt: 9999 });
+cloudDoc.snapshotsUpdatedAt = 9999;
+await ev('forcePull()'); await sleep(700);
+const dupB = (await snapsLocal()).filter((s) => s.date === snapB);
+check('el mismo dia anotado en dos dispositivos queda como UNA fila', dupB.length === 1, JSON.stringify(dupB));
+check('y con el monto de la edicion mas nueva', dupB.length === 1 && dupB[0].total === 1250, JSON.stringify(dupB));
+
+// Borrar tiene que viajar: sin tombstone, el proximo pull lo resucita.
+const idB = (await snapsLocal()).find((s) => s.date === snapB).id;
+await ev(`deleteSnapshot(${idB})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar snapshot');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
+await sleep(500);
+check('el borrado deja tombstone con la fecha',
+  (await ev(`(JSON.parse(localStorage.getItem('ft13')||'{}').deletedSnapDates||[]).some(function(e){return e.id==='${snapB}';})`)) === true,
+  await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').deletedSnapDates||[])"));
+await waitFor(() => !(cloudDoc.snapshots || []).some((s) => s.date === snapB), 10000, 150, 'el push del borrado')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('y la nube lo borra tambien', !(cloudDoc.snapshots || []).some((s) => s.date === snapB), JSON.stringify((cloudDoc.snapshots || []).map((s) => s.date)));
+
+// Un dispositivo desactualizado lo vuelve a pushear: el tombstone lo mata.
+cloudDoc = mergeDocs(cloudDoc, { snapshots: [{ id: 7777, date: snapB, total: 1250, updatedAt: 9999 }], snapshotsUpdatedAt: 9999 });
+check('un push viejo no lo resucita en el server', !(cloudDoc.snapshots || []).some((s) => s.date === snapB), JSON.stringify((cloudDoc.snapshots || []).map((s) => s.date)));
+await boot();
+f29 = await fechasLocal();
+check('y tras recargar sigue borrado', !f29.includes(snapB) && f29.includes(snapA), JSON.stringify(f29));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

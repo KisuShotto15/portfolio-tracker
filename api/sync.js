@@ -54,6 +54,38 @@ export function mergeTxArrays(incomingTxs, cloudTxs, tombs) {
   return merged;
 }
 
+// ── Snapshots: merge por-item por FECHA (espejo de src/sync-core.js) ────────
+// La lista entera ya no se reemplaza por un solo LWW de campo: dos dispositivos
+// que anotan un snapshot cada uno offline conservan los dos. La clave es la fecha
+// (la app garantiza uno por dia; el id es Date.now y difiere entre dispositivos).
+export function snapKey(s) { return s && s.date; }
+export function backfillSnapUpdatedAt(snaps) {
+  (snaps || []).forEach(function (s) { if (s && s.updatedAt == null) s.updatedAt = s.id || 0; });
+  return snaps;
+}
+export function mergeSnapArrays(incomingSnaps, cloudSnaps, tombs) {
+  var tm = {};
+  (tombs || []).forEach(function (e) { tm[tombId(e)] = e; });
+  var order = [], by = {};
+  function put(s, isCloud) {
+    var k = snapKey(s);
+    if (!k) return;
+    var cur = by[k];
+    if (cur === undefined) { by[k] = s; order.push(k); return; }
+    var x = s.updatedAt || 0, y = cur.updatedAt || 0;
+    if (x > y || (x === y && isCloud)) by[k] = s;
+  }
+  (incomingSnaps || []).forEach(function (s) { put(s, false); });
+  (cloudSnaps || []).forEach(function (s) { put(s, true); });
+  return order.map(function (k) { return by[k]; })
+    .filter(function (s) { var e = tm[snapKey(s)]; return !(e !== undefined && tombKills(e, s)); });
+}
+export function pruneRevokedSnapTombs(tombs, snaps) {
+  var live = {};
+  (snaps || []).forEach(function (s) { live[snapKey(s)] = 1; });
+  return (tombs || []).filter(function (e) { return !live[tombId(e)]; });
+}
+
 // Authoritative server-side merge: `incoming` (the client POST) overlays `cloud`.
 // Untimestamped fields take the incoming value (preserves prior whole-blob behavior).
 // Fields with a `<field>UpdatedAt` use last-writer-wins by timestamp so a stale
@@ -72,6 +104,16 @@ export function mergeDocs(cloud, incoming) {
   out.deletedTxIds = pruneRevokedTombstones(tombs, out.transactions);
   out.transactionsUpdatedAt = Math.max(incoming.transactionsUpdatedAt || 0, cloud.transactionsUpdatedAt || 0) || null;
 
+  // snapshots: merge por-item por fecha + tombstones revocables (mismo TTL)
+  var snapTombs = mergeTombstones(incoming.deletedSnapDates, cloud.deletedSnapDates)
+    .filter(function (e) { var t = (e && typeof e === 'object') ? e.ts : e; return (parseInt(t, 10) || 0) > tombCut; });
+  out.snapshots = mergeSnapArrays(
+    backfillSnapUpdatedAt(incoming.snapshots || []),
+    backfillSnapUpdatedAt(cloud.snapshots || []),
+    snapTombs);
+  out.deletedSnapDates = pruneRevokedSnapTombs(snapTombs, out.snapshots);
+  out.snapshotsUpdatedAt = Math.max(incoming.snapshotsUpdatedAt || 0, cloud.snapshotsUpdatedAt || 0) || null;
+
   // Generic last-writer-wins by convention: ANY field with a sibling
   // "<field>UpdatedAt" timestamp participates automatically. Keep whichever side
   // has the higher timestamp (cloud wins ties). No hardcoded field list to drift
@@ -82,7 +124,7 @@ export function mergeDocs(cloud, incoming) {
     var m = /^(.+)UpdatedAt$/.exec(k);
     if (!m) return;
     var key = m[1];
-    if (key === 'transactions' || seen[key]) return;
+    if (key === 'transactions' || key === 'snapshots' || seen[key]) return;
     seen[key] = 1;
     var ts = key + 'UpdatedAt';
     var cloudTs = cloud[ts] || 0, incTs = incoming[ts] || 0;

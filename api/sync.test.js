@@ -100,3 +100,52 @@ describe('mergeDocs tombstones revocables (undo de borrado)', () => {
     expect(mergeDocs(cloud, inc).transactions).toEqual([]);
   });
 });
+
+describe('mergeDocs: snapshots se mergean por item (F2)', () => {
+  it('un push con marca vieja YA NO borra el snapshot que el otro device no tenia', () => {
+    const cloud = { snapshots: [{ id: 1, date: '2026-07-31', total: 1000 }], snapshotsUpdatedAt: 200 };
+    const stale = {
+      snapshots: [{ id: 1, date: '2026-07-31', total: 1000 }, { id: 2, date: '2026-08-31', total: 1300 }],
+      snapshotsUpdatedAt: 150,
+    };
+    const out = mergeDocs(cloud, stale);
+    expect(out.snapshots.map((s) => s.date)).toEqual(['2026-07-31', '2026-08-31']);
+    expect(out.snapshotsUpdatedAt).toBe(200);
+  });
+
+  it('el snapshot automatico de fin de mes creado en los dos devices no se duplica', () => {
+    const fin = { id: 5, date: '2026-08-31', total: 1500, auto: true, updatedAt: 90 };
+    const out = mergeDocs({ snapshots: [fin] }, { snapshots: [{ ...fin, id: 6, total: 1502, updatedAt: 95 }] });
+    expect(out.snapshots).toHaveLength(1);
+    expect(out.snapshots[0].total).toBe(1502);
+  });
+
+  it('borrar un snapshot viaja al server y no revive', () => {
+    // ts real: el tombstone se poda a los 90 dias, asi que uno con ts=150 se
+    // descartaria por viejisimo antes de matar nada.
+    const borrado = Date.now();
+    const cloud = { snapshots: [{ id: 1, date: '2026-08-31', updatedAt: borrado - 1000 }] };
+    const inc = { snapshots: [], deletedSnapDates: [{ id: '2026-08-31', ts: borrado }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.snapshots).toEqual([]);
+    expect(out.deletedSnapDates).toEqual([{ id: '2026-08-31', ts: borrado }]);
+  });
+
+  it('volver a anotar ese dia revoca el tombstone', () => {
+    const borrado = Date.now();
+    const cloud = { snapshots: [], deletedSnapDates: [{ id: '2026-08-31', ts: borrado }] };
+    const inc = { snapshots: [{ id: 7, date: '2026-08-31', total: 1400, updatedAt: borrado + 50 }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.snapshots).toHaveLength(1);
+    expect(out.deletedSnapDates).toEqual([]);
+  });
+
+  it('un tombstone de snapshot fuera del TTL de 90d se poda y no mata', () => {
+    const viejo = Date.now() - 100 * 24 * 60 * 60 * 1000;
+    const cloud = { snapshots: [{ id: 1, date: '2026-01-31', updatedAt: 10 }] };
+    const inc = { snapshots: [], deletedSnapDates: [{ id: '2026-01-31', ts: viejo }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.snapshots).toHaveLength(1);
+    expect(out.deletedSnapDates).toEqual([]);
+  });
+});

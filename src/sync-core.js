@@ -180,3 +180,54 @@ export function backfillRecurringTxWallets(recurring, transactions){
   });
   return fixed;
 }
+
+// ── Snapshots: merge por-item (mismo patron que transactions) ───────────────
+// Antes toda la lista se reemplazaba con un solo LWW de campo: si el telefono
+// anotaba un snapshot sin conexion y la compu otro, al sincronizar uno de los dos
+// DESAPARECIA en silencio. Un snapshot perdido no es solo una fila: se lleva un
+// punto de la curva de patrimonio y el income derivado de todo un periodo.
+//
+// La identidad de un snapshot es su FECHA, no su id. La app ya garantiza uno por
+// dia (recordSnapshot reemplaza el del dia; autoSnapshotDueCore no repite fecha),
+// y dos dispositivos que anotan el mismo dia generan ids distintos (Date.now) para
+// la misma cosa: mergeando por id quedarian dos snapshots del mismo dia, con un
+// periodo de cero dias entre ellos. Por fecha, se unen en uno solo.
+export function snapKey(s){ return s && s.date; }
+
+// updatedAt por item, que es lo que decide el LWW. Los snapshots viejos no lo
+// tienen: se congela en su id (el Date.now del alta, o las 23:59:59 del dia en los
+// automaticos). Es el mismo valor en todos los dispositivos, asi que el backfill
+// nunca le gana por accidente a una edicion real (que lleva stamp() >= Date.now()).
+export function backfillSnapUpdatedAt(snaps){
+  var n = 0;
+  (snaps || []).forEach(function(s){ if(s && s.updatedAt == null){ s.updatedAt = s.id || 0; n++; } });
+  return n;
+}
+
+// Une dos listas de snapshots por fecha: gana el updatedAt mas alto y, ante empate,
+// la nube (mismo criterio que mergeTxArrays). `tombs` son los tombstones ya unidos:
+// un snapshot recreado despues del borrado (updatedAt > ts) le gana y revive.
+export function mergeSnapArrays(localSnaps, cloudSnaps, tombs){
+  var tm = {};
+  (tombs || []).forEach(function(e){ tm[tombId(e)] = e; });
+  var order = [], by = {};
+  function put(s, isCloud){
+    var k = snapKey(s);
+    if(!k) return;
+    var cur = by[k];
+    if(cur === undefined){ by[k] = s; order.push(k); return; }
+    var a = s.updatedAt || 0, b = cur.updatedAt || 0;
+    if(a > b || (a === b && isCloud)) by[k] = s;
+  }
+  (localSnaps || []).forEach(function(s){ put(s, false); });
+  (cloudSnaps || []).forEach(function(s){ put(s, true); });
+  return order.map(function(k){ return by[k]; })
+    .filter(function(s){ var e = tm[snapKey(s)]; return !(e !== undefined && tombKills(e, s)); });
+}
+
+// Igual que pruneRevokedTombstones pero con la fecha como clave.
+export function pruneRevokedSnapTombs(tombs, snaps){
+  var live = {};
+  (snaps || []).forEach(function(s){ live[snapKey(s)] = 1; });
+  return (tombs || []).filter(function(e){ return !live[tombId(e)]; });
+}

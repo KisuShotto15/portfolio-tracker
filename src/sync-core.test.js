@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -343,5 +343,87 @@ describe('renameWalletRefsCore', () => {
     renameWalletRefsCore(txs, [], 'Emily', 'Emily M');
     expect(saldo('Emily')).toBe(0);
     expect(saldo('Emily M')).toBe(380);
+  });
+});
+
+describe('mergeSnapArrays (merge por-item de snapshots)', () => {
+  it('EL BUG F2: dos snapshots creados offline en distintos dispositivos sobreviven los dos', () => {
+    // Antes toda la lista viajaba con un solo timestamp: la del telefono (marca
+    // vieja) se descartaba entera y el snapshot del 31-ago desaparecia sin aviso.
+    const nube = [{ id: 1, date: '2026-07-31', total: 1000, updatedAt: 200 }];
+    const tel = [
+      { id: 1, date: '2026-07-31', total: 1000, updatedAt: 200 },
+      { id: 2, date: '2026-08-31', total: 1300, updatedAt: 150 },
+    ];
+    const out = mergeSnapArrays(tel, nube, []);
+    expect(out.map((s) => s.date)).toEqual(['2026-07-31', '2026-08-31']);
+  });
+
+  it('el mismo dia anotado en los dos dispositivos queda como UN solo snapshot', () => {
+    // Ids distintos (Date.now de cada uno) para la misma cosa: la clave es la fecha.
+    const a = [{ id: 111, date: '2026-09-30', total: 900, updatedAt: 10 }];
+    const b = [{ id: 222, date: '2026-09-30', total: 950, updatedAt: 20 }];
+    const out = mergeSnapArrays(a, b, []);
+    expect(out).toHaveLength(1);
+    expect(out[0].total).toBe(950);
+  });
+
+  it('editar el monto en un dispositivo le gana a la copia vieja del otro', () => {
+    const local = [{ id: 1, date: '2026-08-31', total: 1500, updatedAt: 300 }];
+    const nube = [{ id: 1, date: '2026-08-31', total: 1300, updatedAt: 100 }];
+    expect(mergeSnapArrays(local, nube, [])[0].total).toBe(1500);
+  });
+
+  it('empate de updatedAt: gana la nube (mismo criterio que las txs)', () => {
+    const local = [{ id: 1, date: '2026-08-31', total: 1500, updatedAt: 100 }];
+    const nube = [{ id: 1, date: '2026-08-31', total: 1300, updatedAt: 100 }];
+    expect(mergeSnapArrays(local, nube, [])[0].total).toBe(1300);
+  });
+
+  it('un borrado mata al snapshot que sigue vivo en la nube', () => {
+    const nube = [{ id: 1, date: '2026-08-31', total: 1300, updatedAt: 100 }];
+    const out = mergeSnapArrays([], nube, [{ id: '2026-08-31', ts: 150 }]);
+    expect(out).toEqual([]);
+  });
+
+  it('pero no mata al que se volvio a anotar despues del borrado', () => {
+    const local = [{ id: 9, date: '2026-08-31', total: 1400, updatedAt: 200 }];
+    const out = mergeSnapArrays(local, [], [{ id: '2026-08-31', ts: 150 }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].total).toBe(1400);
+  });
+
+  it('el tombstone revocado se descarta para que no mate en el proximo merge', () => {
+    const vivos = [{ id: 9, date: '2026-08-31', updatedAt: 200 }];
+    const tombs = [{ id: '2026-08-31', ts: 150 }, { id: '2026-07-31', ts: 150 }];
+    expect(pruneRevokedSnapTombs(tombs, vivos)).toEqual([{ id: '2026-07-31', ts: 150 }]);
+  });
+
+  it('aguanta listas nulas y entradas sin fecha', () => {
+    expect(mergeSnapArrays(null, null, null)).toEqual([]);
+    expect(mergeSnapArrays([{ id: 1 }, null], [], [])).toEqual([]);
+  });
+});
+
+describe('backfillSnapUpdatedAt', () => {
+  it('congela updatedAt en el id, igual en todos los dispositivos', () => {
+    const snaps = [{ id: 1700, date: '2026-07-31' }, { id: 1800, date: '2026-08-31', updatedAt: 5 }];
+    expect(backfillSnapUpdatedAt(snaps)).toBe(1);
+    expect(snaps[0].updatedAt).toBe(1700);
+    expect(snaps[1].updatedAt).toBe(5);   // no pisa el que ya tenia
+  });
+
+  it('un snapshot viejo backfilleado NUNCA le gana a una edicion real', () => {
+    // El backfill vale el id (Date.now del alta); cualquier stamp() posterior es mayor.
+    const viejo = [{ id: 1000, date: '2026-08-31', total: 100 }];
+    const editado = [{ id: 1000, date: '2026-08-31', total: 999, updatedAt: 5000 }];
+    backfillSnapUpdatedAt(viejo);
+    expect(mergeSnapArrays(viejo, editado, [])[0].total).toBe(999);
+    expect(mergeSnapArrays(editado, viejo, [])[0].total).toBe(999);
+  });
+
+  it('snapKey es la fecha', () => {
+    expect(snapKey({ id: 1, date: '2026-01-05' })).toBe('2026-01-05');
+    expect(snapKey(null)).toBeFalsy();
   });
 });

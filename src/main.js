@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -93,6 +93,9 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
+  // Tombstones de snapshots. La clave es la FECHA (ver snapKey en sync-core): es
+  // lo que identifica a un snapshot entre dispositivos, no su id.
+  deletedSnapDates:[],
   transactionsUpdatedAt:null,
   dashGoal:0, dashGoalUpdatedAt:null,
   categoryBudgets:{}, categoryBudgetsUpdatedAt:null, // legacy USD (migrado a pcts)
@@ -170,7 +173,8 @@ function stamp(){ _ts=nextStamp(_ts, Date.now()); return _ts; }
 // sync basta declararlo en los defaults de S con su sibling UpdatedAt.
 function tsFields(){ return Object.keys(S).filter(function(k){ return /UpdatedAt$/.test(k); }); }
 // [dataField, timestampField] pares para LWW en pull (transactions va aparte via per-tx merge).
-function lwwPairs(){ return tsFields().filter(function(k){ return k!=='transactionsUpdatedAt'; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
+// transactions y snapshots van aparte: se mergean por item, no como bloque.
+function lwwPairs(){ return tsFields().filter(function(k){ return k!=='transactionsUpdatedAt'&&k!=='snapshotsUpdatedAt'; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
 // Firma barata del estado para detectar si un pull cambio algo (reemplaza el
 // doble JSON.stringify(S) de cada 25s). Todo cambio sincronizado viene con un
 // timestamp (*UpdatedAt/*Updated/*FetchedAt) — invariante del sync — y las tx
@@ -180,6 +184,9 @@ function stateSig(){
   var a=S.transactions||[], sum=0;
   for(var i=0;i<a.length;i++) sum+=(a[i].updatedAt||0);
   var sig='t'+a.length+':'+sum;
+  var sn=S.snapshots||[], ssum=0;
+  for(var j=0;j<sn.length;j++) ssum+=(sn[j].updatedAt||0);
+  sig+=';s'+sn.length+':'+ssum;
   for(var k in S){ if(/(?:UpdatedAt|Updated|FetchedAt)$/.test(k)) sig+=';'+k+'='+S[k]; }
   return sig;
 }
@@ -201,9 +208,10 @@ var TOMBSTONE_TTL=90*24*60*60*1000; // 90d: by then every device has applied the
 // Drop tombstones older than the TTL so the sync payload doesn't grow without
 // bound. Nuevos: por fecha de borrado (ts). Legacy: por fecha de creacion (id).
 function pruneTombstones(){
-  if(!Array.isArray(S.deletedTxIds)||!S.deletedTxIds.length) return;
   var cut=Date.now()-TOMBSTONE_TTL;
-  S.deletedTxIds=S.deletedTxIds.filter(function(e){ var t=(e&&typeof e==='object')?e.ts:e; return (parseInt(t,10)||0)>cut; });
+  function keep(e){ var t=(e&&typeof e==='object')?e.ts:e; return (parseInt(t,10)||0)>cut; }
+  if(Array.isArray(S.deletedTxIds)&&S.deletedTxIds.length) S.deletedTxIds=S.deletedTxIds.filter(keep);
+  if(Array.isArray(S.deletedSnapDates)&&S.deletedSnapDates.length) S.deletedSnapDates=S.deletedSnapDates.filter(keep);
 }
 // Persistencia diferida: serializar S completo a localStorage en cada edicion
 // competia con las animaciones. La escritura corre en idle; flush al ocultar la
@@ -225,7 +233,7 @@ function flushSaveLocal(){
 }
 window.addEventListener('pagehide',flushSaveLocal);
 document.addEventListener('visibilitychange',function(){ if(document.hidden) flushSaveLocal(); });
-function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); }
+function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); backfillSnapUpdatedAt(S.snapshots); }
 
 // mergeTxArrays / dueMonths / vesToUsd / localFieldWins / maxObservedStamp / nextStamp
 // live in ./sync-core.js (pure, unit-tested).
@@ -288,10 +296,22 @@ async function pullFromCloud(quiet){
         S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
         S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
       }
+      // Snapshots: merge por-item por fecha. Sin esto, dos dispositivos que
+      // anotan un snapshot cada uno estando offline pierden uno de los dos.
+      if(cloud.snapshots){
+        backfillSnapUpdatedAt(S.snapshots); backfillSnapUpdatedAt(cloud.snapshots);
+        var stombs=mergeTombstones(S.deletedSnapDates,cloud.deletedSnapDates);
+        S.snapshots=mergeSnapArrays(S.snapshots,cloud.snapshots,stombs);
+        S.deletedSnapDates=pruneRevokedSnapTombs(stombs,S.snapshots);
+        S.snapshotsUpdatedAt=Math.max(S.snapshotsUpdatedAt||0,cloud.snapshotsUpdatedAt||0)||null;
+      }
       // Replace all other fields normally
       var rest=Object.assign({},cloud);
       delete rest.transactions;
       delete rest.deletedTxIds;
+      delete rest.snapshots;
+      delete rest.snapshotsUpdatedAt;
+      delete rest.deletedSnapDates;
       // For every timestamped field, keep local when it is strictly newer than
       // cloud — never clobber an edit this device made but hasn't pushed yet.
       lwwPairs().forEach(function(p){
@@ -2851,8 +2871,8 @@ async function recordSnapshot(){
     }
     S.snapshots.splice(existing,1);
   }
-  S.snapshots.push({id:Date.now(),date:today,total:val,holdingsValue:holdingsTotalUsd()});
-  S.snapshotsUpdatedAt=stamp();
+  var nuevo={id:Date.now(),date:today,total:val,holdingsValue:holdingsTotalUsd()};
+  S.snapshots.push(nuevo);
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   if(sorted.length>=2&&res.checked){
     var cur=S.snapshots[S.snapshots.length-1];
@@ -2862,6 +2882,9 @@ async function recordSnapshot(){
     // de $0, y un valor que el usuario podia editar a mano y desincronizar).
     cur.derivedIncome=derivedIncomeFor(sorted[sorted.length-2],cur);
   }
+  // updatedAt por item: es lo que hace que el merge una los snapshots de dos
+  // dispositivos en vez de que la lista entera de uno pise la del otro.
+  nuevo.updatedAt=S.snapshotsUpdatedAt=stamp();
   save(); renderEquityChart();
 }
 
@@ -2905,15 +2928,15 @@ function autoMonthSnapshot(hour,minHour,todayISO){
   // fue sin registrar, o un total mal estimado. Eso no es "income negativo": es un
   // faltante, y el cierre de mes ya lo muestra en su linea "Unexplained".
   if(prev) snap.derivedIncome=Math.max(0,derivedIncomeFor(prev,snap));
+  snap.updatedAt=S.snapshotsUpdatedAt=stamp();
   S.snapshots.push(snap);
-  S.snapshotsUpdatedAt=stamp();
   save();
 }
 window.autoMonthSnapshot=autoMonthSnapshot;
 window.dismissAutoSnapshot=function(id){
   var s=(S.snapshots||[]).find(function(x){ return x.id===id; });
   if(!s||!s.auto) return;
-  s.auto=false; S.snapshotsUpdatedAt=stamp(); save(); renderAlerts(); renderSummary();
+  s.auto=false; s.updatedAt=S.snapshotsUpdatedAt=stamp(); save(); renderAlerts(); renderSummary();
 };
 
 function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
@@ -2923,6 +2946,9 @@ async function deleteSnapshot(id){
   if(!ok) return;
   var snap=S.snapshots.find(function(s){ return s.id===id; });
   S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; });
+  // Sin tombstone el borrado no viaja: el proximo pull lo encuentra vivo en la
+  // nube y lo resucita. La clave es la fecha, igual que en el merge.
+  if(snap){ if(!S.deletedSnapDates) S.deletedSnapDates=[]; S.deletedSnapDates.push({id:snap.date,ts:stamp()}); }
   S.snapshotsUpdatedAt=stamp();
   if(snap&&snap.txId){
     var linked=S.transactions.find(function(t){ return t.id===snap.txId; });
@@ -2943,6 +2969,7 @@ async function editSnapshot(id){
   snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; // re-fetch: un sync durante el await pudo reemplazar el array
   snap.total=val;
   snap.auto=false;   // revisado a mano: deja de pedir revision
+  snap.updatedAt=stamp();
   recalcDerivedIncome(snap);
   S.snapshotsUpdatedAt=stamp(); save();
   if(document.getElementById('page-history').classList.contains('active')) renderHistory(window._historyView||'snapshots'); else { renderEquityChart(); }
@@ -2960,6 +2987,7 @@ function recalcDerivedIncome(snap){
     var s=sorted[k], p=sorted[k-1];
     if(!s||!p||typeof s.derivedIncome!=='number') return;
     s.derivedIncome=derivedIncomeFor(p,s);
+    s.updatedAt=stamp();   // el vecino tambien cambio: sin esto el merge lo revierte
   });
 }
 window.editSnapshot=editSnapshot;
