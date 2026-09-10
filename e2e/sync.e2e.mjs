@@ -551,7 +551,8 @@ check('los botones van en la fila, no encima', actsM.pos === 'static', JSON.stri
 check('sin degradado que manche el fondo', actsM.bg === 'none', JSON.stringify(actsM));
 check('el monto queda visible', actsM.balVis && !actsM.tapa, JSON.stringify(actsM));
 check('las pastillas de texto no se aplastan', actsM.pills.length === 2 && actsM.pills.every(function (w) { return w >= 45; }), JSON.stringify(actsM));
-check('estan los cuatro botones', actsM.nb === 4, JSON.stringify(actsM));
+// Borrow, Pay, Rename, editar saldo y borrar: los cinco entran en el renglon.
+check('estan los cinco botones de la fila', actsM.nb === 5, JSON.stringify(actsM));
 await ev("document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){r.classList.remove('wm-sel')})");
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
 
@@ -1478,8 +1479,10 @@ await ev("showPage('wallets',null);renderWallets()"); await sleep(400);
 const saldoDe = async (nombre) => await ev(`(function(){var r=[...document.querySelectorAll('#w-grid .wm-row')].find(function(x){var n=x.querySelector('.wm-name');return n&&n.textContent===${JSON.stringify(nombre)};});return r?r.querySelector('.wm-bal').textContent:null;})()`);
 check('antes de renombrar, Emily suma $380.00', (await saldoDe('Emily')) === '$380.00', String(await saldoDe('Emily')));
 
-// Renombrar de verdad, por el mismo camino que usa la UI.
-await ev('renameManualWallet(81)');
+// Renombrar por el boton de la fila: sin el, la funcion existia pero no habia
+// forma de llegar a ella desde la UI y renombrar era borrar-y-recrear.
+const btnFila = (nombre, titulo) => `(function(){var r=[...document.querySelectorAll('#w-grid .wm-row')].find(function(x){var n=x.querySelector('.wm-name');return n&&n.textContent===${JSON.stringify(nombre)};});var b=r&&r.querySelector('[title=${JSON.stringify(titulo)}]');if(b)b.click();return !!b;})()`;
+check('la fila de la wallet ofrece Rename', (await ev(btnFila('Emily', 'Rename'))) === true);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de renombrar');
 await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];b.querySelector('#_ami').value='Emily M';b.querySelector('#_amo').click();})()");
 await sleep(500);
@@ -1521,6 +1524,20 @@ await ev("document.getElementById('wm-name').value='emily m';document.getElement
 await sleep(400);
 await ev("renderWallets()"); await sleep(200);
 check('re-guardar con otra mayuscula no renombra ni parte el saldo', (await saldoDe('Emily M')) === '$380.00', String(await saldoDe('Emily M')));
+
+// Borrar no borra las txs: quedan apuntando a un nombre inexistente y el
+// patrimonio se mueve en el acto. El confirm decia solo el nombre.
+await ev(btnFila('Emily M', 'Delete'));
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar wallet');
+const avisoDel = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m[m.length-1].querySelector('.modal-info').textContent;})()");
+check('el confirm dice cuanto se mueve el patrimonio', /Net worth drops by \$380\.00/.test(avisoDel), avisoDel);
+check('y cuantas txs quedan sueltas', /2 transactions stay logged/.test(avisoDel), avisoDel);
+check('y que la regla recurrente sigue apuntando ahi', /1 recurring rule/.test(avisoDel), avisoDel);
+check('y como recuperarlo', /exact name again brings the balance back/.test(avisoDel), avisoDel);
+// Cancelar no borra nada.
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amc').click();})()");
+await sleep(300);
+check('cancelar deja la wallet en su lugar', (await saldoDe('Emily M')) === '$380.00', String(await saldoDe('Emily M')));
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

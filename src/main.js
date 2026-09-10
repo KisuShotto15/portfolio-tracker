@@ -1418,7 +1418,38 @@ function updateTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
-async function deleteManualWallet(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var ok=await appConfirm('Delete wallet?',escHtml(w.name),'Delete'); if(!ok) return; S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; }); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects(); }
+// Borrar una wallet NO borra sus transacciones: quedan apuntando a un nombre que
+// ya no existe y dejan de sumar a ningun saldo, asi que el patrimonio se mueve en
+// el acto. Ademas no hay undo (el stack solo guarda transacciones). El confirm
+// decia solo el nombre; ahora dice cuanto se mueve, que queda suelto y como volver.
+function deleteWalletImpact(w){
+  var lines=[];
+  var val=w.trackerOnly?(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)):manualWalletUsd(w);
+  if(Math.abs(val)>=0.005){
+    // Lo que debes RESTA del patrimonio, asi que sacarlo lo sube.
+    var up=w.debt==='out';
+    lines.push('Net worth '+(up?'rises':'drops')+' by <b style="color:#fff">'+fmtUSD(Math.abs(val))+'</b>.');
+  }
+  if(w.trackerOnly){
+    var n=S.transactions.filter(function(t){ return t.wallet===w.name&&!t.imported; }).length;
+    if(n) lines.push('Its <b style="color:#fff">'+n+'</b> transaction'+(n===1?'':'s')+' stay logged, but stop counting toward any balance.');
+    var nr=(S.recurring||[]).filter(function(r){ return r.wallet===w.name; }).length;
+    if(nr) lines.push('<b style="color:#fff">'+nr+'</b> recurring '+(nr===1?'rule still points':'rules still point')+' here, and will keep adding transactions that move nothing.');
+    // El saldo de un tracker sale de sus txs, y las txs siguen ahi: re-crearlo con
+    // el MISMO nombre lo devuelve entero. En una wallet manual el saldo es suyo y
+    // no vuelve, por eso la nota solo aplica a trackers.
+    if(n) lines.push('Adding a wallet with this exact name again brings the balance back.');
+  }
+  return lines.length?'<span style="display:block;margin-top:9px;line-height:1.5">'+lines.join(' ')+'</span>':'';
+}
+async function deleteManualWallet(id){
+  var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return;
+  var ok=await appConfirm('Delete wallet?',escHtml(w.name)+deleteWalletImpact(w),'Delete');
+  if(!ok) return;
+  w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
+  S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; });
+  S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects();
+}
 // Reetiqueta las txs y las reglas que apuntaban al nombre viejo. Las txs tocadas
 // llevan updatedAt nuevo para GANAR el merge: sin eso, la copia con el nombre
 // viejo que tiene otro dispositivo revierte el renombre en el proximo pull.
@@ -3744,6 +3775,10 @@ function renderWallets(){
   // ── icon helpers ─────────────────────────────────────────────────────
   var icP='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
   var icX='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  // Etiqueta = renombrar. Va aparte del lapiz (que edita el SALDO): sin boton
+  // propio, la unica forma de cambiarle el nombre a una wallet era borrarla y
+  // recrearla — justo el camino que le rompe el saldo a sus transacciones.
+  var icT='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
   function balHtml(v){ return '<span class="wm-bal">'+fmtUSD(v)+'</span>'; }
   function wmRow(color,mono,statusClass,name,meta,right,acts,logo){
     var st=statusClass?'<i class="wm-status '+statusClass+'"></i>':'';
@@ -3799,8 +3834,9 @@ function renderWallets(){
       // deuda de una sola vez seria un boton que no se usa nunca.
       if(kind&&mw.cycle) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+',1)">'+(isDebt?'Borrow':'Lend')+'</button>';
       if(kind&&total>0) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pay':'Collect')+'</button>';
-      acts+='<button class="wico" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
-      acts+='<button class="wico del" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
+      acts+='<button class="wico" title="Rename" onclick="renameManualWallet('+mw.id+')">'+icT+'</button>';
+      acts+='<button class="wico" title="Edit balance" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
+      acts+='<button class="wico del" title="Delete" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
     return wmRow(isDebt?'#E24B4A':'#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,walletLogo(name));
   }
@@ -3813,7 +3849,9 @@ function renderWallets(){
   var mnList=S.manualWallets.filter(function(w){return !w.trackerOnly;})
     .slice().sort(function(a,b){ return manualWalletUsd(b)-manualWalletUsd(a); });
   var mnRows=mnList.map(function(w){
-    var acts='<button class="wico" onclick="editManualWalletBal('+w.id+')">'+icP+'</button><button class="wico del" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
+    var acts='<button class="wico" title="Rename" onclick="renameManualWallet('+w.id+')">'+icT+'</button>'
+      +'<button class="wico" title="Edit balance" onclick="editManualWalletBal('+w.id+')">'+icP+'</button>'
+      +'<button class="wico del" title="Delete" onclick="deleteManualWallet('+w.id+')">'+icX+'</button>';
     var isVes=w.currency==='VES';
     var meta=isVes?('Bs '+(w.balance||0).toLocaleString('es-VE')+' · rate '+(vesTxRateSrc()==='p2p'?'USDT':'BCV')):'Manual balance';
     return wmRow('#6B7280',escHtml(w.name).slice(0,1).toUpperCase(),'',escHtml(w.name),meta,balHtml(manualWalletUsd(w)),acts,walletLogo(w.name));
