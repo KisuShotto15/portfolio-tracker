@@ -49,6 +49,7 @@ function isPortFree(port) {
 let cloudDoc = {};          // "fila" del usuario en el backend simulado
 let pullCount = 0;          // se incrementa en cada GET /api/sync respondido: marca que bootAfterAuth hizo su pull
 let failGet = false;        // simula un arranque sin poder leer la nube (el push sale igual)
+let failPost = false;       // simula un dispositivo que no logra SUBIR (el pull sigue bien)
 let failures = [];
 function check(name, cond, extra) {
   const ok = !!cond;
@@ -132,6 +133,7 @@ ws.onmessage = async (e) => {
         if (failGet) await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 503, responseHeaders: hdr, body: b64(JSON.stringify({ error: 'Sync read failed, retry' })) });
         else await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ data: cloudDoc })) });
       }
+      else if (failPost) await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 503, responseHeaders: hdr, body: b64(JSON.stringify({ error: 'Sync write failed, retry' })) });
       else { cloudDoc = mergeDocs(cloudDoc, JSON.parse(req.postData || '{}')); await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ data: cloudDoc })) }); }
     } else if (req.url.includes('/auth/v1/')) {
       await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ access_token: 'fake', refresh_token: 'fake', user: { email: 'e2e@test' } })) });
@@ -1945,6 +1947,57 @@ await sleep(500);
 check('el snapshot del medio se fue', (await der34(sB34)) === null, String(await der34(sB34)));
 // Ahora el periodo del ultimo va de A a C: 2000 - 1000 = 1000, no los 500 viejos.
 check('y el siguiente recalcula su income sobre el periodo largo', (await der34(sC34)) === 1000, String(await der34(sC34)));
+
+// ── escenario 35: un push atascado no congela la bajada (F7) ────────────────
+// El bug: la bajada automatica se salta mientras haya cambios locales sin subir,
+// y no habia salida de ese estado. Un dispositivo que no lograba subir dejaba de
+// ver TODO lo que pasaba en los demas, indefinidamente y sin decir por que.
+console.log('E2E push atascado — el dispositivo sigue bajando lo de los demas');
+cloudDoc = { transactions: [], deletedTxIds: [], snapshots: [], manualWallets: [], recurring: [] };
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+check('la pestana cuenta como visible (si no, autoPull nunca corre)', (await ev('document.hidden')) === false);
+
+failPost = true;
+// Dos ediciones = dos pushes fallidos: a la segunda aparece el aviso.
+for (const desc of ['E2E atasco 1', 'E2E atasco 2']) {
+  await ev('openTxForm()'); await sleep(250);
+  await ev(`document.getElementById('tx-desc').value='${desc}';document.getElementById('tx-amount').value='7';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+  await sleep(2200);   // debounce del push (1.5s) + la respuesta 503
+}
+await waitFor(async () => (await ev("(function(){var b=document.getElementById('sync-banner');return b&&b.classList.contains('show');})()")) === true,
+  8000, 200, 'el aviso de que no se puede subir').catch((e) => console.warn(`  ! ${e.message}`));
+const aviso35 = await ev("(function(){var b=document.getElementById('sync-banner');return b?b.querySelector('span').textContent:null;})()");
+check('avisa que lo que no sube son TUS cambios (la pantalla sigue al dia)',
+  /Could not upload your changes/.test(aviso35 || '') && /other ones will not see them yet/.test(aviso35 || ''), String(aviso35));
+
+// Mientras tanto, otro dispositivo anota algo.
+const idAjena = Date.now() + 500;
+cloudDoc = mergeDocs(cloudDoc, { transactions: [{ id: idAjena, createdAt: idAjena, date: dU(0), desc: 'E2E de otro dispositivo', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 33, originalCurrency: 'USD', imported: false, updatedAt: idAjena }], transactionsUpdatedAt: idAjena });
+
+// Sin el arreglo, autoPull se corta en seco por tener cambios sin subir.
+await ev('__stuckPushMs(1)');   // "lleva rato atascado", sin esperar los 2 minutos reales
+await ev('autoPull()'); await sleep(700);
+const descs35 = JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.desc;}))"));
+check('el dispositivo atascado igual baja lo que anoto el otro', descs35.includes('E2E de otro dispositivo'), JSON.stringify(descs35));
+check('y sus cambios sin subir siguen intactos',
+  descs35.includes('E2E atasco 1') && descs35.includes('E2E atasco 2'), JSON.stringify(descs35));
+
+// Si tampoco puede BAJAR, el aviso lo dice: ahi si la pantalla puede estar vieja.
+failGet = true;
+await ev('forcePull()'); await sleep(600);
+const aviso35b = await ev("(function(){var b=document.getElementById('sync-banner');return b?b.querySelector('span').textContent:null;})()");
+check('si tampoco baja, el aviso admite que la pantalla puede estar vieja',
+  /this screen may be out of date/.test(aviso35b || ''), String(aviso35b));
+failGet = false;
+
+// Y cuando la nube vuelve, el atasco se termina: lo pendiente sube.
+failPost = false;
+await ev('retrySyncNow()');
+await waitFor(() => (cloudDoc.transactions || []).some((t) => t.desc === 'E2E atasco 2'), 12000, 200, 'el push pendiente al volver la nube')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('al volver la nube, lo pendiente sube', (cloudDoc.transactions || []).some((t) => t.desc === 'E2E atasco 2'), JSON.stringify((cloudDoc.transactions || []).map((t) => t.desc)));
+check('y el aviso se va', (await ev("(function(){var b=document.getElementById('sync-banner');return !b||!b.classList.contains('show');})()")) === true);
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

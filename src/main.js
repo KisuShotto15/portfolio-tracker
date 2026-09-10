@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, STUCK_PUSH_MS } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -307,7 +307,7 @@ async function pushToCloud(){
         saveLocal(); renderTx(); renderSummary(); renderWallets(); populateWalletSelects();
       }
     }
-    syncFailed=false; _pushFailCount=0; showSyncBanner(false);
+    syncFailed=false; _pushFailCount=0; _pushFailSince=null; showSyncBanner(false);
     if(_saveSeq===_pushSeq){ _dirty=false; _pendingCount=0; try{ localStorage.removeItem('ft13_dirty'); localStorage.removeItem('ft13_pending'); }catch(e){} updateOfflineBanner(); } // no edit landed during the push
     else { _pendingCount=Math.max(0,_saveSeq-_pushSeq); try{ localStorage.setItem('ft13_pending',_pendingCount); }catch(e){} } // quedan ediciones posteriores al push
     if(typeof _retryTimer!=='undefined') clearTimeout(_retryTimer);
@@ -316,6 +316,7 @@ async function pushToCloud(){
     if(cs) cs.textContent='Last synced: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
     syncFailed=true; _pushFailCount++;
+    if(!_pushFailSince) _pushFailSince=Date.now();
     if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Session expired'); showAuthOverlay(); } else setSyncStatus('error','Invalid secret'); console.warn('push failed:',e.message); return; } // reintentar con el mismo secret/token no sirve
     setSyncStatus('offline','⚠ Unsynced changes');
     if(_pushFailCount>=2&&navigator.onLine) showSyncBanner(true); // offline real ya tiene su propio aviso
@@ -377,12 +378,14 @@ async function pullFromCloud(quiet){
       S=Object.assign({},S,rest);
       _pullChanged=(stateSig()!==before);
       if(_pullChanged) saveLocal();
+      _pullFailed=false; refreshSyncBanner();   // el texto cambia: baja bien, lo unico que no sube es el push
       if(!quiet) setSyncStatus('synced','Synced');
       return true;
     }
     if(!quiet) setSyncStatus('synced','Synced (no cloud data yet)');
     return false;
   }catch(e){
+    _pullFailed=true; refreshSyncBanner();
     if(e.message==='HTTP 401'){ if(MULTIUSER){ setSyncStatus('error','Session expired'); showAuthOverlay(); } else setSyncStatus('error','Invalid secret'); }
     else setSyncStatus('offline','Offline (local only)');
     console.warn('pull failed:',e.message);
@@ -433,10 +436,13 @@ function afterPull(){
 }
 
 // Background pull so an open, focused tab reflects edits from other devices
-// without needing a reload or tab switch. Skipped while there are unsynced
-// local edits (would clobber them) or while offline/in-flight.
+// without needing a reload or tab switch. Skipped while there are unsynced local
+// edits (would clobber them) or while offline/in-flight — salvo que el push lleve
+// minutos fallando: ahi se baja igual (ver autoPullAllowedCore), porque si no el
+// dispositivo se queda con la pantalla vieja para siempre.
 async function autoPull(){
-  if(_pullInFlight||_dirty||syncFailed||document.hidden||!navigator.onLine) return;
+  if(!autoPullAllowedCore({inFlight:_pullInFlight,hidden:document.hidden,online:navigator.onLine,
+      dirty:_dirty,syncFailed:syncFailed,failingSince:_pushFailSince},Date.now(),_stuckPushMs)) return;
   _pullInFlight=true;
   try{ await pullFromCloud(true); if(_pullChanged) afterPull(); } // solo re-render si la nube trajo algo nuevo
   finally{ _pullInFlight=false; }
@@ -454,17 +460,36 @@ window.addEventListener('offline', function(){
 });
 
 var _retryTimer=null, _pushFailCount=0;
+// Desde cuando el push viene fallando sin parar (null = sube bien). Es lo que
+// distingue "el push normal todavia no salio" de "este dispositivo esta atascado".
+var _pushFailSince=null, _pullFailed=false;
+// El umbral es var para que el e2e lo baje y no tenga que esperar dos minutos.
+var _stuckPushMs=STUCK_PUSH_MS;
+window.__stuckPushMs=function(ms){ _stuckPushMs=ms; };
 // Banner visible cuando el sync falla repetido (el dot del sidebar es facil de no ver).
+// Mostrar el aviso lo decide el push (a la segunda falla). Esto solo re-escribe su
+// texto cuando ya esta a la vista y cambio el diagnostico.
+function refreshSyncBanner(){ var b=document.getElementById('sync-banner'); if(b&&b.classList.contains('show')) showSyncBanner(true); }
+// El aviso dice QUE es lo que esta roto. Si solo falla el push, la pantalla sigue
+// al dia (el pull sigue corriendo, ver autoPull) y lo unico pendiente es que lo
+// tuyo llegue al resto. Si tampoco baja, entonces si: lo que ves puede estar viejo.
 function showSyncBanner(show){
   var b=document.getElementById('sync-banner');
   if(!b&&show){
     b=document.createElement('div'); b.id='sync-banner'; b.className='sync-banner';
-    b.innerHTML='<span>⚠ Could not sync. Your changes are saved on this device only.</span><button onclick="window.retrySyncNow()">Retry</button>';
+    b.innerHTML='<span></span><button onclick="window.retrySyncNow()">Retry</button>';
     document.body.appendChild(b);
+  }
+  if(b&&show){
+    var msg=_pullFailed
+      ? '⚠ Could not sync. Your changes are saved on this device only, and this screen may be out of date.'
+      : '⚠ Could not upload your changes. They are saved on this device; the other ones will not see them yet.';
+    var sp=b.querySelector('span'); if(sp) sp.textContent=msg;
   }
   if(b) b.classList.toggle('show', !!show);
 }
 window.retrySyncNow=function(){ _pushFailCount=0; showSyncBanner(false); setSyncStatus('syncing','Syncing...'); pushToCloud(); };
+window.autoPull=autoPull;
 function scheduleRetry(){
   clearTimeout(_retryTimer);
   // backoff exponencial: 15s, 30s, 60s, 120s (tope)

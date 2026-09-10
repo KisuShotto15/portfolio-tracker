@@ -292,3 +292,21 @@ export function restoreTombstonesCore(local, file, lists, ts){
   });
   return out;
 }
+
+// ── Cuando el pull automatico puede correr ──────────────────────────────────
+// La bajada automatica se salta mientras haya cambios locales sin subir. La
+// intencion es correcta (bajar podria pisar lo que todavia no subio), pero no
+// tenia salida: un dispositivo que no logra subir — token roto, red rara, un
+// conflicto que se repite — dejaba de bajar TODO lo que pasaba en los demas, para
+// siempre, sin decir por que.
+// Ahora hay salida: mientras el push es normal (debounce de 1.5s) seguimos sin
+// bajar, pero si lleva minutos fallando se baja igual. El merge conserva lo local
+// mas nuevo (LWW por campo, por-item en las listas, tombstones en los borrados),
+// asi que bajar no pisa lo que este dispositivo todavia no subio.
+export const STUCK_PUSH_MS = 2 * 60 * 1000;
+export function autoPullAllowedCore(st, now, stuckMs){
+  if(!st || st.inFlight || st.hidden || !st.online) return false;
+  if(!st.dirty && !st.syncFailed) return true;
+  if(!st.failingSince) return false;                       // el push todavia no fallo: es el debounce normal
+  return (now - st.failingSince) >= (stuckMs || STUCK_PUSH_MS);
+}

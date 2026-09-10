@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, STUCK_PUSH_MS } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -569,5 +569,52 @@ describe('restoreTombstonesCore (restaurar un backup borra de verdad)', () => {
     const tomb = restoreTombstonesCore({ transactions: [{ id: 2, updatedAt: 10 }] }, { transactions: [] }, LISTS, 500).deletedTxIds;
     expect(mergeByKey([], [{ id: 2, updatedAt: 10 }], tomb, itemId)).toEqual([]);
     expect(mergeByKey([], [{ id: 2, updatedAt: 900 }], tomb, itemId)).toHaveLength(1);
+  });
+});
+
+describe('autoPullAllowedCore (un push atascado no congela la bajada)', () => {
+  const base = { inFlight: false, hidden: false, online: true, dirty: false, syncFailed: false, failingSince: null };
+  const ahora = 1_000_000;
+
+  it('sin nada pendiente, baja', () => {
+    expect(autoPullAllowedCore(base, ahora)).toBe(true);
+  });
+
+  it('no baja mientras hay un pull en vuelo, la pestana esta oculta o no hay red', () => {
+    expect(autoPullAllowedCore({ ...base, inFlight: true }, ahora)).toBe(false);
+    expect(autoPullAllowedCore({ ...base, hidden: true }, ahora)).toBe(false);
+    expect(autoPullAllowedCore({ ...base, online: false }, ahora)).toBe(false);
+  });
+
+  it('no baja durante el push normal (el debounce todavia no fallo)', () => {
+    expect(autoPullAllowedCore({ ...base, dirty: true }, ahora)).toBe(false);
+  });
+
+  it('tampoco apenas falla el primer push', () => {
+    expect(autoPullAllowedCore({ ...base, dirty: true, syncFailed: true, failingSince: ahora - 5000 }, ahora)).toBe(false);
+  });
+
+  it('EL BUG F7: pero si lleva minutos sin poder subir, baja igual', () => {
+    // Sin esto el dispositivo se quedaba con la pantalla vieja para siempre: la
+    // bajada se salta mientras haya cambios sin subir, y no habia salida.
+    const st = { ...base, dirty: true, syncFailed: true, failingSince: ahora - STUCK_PUSH_MS };
+    expect(autoPullAllowedCore(st, ahora)).toBe(true);
+  });
+
+  it('atascado pero sin red: sigue sin bajar', () => {
+    const st = { ...base, dirty: true, syncFailed: true, online: false, failingSince: ahora - STUCK_PUSH_MS };
+    expect(autoPullAllowedCore(st, ahora)).toBe(false);
+  });
+
+  it('el umbral se puede bajar (lo usa el e2e para no esperar dos minutos)', () => {
+    const st = { ...base, dirty: true, syncFailed: true, failingSince: ahora - 50 };
+    expect(autoPullAllowedCore(st, ahora, 10)).toBe(true);
+    expect(autoPullAllowedCore(st, ahora, 5000)).toBe(false);
+  });
+
+  it('syncFailed sin cambios locales tambien sale del atasco', () => {
+    // El push fallido deja syncFailed en true aunque el cambio ya no este pendiente.
+    const st = { ...base, syncFailed: true, failingSince: ahora - STUCK_PUSH_MS };
+    expect(autoPullAllowedCore(st, ahora)).toBe(true);
   });
 });
