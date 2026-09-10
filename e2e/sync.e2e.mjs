@@ -428,14 +428,18 @@ check('la deuda resta del total de wallets', nw0 === 200 + 80 + 1700 - 300, `tot
 // Un tracker sin marcar NO es una deuda: sigue en su grupo y con su etiqueta.
 const grupos = await ev("[...document.querySelectorAll('#page-wallets .wm-group')].map(function(g){var t=g.querySelector('.wm-group-title');return (t?t.textContent:'')+':'+[...g.querySelectorAll('.wm-row')].map(function(r){return r.querySelector('.wm-name').textContent+'|'+(r.querySelector('.wm-badge')||{}).textContent}).join(',')}).join(' ~ ')");
 check('un tracker comun queda en su grupo', /Trackers:Mercantil Panama\|tracker/.test(grupos), grupos);
-// Las 4 columnas en una fila: el layout que se rompia antes de sacar .wm-acts
-// del flujo. Se fija el ancho porque abajo de 1280 baja a 2 a proposito.
-await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-await sleep(350);
-const filas = await ev("(function(){var g=[...document.querySelectorAll('#page-wallets .wm-group')];var tops={};g.forEach(function(e){tops[Math.round(e.getBoundingClientRect().top)]=1});return g.length+'/'+Object.keys(tops).length;})()");
-check('los 4 grupos entran en una sola fila', filas === '4/1', `grupos/filas = ${filas}`);
-const cortado = await ev("[...document.querySelectorAll('#page-wallets .wm-name')].some(function(e){return e.scrollWidth>e.clientWidth+1})");
-check('ningun nombre se desborda a 1600px', cortado === false);
+// El ancho que le queda al NOMBRE es la medida que importa. Cobrar/Pagar viven en
+// el flujo de la fila, asi que le restan ~115px fijos: con cuatro columnas la fila
+// caia a ~280px y el nombre se quedaba con CERO ancho (invisible, sin siquiera
+// puntos suspensivos). Por eso el grid llega a tres como maximo. Se recorren los
+// anchos donde el layout cambia de forma, no uno solo.
+for (const _w of [1920, 1600, 1440, 1280, 1100, 900]) {
+  await send('Emulation.setDeviceMetricsOverride', { width: _w, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  const nom = JSON.parse(await ev("(function(){var e=[...document.querySelectorAll('#page-wallets .wm-name')];return JSON.stringify({min:Math.min.apply(null,e.map(function(x){return Math.round(x.getBoundingClientRect().width)})),cortado:e.some(function(x){return x.scrollWidth>x.clientWidth+1})});})()"));
+  check(`a ${_w}px el nombre conserva ancho util`, nom.min >= 60, JSON.stringify(nom));
+  check(`y ninguno se corta a ${_w}px`, nom.cortado === false, JSON.stringify(nom));
+}
 await send('Emulation.clearDeviceMetricsOverride', {});
 await sleep(250);
 
@@ -531,28 +535,50 @@ check('avisa de la deuda parada', /Vieja owes you/.test(alertD), alertD.slice(0,
 check('con el verbo correcto segun la direccion', /Collect it/.test(alertD), alertD.slice(0, 300));
 check('una deuda reciente no genera aviso', !/Reciente/.test(alertD), alertD.slice(0, 300));
 
-// Los botones de una fila abierta en movil. Estaban superpuestos al monto con un
-// degradado que terminaba en var(--surface): sobre una fila con fondo propio
-// (seleccionada) eso pintaba manchas oscuras entre boton y boton, y tapaba el
-// monto. Ahora van en su propio renglon, sin fondo.
+// El panel de acciones de una fila. Descansa fuera del borde derecho y entra
+// deslizando al seleccionarla, con el borde izquierdo en diagonal y fondo propio.
+// Tapa el monto (que es lo que la fila deja de necesitar mientras eliges que hacer)
+// pero NO el nombre: hay que seguir viendo sobre cual wallet estas actuando. Las
+// pastillas Cobrar/Pagar viven fuera del panel y tienen que quedar destapadas.
 await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, deviceScaleFactor: 2, mobile: true });
 await ev("showPage('wallets',null)"); await sleep(600);
-await ev("(function(){var r=[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&/Ciclo/.test(n.textContent)})[0];if(r)r.click();})()");
-await sleep(400);
-const actsM = JSON.parse(await ev(`(function(){
-  var r=document.querySelector('.wm-row.wm-sel'); if(!r) return JSON.stringify({err:'sin fila abierta'});
-  var a=r.querySelector('.wm-acts'), bal=r.querySelector('.wm-bal');
-  var cs=getComputedStyle(a), ab=a.getBoundingClientRect(), bb=bal.getBoundingClientRect();
-  var pills=[...a.querySelectorAll('.wsettle')].map(function(b){ return Math.round(b.getBoundingClientRect().width); });
-  return JSON.stringify({pos:cs.position, bg:cs.backgroundImage, tapa:!(ab.left>=bb.right||ab.right<=bb.left||ab.top>=bb.bottom||ab.bottom<=bb.top),
-    pills:pills, nb:a.querySelectorAll('.wico').length, balVis:bb.width>0});
-})()`));
-check('los botones van en la fila, no encima', actsM.pos === 'static', JSON.stringify(actsM));
-check('sin degradado que manche el fondo', actsM.bg === 'none', JSON.stringify(actsM));
-check('el monto queda visible', actsM.balVis && !actsM.tapa, JSON.stringify(actsM));
-check('las pastillas de texto no se aplastan', actsM.pills.length === 2 && actsM.pills.every(function (w) { return w >= 45; }), JSON.stringify(actsM));
-// Borrow, Pay, Rename, editar saldo y borrar: los cinco entran en el renglon.
-check('estan los cinco botones de la fila', actsM.nb === 5, JSON.stringify(actsM));
+await ev("document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){r.classList.remove('wm-sel')})");
+const filaCiclo = "[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&/Ciclo/.test(n.textContent)})[0]";
+const medirPanel = `(function(){
+  var r=${filaCiclo}; if(!r) return JSON.stringify({err:'sin fila'});
+  var a=r.querySelector('.wm-acts'), bal=r.querySelector('.wm-bal'), nm=r.querySelector('.wm-name');
+  var cs=getComputedStyle(a), rb=r.getBoundingClientRect(), ab=a.getBoundingClientRect();
+  var sw=r.querySelector('.wm-settle');
+  var pills=[...r.querySelectorAll('.wm-settle .wsettle')].map(function(b){ return Math.round(b.getBoundingClientRect().width); });
+  var solapa=function(el){ if(!el) return false; var x=el.getBoundingClientRect(); return !(ab.left>=x.right||ab.right<=x.left); };
+  return JSON.stringify({pos:cs.position, tx:cs.transform, diag:cs.clipPath!=='none', bg:cs.backgroundColor,
+    dentro:a.querySelectorAll('.wico').length, pills:pills,
+    tapaBal:solapa(bal), tapaNombre:solapa(nm), settleOp:sw?getComputedStyle(sw).opacity:null,
+    afuera:Math.round(ab.left)>=Math.round(rb.right)-1, overflow:getComputedStyle(r).overflowX});
+})()`;
+
+const panelOff = JSON.parse(await ev(medirPanel));
+check('cerrado, el panel descansa fuera del borde derecho', panelOff.afuera === true, JSON.stringify(panelOff));
+check('y la fila lo recorta para que no asome', panelOff.overflow === 'hidden', JSON.stringify(panelOff));
+// En reposo —que es como se ve la fila el 99% del tiempo— Cobrar/Pagar estan a un
+// solo tap, fuera del panel y sin aplastarse.
+check('en reposo, Cobrar/Pagar estan a la vista en la fila',
+  panelOff.pills.length === 2 && panelOff.pills.every(function (w) { return w >= 45; }) && panelOff.settleOp === '1',
+  JSON.stringify(panelOff));
+
+await ev(`(function(){var r=${filaCiclo};if(r)r.click();})()`);
+await sleep(500);
+const panelOn = JSON.parse(await ev(medirPanel));
+check('al seleccionar la fila el panel entra', panelOn.tx === 'none' && panelOn.afuera === false, JSON.stringify(panelOn));
+check('va por encima, no en el flujo', panelOn.pos === 'absolute', JSON.stringify(panelOn));
+check('con el borde izquierdo en diagonal', panelOn.diag === true, JSON.stringify(panelOn));
+check('y fondo propio, no transparente', panelOn.bg !== 'rgba(0, 0, 0, 0)' && panelOn.bg !== 'transparent', JSON.stringify(panelOn));
+check('adentro van los tres iconos', panelOn.dentro === 3, JSON.stringify(panelOn));
+check('tapa el monto', panelOn.tapaBal === true, JSON.stringify(panelOn));
+check('pero deja ver el nombre', panelOn.tapaNombre === false, JSON.stringify(panelOn));
+// A 412px el panel no cabe sin morder las pastillas, asi que se desvanecen
+// mientras entra: nunca se ve media palabra cortada bajo el borde diagonal.
+check('y las pastillas se desvanecen en vez de quedar cortadas', panelOn.settleOp === '0', JSON.stringify(panelOn));
 await ev("document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){r.classList.remove('wm-sel')})");
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
 

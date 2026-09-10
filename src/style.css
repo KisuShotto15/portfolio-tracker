@@ -787,7 +787,12 @@ input,select,textarea,button{font-family:inherit}
 /* Cuatro grupos (Exchanges, Trackers, Manual, Debts) en una sola fila. Entra
    porque .wm-acts salio del flujo: antes cada fila reservaba 126px para los
    botones y el nombre se quedaba sin lugar apenas la columna bajaba de ~330px. */
-.wm-cols-4{grid-template-columns:repeat(4,1fr)}
+/* Tres columnas como maximo, aunque haya cuatro grupos. Cobrar/Pagar pasaron a
+   vivir EN la fila (antes estaban dentro del panel, fuera del flujo): son ~115px
+   que ahora se le restan al nombre siempre. Con cuatro columnas la fila queda en
+   ~350px hasta a 1920px y el nombre se caia a 39-71px — o sea, ilegible o
+   invisible. Con tres pasa de 250px para arriba. */
+.wm-cols-4{grid-template-columns:repeat(3,1fr)}
 /* Cobrar/Pagar: el unico boton de la fila con texto, porque es el que se usa. */
 .wico.wsettle{width:auto;padding:0 9px;font-size:11px;font-weight:600;color:var(--txt2)}
 .wico.wsettle:hover{color:var(--txt)}
@@ -795,13 +800,18 @@ input,select,textarea,button{font-family:inherit}
    3 columnas piden ~640px y no entraban entre 721 y ~830px: la pagina se iba a
    scroll horizontal. A 2 columnas entra de sobra; ≤720px ya baja a 1. */
 @media(max-width:1280px){.wm-cols-4{grid-template-columns:1fr 1fr}}
+/* Y una sola columna por debajo de ~1050px: a dos, la fila vuelve a caer a ~330px
+   y el nombre se queda con 49px, que corta cualquier nombre real. */
+@media(max-width:1050px){.wm-cols-4{grid-template-columns:1fr}}
 @media(max-width:900px){.wm-cols-3{grid-template-columns:1fr 1fr}}
 .wm-group{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:7px 8px 11px;min-width:0}
 .wm-group-head{display:flex;align-items:baseline;justify-content:space-between;padding:13px 16px 11px}
 .wm-group-title{font-size:13px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
 .wm-group-sum{font-family:var(--font-num);font-size:14px;color:var(--txt3);margin-right:83px}
 .wm-rows{display:flex;flex-direction:column}
-.wm-row{position:relative;display:flex;align-items:center;gap:13px;padding:11px 16px;border-radius:12px;transition:background .12s,transform .08s ease}
+/* overflow:hidden: el panel de acciones descansa FUERA del borde derecho y entra
+   deslizando; sin esto asoma sobre la columna de al lado mientras entra y sale. */
+.wm-row{position:relative;overflow:hidden;display:flex;align-items:center;gap:13px;padding:11px 16px;border-radius:12px;transition:background .12s,transform .08s ease}
 .wm-row:active{transform:scale(.99)}
 .wm-row:hover{background:rgba(255,255,255,.025)}
 .wm-chip{position:relative;width:36px;height:36px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-num);font-weight:600;font-size:14px;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c)}
@@ -836,15 +846,35 @@ input,select,textarea,button{font-family:inherit}
    angostas) el nombre se quedaba con 10px y se montaba sobre el balance apenas la
    fila sumaba un boton mas. Al aparecer tapa el balance, que es justo lo que la
    fila deja de necesitar mientras estas eligiendo que hacer con ella. */
-/* El degradado tiene que terminar en el MISMO color que la fila de atras: con
-   var(--surface) a secas se veia una franja negra detras de los botones apenas la
-   fila cambiaba de fondo (hover, o seleccionada en movil). */
-.wm-acts{--acts-bg:var(--surface);position:absolute;right:16px;top:50%;transform:translateY(-50%);
-  display:flex;gap:5px;justify-content:flex-end;align-items:center;opacity:0;pointer-events:none;
-  transition:opacity .12s;padding-left:16px;border-radius:10px;
-  background:linear-gradient(90deg,transparent,var(--acts-bg) 16px)}
-.wm-row:hover .wm-acts{--acts-bg:color-mix(in srgb,#fff 2.5%,var(--surface))}
-.wm-row:hover .wm-acts,.wm-row:focus-within .wm-acts{opacity:1;pointer-events:auto}
+/* Panel de acciones: descansa fuera del borde derecho y ENTRA DESLIZANDO al
+   seleccionar la fila, con el borde izquierdo en diagonal y fondo propio. Antes
+   aparecia con un fade sobre un degradado en web y bajaba a un renglon aparte en
+   movil: dos comportamientos distintos para el mismo gesto. Ahora es el mismo
+   panel en los dos, y se abre con clic/tap — con hover entraba y salia solo al
+   recorrer la lista con el mouse.
+   La diagonal se recorta sobre el propio panel, asi que viaja con el deslizado. */
+.wm-acts{position:absolute;right:0;top:0;bottom:0;
+  display:flex;gap:5px;justify-content:flex-end;align-items:center;
+  padding:0 14px 0 32px;
+  clip-path:polygon(24px 0,100% 0,100% 100%,0 100%);
+  background:color-mix(in srgb,var(--accent) 26%,var(--surface));
+  transform:translateX(100%);opacity:0;pointer-events:none;
+  transition:transform .24s cubic-bezier(.22,.7,.3,1),opacity .14s linear}
+/* focus-within ademas de la seleccion: los botones siguen siendo tabulables aunque
+   el panel este afuera, y llegar a uno con el teclado sin verlo no sirve de nada. */
+.wm-row.wm-sel .wm-acts,.wm-row:focus-within .wm-acts{transform:none;opacity:1;pointer-events:auto}
+/* El panel ya es la superficie: un fondo por boton se veia como chips sobre chip. */
+.wm-acts .wico{background:transparent}
+.wm-acts .wico:hover{background:rgba(255,255,255,.13)}
+/* Cobrar/Pagar NO entran al panel: se quedan en el flujo de la fila, a la izquierda
+   del monto. Son las acciones de todos los dias — esconderlas detras de un tap
+   cuesta mas de lo que ahorra. */
+.wm-settle{display:flex;gap:5px;align-items:center;flex-shrink:0;transition:opacity .14s}
+/* En una fila angosta el panel no cabe sin morder las pastillas, y media palabra
+   cortada bajo el borde diagonal se ve rota. Se desvanecen mientras el panel entra:
+   siguen a la vista con la fila en reposo, que es donde de verdad se usan.
+   pointer-events:none porque invisible no es lo mismo que inalcanzable. */
+.wm-row.wm-sel .wm-settle,.wm-row:focus-within .wm-settle{opacity:0;pointer-events:none}
 /* Un grupo sin wallets no necesita una tarjeta entera: se queda en el titulo y un
    boton chico. Debts no entra aca: su vacio lleva un texto que si explica algo. */
 .wm-group.is-empty{padding:4px 8px 6px}
@@ -1338,28 +1368,14 @@ input::placeholder{color:var(--txt3)}
   .wm-row{padding:11px 14px;gap:12px}
   .wm-group-head{padding:12px 14px 10px}
   .wm-group-sum{margin-right:0}
-  /* Mobile: no reserved space — amount sits at the edge; tapping the row reveals the
-     edit/delete buttons which push the amount left (like transactions). */
-  /* En movil los botones van EN LA FILA, no encima: empujan el monto a la
-     izquierda igual que en transacciones. Superpuestos tapaban el monto y el
-     degradado que los despegaba del fondo se veia como una mancha oscura. */
-  .wm-acts{display:none}
   .wm-row.wm-sel{background:rgba(255,255,255,.06)}
-  /* Renglon propio: con cuatro botones (Lend, Collect, editar, borrar) meterlos
-     en la misma linea aplastaba las pastillas una contra otra y cortaba la
-     etiqueta. Abajo entran siempre, sin importar el largo del nombre. */
-  .wm-row.wm-sel{flex-wrap:wrap}
-  .wm-row.wm-sel .wm-acts{display:flex;opacity:1;pointer-events:auto;
-    position:static;transform:none;background:none;padding-left:0;
-    flex:0 0 100%;justify-content:flex-end;margin-top:10px;gap:6px}
-  /* Los de la fila un poco mas grandes que los de Holdings: aca hay texto
-     adentro ("Collect", "Lend") y a 22px quedaba apretado. */
+  /* El mismo panel deslizante que en web, un poco mas compacto: con tres iconos
+     entra de sobra sin tapar el nombre, incluso en la fila mas angosta. */
+  .wm-acts{padding:0 12px 0 28px;gap:4px;clip-path:polygon(20px 0,100% 0,100% 100%,0 100%)}
   .wm-acts .wico{width:28px;height:28px;border-radius:9px;flex-shrink:0}
   .wm-acts .wico svg{width:12px;height:12px}
-  /* width:auto explicito: .wm-acts .wico de arriba empata en especificidad con
-     .wico.wsettle y gana por venir despues, asi que sin esto las pastillas de
-     texto quedaban cuadradas de 28px y "Lend"/"Collect" se desbordaban pegadas. */
-  .wm-acts .wico.wsettle{width:auto;height:28px;padding:0 12px;font-size:12px;background:rgba(255,255,255,.09);color:var(--txt)}
+  /* Las pastillas de texto viven fuera del panel: se dimensionan aparte. */
+  .wm-settle .wico.wsettle{width:auto;height:28px;padding:0 11px;font-size:12px;background:rgba(255,255,255,.09);color:var(--txt)}
 
   /* Budget + Holdings hero font */
   .bdg-hero-val{font-size:38px}
