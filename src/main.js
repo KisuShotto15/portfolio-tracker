@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -93,9 +93,10 @@ var S = {
   snapshots:[],
   manualWalletsUpdatedAt:null, portfolioUpdatedAt:null, snapshotsUpdatedAt:null,
   deletedTxIds:[],
-  // Tombstones de snapshots. La clave es la FECHA (ver snapKey en sync-core): es
-  // lo que identifica a un snapshot entre dispositivos, no su id.
-  deletedSnapDates:[],
+  // Tombstones de las listas que se mergean por item (ver PER_ITEM_LISTS). Sin
+  // ellos el borrado no viaja: el proximo pull lo encuentra vivo en la nube y lo
+  // resucita. En snapshots la clave es la FECHA (snapKey); en el resto, el id.
+  deletedSnapDates:[], deletedWalletIds:[], deletedExchangeIds:[], deletedOnchainIds:[], deletedRuleIds:[],
   transactionsUpdatedAt:null,
   dashGoal:0, dashGoalUpdatedAt:null,
   categoryBudgets:{}, categoryBudgetsUpdatedAt:null, // legacy USD (migrado a pcts)
@@ -173,20 +174,46 @@ function stamp(){ _ts=nextStamp(_ts, Date.now()); return _ts; }
 // sync basta declararlo en los defaults de S con su sibling UpdatedAt.
 function tsFields(){ return Object.keys(S).filter(function(k){ return /UpdatedAt$/.test(k); }); }
 // [dataField, timestampField] pares para LWW en pull (transactions va aparte via per-tx merge).
-// transactions y snapshots van aparte: se mergean por item, no como bloque.
-function lwwPairs(){ return tsFields().filter(function(k){ return k!=='transactionsUpdatedAt'&&k!=='snapshotsUpdatedAt'; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
+// Listas que NO se reemplazan enteras: se unen item por item, cada una con su
+// lista de tombstones. Reemplazar la lista entera con un solo timestamp de campo
+// perdia lo que el otro dispositivo hubiera agregado sin conexion. api/sync.js
+// tiene la MISMA tabla: si agregas una lista aca, agregala alla.
+var PER_ITEM_LISTS={
+  transactions:'deletedTxIds',          // merge propio (createdAt inmutable)
+  snapshots:'deletedSnapDates',         // clave: la fecha
+  manualWallets:'deletedWalletIds',
+  exchangeWallets:'deletedExchangeIds',
+  onchainWallets:'deletedOnchainIds',
+  recurring:'deletedRuleIds',
+};
+// Estas listas quedan fuera del LWW de campo: las mergea el bloque por-item del pull.
+function lwwPairs(){ return tsFields().filter(function(k){ return !PER_ITEM_LISTS[k.slice(0,-9)]; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
+// Marca un item de esas listas: sin su updatedAt propio, la copia vieja de otro
+// dispositivo le gana al cambio en el proximo merge y lo revierte.
+function touchItem(field,item){ var t=stamp(); if(item) item.updatedAt=t; S[field+'UpdatedAt']=t; return t; }
+// Borrado que viaja: el tombstone es lo unico que evita que la copia de otro
+// dispositivo lo resucite.
+function tombstoneItem(field,key){
+  var tk=PER_ITEM_LISTS[field];
+  if(!Array.isArray(S[tk])) S[tk]=[];
+  var t=stamp();
+  S[tk].push({id:key,ts:t});
+  S[field+'UpdatedAt']=t;
+}
 // Firma barata del estado para detectar si un pull cambio algo (reemplaza el
 // doble JSON.stringify(S) de cada 25s). Todo cambio sincronizado viene con un
 // timestamp (*UpdatedAt/*Updated/*FetchedAt) — invariante del sync — y las tx
 // se cubren con length + suma de updatedAt (un merge por-tx puede no mover
 // transactionsUpdatedAt).
 function stateSig(){
-  var a=S.transactions||[], sum=0;
-  for(var i=0;i<a.length;i++) sum+=(a[i].updatedAt||0);
-  var sig='t'+a.length+':'+sum;
-  var sn=S.snapshots||[], ssum=0;
-  for(var j=0;j<sn.length;j++) ssum+=(sn[j].updatedAt||0);
-  sig+=';s'+sn.length+':'+ssum;
+  var sig='';
+  // Las listas por-item cambian sin que su UpdatedAt se mueva (el merge toma el
+  // maximo de los dos lados), asi que van con largo + suma de updatedAt.
+  Object.keys(PER_ITEM_LISTS).forEach(function(f){
+    var a=S[f]||[], sum=0;
+    for(var i=0;i<a.length;i++) sum+=(a[i].updatedAt||0);
+    sig+=f[0]+a.length+':'+sum+';';
+  });
   for(var k in S){ if(/(?:UpdatedAt|Updated|FetchedAt)$/.test(k)) sig+=';'+k+'='+S[k]; }
   return sig;
 }
@@ -210,8 +237,10 @@ var TOMBSTONE_TTL=90*24*60*60*1000; // 90d: by then every device has applied the
 function pruneTombstones(){
   var cut=Date.now()-TOMBSTONE_TTL;
   function keep(e){ var t=(e&&typeof e==='object')?e.ts:e; return (parseInt(t,10)||0)>cut; }
-  if(Array.isArray(S.deletedTxIds)&&S.deletedTxIds.length) S.deletedTxIds=S.deletedTxIds.filter(keep);
-  if(Array.isArray(S.deletedSnapDates)&&S.deletedSnapDates.length) S.deletedSnapDates=S.deletedSnapDates.filter(keep);
+  Object.keys(PER_ITEM_LISTS).forEach(function(f){
+    var tk=PER_ITEM_LISTS[f];
+    if(Array.isArray(S[tk])&&S[tk].length) S[tk]=S[tk].filter(keep);
+  });
 }
 // Persistencia diferida: serializar S completo a localStorage en cada edicion
 // competia con las animaciones. La escritura corre en idle; flush al ocultar la
@@ -233,7 +262,7 @@ function flushSaveLocal(){
 }
 window.addEventListener('pagehide',flushSaveLocal);
 document.addEventListener('visibilitychange',function(){ if(document.hidden) flushSaveLocal(); });
-function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); backfillSnapUpdatedAt(S.snapshots); }
+function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); Object.keys(PER_ITEM_LISTS).forEach(function(f){ backfillUpdatedAt(S[f]); }); }
 
 // mergeTxArrays / dueMonths / vesToUsd / localFieldWins / maxObservedStamp / nextStamp
 // live in ./sync-core.js (pure, unit-tested).
@@ -296,22 +325,28 @@ async function pullFromCloud(quiet){
         S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
         S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
       }
-      // Snapshots: merge por-item por fecha. Sin esto, dos dispositivos que
-      // anotan un snapshot cada uno estando offline pierden uno de los dos.
-      if(cloud.snapshots){
-        backfillSnapUpdatedAt(S.snapshots); backfillSnapUpdatedAt(cloud.snapshots);
-        var stombs=mergeTombstones(S.deletedSnapDates,cloud.deletedSnapDates);
-        S.snapshots=mergeSnapArrays(S.snapshots,cloud.snapshots,stombs);
-        S.deletedSnapDates=pruneRevokedSnapTombs(stombs,S.snapshots);
-        S.snapshotsUpdatedAt=Math.max(S.snapshotsUpdatedAt||0,cloud.snapshotsUpdatedAt||0)||null;
-      }
       // Replace all other fields normally
       var rest=Object.assign({},cloud);
       delete rest.transactions;
       delete rest.deletedTxIds;
-      delete rest.snapshots;
-      delete rest.snapshotsUpdatedAt;
-      delete rest.deletedSnapDates;
+      // El resto de las listas por-item: snapshots, wallets, exchanges, on-chain y
+      // reglas recurrentes. Se unen item por item para que lo que agrego un
+      // dispositivo sin conexion no se pierda al perder su lista el LWW de campo.
+      Object.keys(PER_ITEM_LISTS).forEach(function(f){
+        if(f==='transactions') return;
+        var tk=PER_ITEM_LISTS[f], keyOf=(f==='snapshots')?snapKey:itemId;
+        delete rest[f]; delete rest[f+'UpdatedAt']; delete rest[tk];
+        if(!cloud[f]) return;
+        backfillUpdatedAt(S[f]); backfillUpdatedAt(cloud[f]);
+        var tb=mergeTombstones(S[tk],cloud[tk]);
+        S[f]=mergeByKey(S[f]||[],cloud[f],tb,keyOf);
+        // Duplicados creados en dos dispositivos: dos filas para la misma wallet
+        // duplican su saldo en el patrimonio.
+        if(f==='manualWallets'||f==='exchangeWallets') S[f]=dedupeByNaturalKey(S[f],walletNameKey);
+        if(f==='onchainWallets') S[f]=dedupeByNaturalKey(S[f],onchainAddrKey);
+        S[tk]=pruneRevokedByKey(tb,S[f],keyOf);
+        S[f+'UpdatedAt']=Math.max(S[f+'UpdatedAt']||0,cloud[f+'UpdatedAt']||0)||null;
+      });
       // For every timestamped field, keep local when it is strictly newer than
       // cloud — never clobber an edit this device made but hasn't pushed yet.
       lwwPairs().forEach(function(p){
@@ -835,7 +870,7 @@ function saveOnchainWallet(){
   if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ owStatus('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
   if(chain==='btc'&&!/^([xyz]pub[A-Za-z0-9]{100,}|(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87})$/.test(addr)){ owStatus('Invalid Bitcoin address or xpub/zpub/ypub'); return; }
   owStatus('');
-  S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr}]);
+  S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr,updatedAt:stamp()}]);
   S.onchainWalletsUpdatedAt=stamp();
   document.getElementById('ow-label').value='';
   document.getElementById('ow-addr').value='';
@@ -847,7 +882,7 @@ async function deleteOnchainWallet(id){
   var ok=await appConfirm('Delete wallet?',escHtml(w.label),'Delete');
   if(!ok) return;
   S.onchainWallets=(S.onchainWallets||[]).filter(function(x){ return x.id!==id; });
-  S.onchainWalletsUpdatedAt=stamp();
+  tombstoneItem('onchainWallets',id);
   save(); renderOnchainWallets();
 }
 function copyAddr(a){
@@ -1468,7 +1503,8 @@ async function deleteManualWallet(id){
   if(!ok) return;
   w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
   S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; });
-  S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); populateWalletSelects();
+  tombstoneItem('manualWallets',id);
+  save(); renderWallets(); populateWalletSelects();
 }
 // Reetiqueta las txs y las reglas que apuntaban al nombre viejo. Las txs tocadas
 // llevan updatedAt nuevo para GANAR el merge: sin eso, la copia con el nombre
@@ -1480,7 +1516,7 @@ function renameWalletRefs(oldName,newName){
   var res=renameWalletRefsCore(S.transactions,S.recurring,oldName,newName);
   var ut=stamp();
   if(res.txs.length){ res.txs.forEach(function(t){ t.updatedAt=ut; }); S.transactionsUpdatedAt=ut; }
-  if(res.rules) S.recurringUpdatedAt=ut;
+  if(res.rules.length){ res.rules.forEach(function(r){ r.updatedAt=ut; }); S.recurringUpdatedAt=ut; }
   return res;
 }
 async function renameManualWallet(id){
@@ -1499,11 +1535,11 @@ async function renameManualWallet(id){
   }
   w.name=next;
   renameWalletRefs(old,next);
-  S.manualWalletsUpdatedAt=stamp(); save();
+  touchItem('manualWallets',w); save();
   renderWallets(); populateWalletSelects(); renderTx(); renderSummary();
 }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
@@ -1539,7 +1575,7 @@ async function settleTracker(id,sube){
   save(); renderWallets(); renderSummary(); renderTx();
   showTxToast();
 }
-async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · accepts sums (1000+2500)',cur,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; S.manualWalletsUpdatedAt=stamp(); save(); renderWallets(); renderSummary(); }
+async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · accepts sums (1000+2500)',cur,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
 window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
 
@@ -2372,9 +2408,10 @@ function applyRecurring(){
   // Repara txs recurrentes ya generadas que quedaron sin wallet: sin esto nunca
   // se debitan del tracker aunque despues arregles la regla.
   var fixedW=backfillRecurringTxWallets(S.recurring,S.transactions);
-  var now=new Date(), added=[], deleted=new Set((S.deletedTxIds||[]).map(tombId));
+  var now=new Date(), added=[], touched=[], deleted=new Set((S.deletedTxIds||[]).map(tombId));
   S.recurring.forEach(function(r){
     if(!r.amount||r.amount<=0||!r.dayOfMonth) return;
+    var lastRunPrev=r.lastRun;
     dueMonths(r, now).forEach(function(d){
       var cur=r.currency||'USD', amtUSD=r.amount, amtVES=null, rateUsed=null;
       if(cur==='VES'){ var _vr=vesTxRate(); if(!_vr) return; amtVES=r.amount; amtUSD=vesToUsd(r.amount,_vr); rateUsed=_vr; var _rs=vesTxRateSrc(); } else { var _rs=null; }
@@ -2393,15 +2430,22 @@ function applyRecurring(){
       r.lastRun=d.ym;
       added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
     });
+    // lastRun avanza tambien cuando la tx ya existia o estaba borrada. Sin marcar
+    // la regla (y sin guardar), ese avance se perdia: el proximo boot volvia a
+    // recorrer el mismo mes, y la copia vieja de otro dispositivo lo revertia.
+    if(r.lastRun!==lastRunPrev) touched.push(r);
   });
-  if(added.length||fixedW.length){
+  if(added.length||fixedW.length||touched.length){
     var ut=stamp();
     S.transactionsUpdatedAt=ut;
     // updatedAt nuevo en las reparadas: asi el merge propaga el arreglo al resto
     // de los dispositivos en vez de que una copia vieja sin wallet lo revierta.
     fixedW.forEach(function(t){ t.updatedAt=ut; });
-    if(added.length){
+    if(touched.length){
+      touched.forEach(function(r){ r.updatedAt=ut; });
       S.recurringUpdatedAt=ut;
+    }
+    if(added.length){
       if(!Array.isArray(S.recurringLog)) S.recurringLog=[];
       added.forEach(function(a){ S.recurringLog.unshift(a); });
       S.recurringLog=S.recurringLog.slice(0,30);
@@ -2522,11 +2566,11 @@ window.addRecurringRule=function(){
     amount:amount};
   if(_editingRecId){
     var r=S.recurring.find(function(x){ return x.id===_editingRecId; });
-    if(r) Object.assign(r,fields); // conserva id, lastRun -> no re-agrega tx ya creadas
+    if(r){ Object.assign(r,fields); touchItem('recurring',r); } // conserva id, lastRun -> no re-agrega tx ya creadas
     cancelEditRecurring();
     txMsg('Rule updated ✓',true);
   }else{
-    S.recurring.push(Object.assign({id:Date.now(),lastRun:null},fields));
+    S.recurring.push(Object.assign({id:Date.now(),lastRun:null,updatedAt:stamp()},fields));
     document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value=''; document.getElementById('tx-rec-day').value='';
     txMsg('Rule created ✓',true);
   }
@@ -2539,7 +2583,7 @@ window.deleteRecurringRule=async function(id){
   var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
   var ok=await appConfirm('Delete recurring rule?',escHtml(r.label)+' <span style="color:'+(r.type==='Credit'?'#5DCAA5':'#E24B4A')+'">'+amt+'</span>','Delete');
   if(!ok) return;
-  S.recurring=(S.recurring||[]).filter(function(x){ return x.id!==id; }); S.recurringUpdatedAt=stamp();
+  S.recurring=(S.recurring||[]).filter(function(x){ return x.id!==id; }); tombstoneItem('recurring',id);
   // limpia las entradas del log que pertenecen a esta regla (por rid)
   if(Array.isArray(S.recurringLog)){
     var before=S.recurringLog.length;
@@ -3529,7 +3573,7 @@ function saveManualWallet(){
     obj.balance=parseFloat(((_old.balance||0)-txSum).toFixed(2));
   }
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
-  S.manualWalletsUpdatedAt=stamp();
+  touchItem('manualWallets',idx>=0?S.manualWallets[idx]:obj);
   closeWalletForm();
   save(); renderWallets(); populateWalletSelects();
 }
@@ -3616,10 +3660,11 @@ function stripExchangeSecrets(){
     if(w.key||w.secret||w.passphrase){
       xkSet(w.id,{key:w.key||'',secret:w.secret||'',passphrase:w.passphrase||''});
       delete w.key; delete w.secret; delete w.passphrase;
+      touchItem('exchangeWallets',w);
       dirty=true;
     }
   });
-  if(dirty){ S.exchangeWalletsUpdatedAt=stamp(); save(); }
+  if(dirty) save();
 }
 function canFetchExchanges(){ return !!sbGet('sb_at'); }
 function exchangeProxyHeaders(){
@@ -3659,7 +3704,7 @@ async function fetchExchangeWallet(w){
     }
   }
   w.updated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); w.fetchedAt=Date.now();
-  S.exchangeWalletsUpdatedAt=stamp(); save();
+  touchItem('exchangeWallets',w); save();
   return w.balance;
 }
 // Logo automatico por nombre: si el nombre contiene binance/bybit/okx/trezor/etc,
@@ -3694,10 +3739,10 @@ function migrateExchangeWallets(){
   if(!S.exchangeWallets) S.exchangeWallets=[];
   var has=function(n){ return S.exchangeWallets.some(function(w){ return w.name===n; }); };
   if(S.trezorAddress&&/^0x[0-9a-fA-F]{40}$/.test(S.trezorAddress.trim())&&!has('Trezor')){
-    S.exchangeWallets.push({id:Date.now(),name:'Trezor',type:'bsc',address:S.trezorAddress.trim(),balance:S.trezorBalance,updated:S.trezorUpdated,fetchedAt:null});
+    S.exchangeWallets.push({id:Date.now(),name:'Trezor',type:'bsc',address:S.trezorAddress.trim(),balance:S.trezorBalance,updated:S.trezorUpdated,fetchedAt:null,updatedAt:stamp()});
   }
   if((S.bibiBinanceKey&&S.bibiBinanceSecret)&&!has('Bibi')){
-    S.exchangeWallets.push({id:Date.now()+1,name:'Bibi',type:'binance',key:S.bibiBinanceKey,secret:S.bibiBinanceSecret,balance:S.bibiBinanceBalance,updated:S.bibiBinanceUpdated,fetchedAt:null});
+    S.exchangeWallets.push({id:Date.now()+1,name:'Bibi',type:'binance',key:S.bibiBinanceKey,secret:S.bibiBinanceSecret,balance:S.bibiBinanceBalance,updated:S.bibiBinanceUpdated,fetchedAt:null,updatedAt:stamp()});
   }
   S.exchangeMigrated=1; S.exchangeWalletsUpdatedAt=stamp(); save();
 }
@@ -3732,7 +3777,7 @@ window.addExchangeWallet=async function(){
     xkSet(w.id,{key:_k,secret:_s,passphrase:_p});
   }
   if(!S.exchangeWallets) S.exchangeWallets=[];
-  S.exchangeWallets.push(w); S.exchangeWalletsUpdatedAt=stamp(); save();
+  S.exchangeWallets.push(w); touchItem('exchangeWallets',w); save();
   renderWallets(); renderSummary();
   closeExchangeForm(); // cierre rapido; el balance aparece en la fila al resolver el fetch
   try{ await fetchExchangeWallet(w); }catch(e){ /* balance queda en — hasta el proximo refresh */ }
@@ -3742,7 +3787,7 @@ window.removeExchangeWallet=async function(id){
   if(!await appConfirm('Delete this exchange wallet?','Its keys are removed from this device.','Delete')) return;
   S.exchangeWallets=(S.exchangeWallets||[]).filter(function(w){ return w.id!==id; });
   xkDel(id);
-  S.exchangeWalletsUpdatedAt=stamp(); save();
+  tombstoneItem('exchangeWallets',id); save();
   renderWallets(); renderSummary();
 };
 // (Re)ingresar las keys en ESTE dispositivo para un wallet ya sincronizado
@@ -4542,7 +4587,7 @@ var MIGRATIONS=[
     if(zTx.length){
       if(!S.manualWallets.some(function(w){ return w.name==='Emily'; })){
         S.manualWallets.push({id:Date.now(),name:'Emily',trackerOnly:true,balance:0,balanceOverride:null});
-        S.manualWalletsUpdatedAt=stamp();
+        touchItem('manualWallets',S.manualWallets[S.manualWallets.length-1]);
       }
       zTx.forEach(function(t){ if(t.wallet==='Zelle') t.wallet='Emily'; if(t.category==='Emily') t.category=''; t.updatedAt=stamp(); });
       S.transactionsUpdatedAt=stamp();
@@ -4562,16 +4607,14 @@ var MIGRATIONS=[
   { v:3, fn:function(){ // balanceOverride congelado → rebase a base viva
     var frozen=S.manualWallets.filter(function(w){ return w.trackerOnly&&w.balanceOverride!=null; });
     if(!frozen.length) return;
-    frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; });
-    S.manualWalletsUpdatedAt=stamp();
+    frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; touchItem('manualWallets',w); });
   }},
   // De aca para abajo, SIEMPRE append: runMigrations referencia MIGRATIONS[2] (la
   // v3, que corre en cada boot) por indice, y toma la ultima entrada como version
   // vigente. Insertar en el medio rompe las dos cosas.
   { v:4, fn:function(){ // owed:true → debt:'out' (el flag paso a tener tres estados)
     var hit=S.manualWallets.filter(function(w){ return w.owed===true; });
-    S.manualWallets.forEach(function(w){ if('owed' in w){ if(w.owed===true) w.debt='out'; delete w.owed; } });
-    if(hit.length) S.manualWalletsUpdatedAt=stamp();
+    S.manualWallets.forEach(function(w){ if('owed' in w){ if(w.owed===true) w.debt='out'; delete w.owed; touchItem('manualWallets',w); } });
   }},
   { v:5, fn:function(){ // rollover plano (valia para todos los meses) → por mes
     var next=migrateRolloverCore(S.rolloverCats,BUDGET_CATS,monthKey(new Date()));

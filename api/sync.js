@@ -54,37 +54,67 @@ export function mergeTxArrays(incomingTxs, cloudTxs, tombs) {
   return merged;
 }
 
-// ── Snapshots: merge por-item por FECHA (espejo de src/sync-core.js) ────────
-// La lista entera ya no se reemplaza por un solo LWW de campo: dos dispositivos
-// que anotan un snapshot cada uno offline conservan los dos. La clave es la fecha
-// (la app garantiza uno por dia; el id es Date.now y difiere entre dispositivos).
-export function snapKey(s) { return s && s.date; }
-export function backfillSnapUpdatedAt(snaps) {
-  (snaps || []).forEach(function (s) { if (s && s.updatedAt == null) s.updatedAt = s.id || 0; });
-  return snaps;
+// ── Merge por-item generico (espejo de src/sync-core.js) ────────────────────
+// Las listas ya no se reemplazan enteras por un solo LWW de campo: se unen item
+// por item, asi lo que un dispositivo agrego sin conexion no desaparece porque su
+// copia de la lista tenia la marca mas vieja.
+export function itemId(x) { return x && x.id; }
+export function snapKey(s) { return s && s.date; }   // un snapshot se identifica por su FECHA
+export function backfillUpdatedAt(items) {
+  (items || []).forEach(function (x) { if (x && x.updatedAt == null) x.updatedAt = x.id || 0; });
+  return items;
 }
-export function mergeSnapArrays(incomingSnaps, cloudSnaps, tombs) {
+export function mergeByKey(incomingItems, cloudItems, tombs, keyOf) {
   var tm = {};
   (tombs || []).forEach(function (e) { tm[tombId(e)] = e; });
   var order = [], by = {};
-  function put(s, isCloud) {
-    var k = snapKey(s);
-    if (!k) return;
+  function put(it, isCloud) {
+    var k = keyOf(it);
+    if (k === undefined || k === null || k === '') return;
     var cur = by[k];
-    if (cur === undefined) { by[k] = s; order.push(k); return; }
-    var x = s.updatedAt || 0, y = cur.updatedAt || 0;
-    if (x > y || (x === y && isCloud)) by[k] = s;
+    if (cur === undefined) { by[k] = it; order.push(k); return; }
+    var x = it.updatedAt || 0, y = cur.updatedAt || 0;
+    if (x > y || (x === y && isCloud)) by[k] = it;
   }
-  (incomingSnaps || []).forEach(function (s) { put(s, false); });
-  (cloudSnaps || []).forEach(function (s) { put(s, true); });
+  (incomingItems || []).forEach(function (it) { if (it) put(it, false); });
+  (cloudItems || []).forEach(function (it) { if (it) put(it, true); });
   return order.map(function (k) { return by[k]; })
-    .filter(function (s) { var e = tm[snapKey(s)]; return !(e !== undefined && tombKills(e, s)); });
+    .filter(function (it) { var e = tm[keyOf(it)]; return !(e !== undefined && tombKills(e, it)); });
 }
-export function pruneRevokedSnapTombs(tombs, snaps) {
+export function pruneRevokedByKey(tombs, items, keyOf) {
   var live = {};
-  (snaps || []).forEach(function (s) { live[snapKey(s)] = 1; });
+  (items || []).forEach(function (x) { live[keyOf(x)] = 1; });
   return (tombs || []).filter(function (e) { return !live[tombId(e)]; });
 }
+// Dos dispositivos que crean la misma wallet generan ids distintos para la misma
+// cosa; dejar las dos filas duplica su saldo en el patrimonio. Se colapsan por su
+// clave natural (nombre, o direccion en las on-chain): gana el updatedAt mas alto
+// y, ante empate, el id mas chico — mismo resultado que en el cliente.
+export function walletNameKey(w) { return String((w && w.name != null) ? w.name : '').trim().toLowerCase(); }
+export function onchainAddrKey(w) { return String((w && w.address != null) ? w.address : '').trim().toLowerCase(); }
+export function dedupeByNaturalKey(items, keyOf) {
+  var by = {}, order = [];
+  (items || []).forEach(function (it) {
+    if (!it) return;
+    var k = keyOf(it);
+    if (!k) { order.push(it); return; }
+    if (by[k] === undefined) { by[k] = it; order.push(k); return; }
+    var a = it.updatedAt || 0, b = by[k].updatedAt || 0;
+    if (a > b || (a === b && (it.id || 0) < (by[k].id || 0))) by[k] = it;
+  });
+  return order.map(function (k) { return typeof k === 'string' ? by[k] : k; });
+}
+
+// Listas que se mergean por item, con su lista de tombstones y como se colapsan
+// los duplicados. El cliente tiene la MISMA tabla (PER_ITEM_LISTS en main.js): si
+// agregas una lista alla, agregala aca.
+const ITEM_LISTS = [
+  { field: 'snapshots', tomb: 'deletedSnapDates', key: snapKey, dedupe: null },
+  { field: 'manualWallets', tomb: 'deletedWalletIds', key: itemId, dedupe: walletNameKey },
+  { field: 'exchangeWallets', tomb: 'deletedExchangeIds', key: itemId, dedupe: walletNameKey },
+  { field: 'onchainWallets', tomb: 'deletedOnchainIds', key: itemId, dedupe: onchainAddrKey },
+  { field: 'recurring', tomb: 'deletedRuleIds', key: itemId, dedupe: null },
+];
 
 // Authoritative server-side merge: `incoming` (the client POST) overlays `cloud`.
 // Untimestamped fields take the incoming value (preserves prior whole-blob behavior).
@@ -104,15 +134,21 @@ export function mergeDocs(cloud, incoming) {
   out.deletedTxIds = pruneRevokedTombstones(tombs, out.transactions);
   out.transactionsUpdatedAt = Math.max(incoming.transactionsUpdatedAt || 0, cloud.transactionsUpdatedAt || 0) || null;
 
-  // snapshots: merge por-item por fecha + tombstones revocables (mismo TTL)
-  var snapTombs = mergeTombstones(incoming.deletedSnapDates, cloud.deletedSnapDates)
-    .filter(function (e) { var t = (e && typeof e === 'object') ? e.ts : e; return (parseInt(t, 10) || 0) > tombCut; });
-  out.snapshots = mergeSnapArrays(
-    backfillSnapUpdatedAt(incoming.snapshots || []),
-    backfillSnapUpdatedAt(cloud.snapshots || []),
-    snapTombs);
-  out.deletedSnapDates = pruneRevokedSnapTombs(snapTombs, out.snapshots);
-  out.snapshotsUpdatedAt = Math.max(incoming.snapshotsUpdatedAt || 0, cloud.snapshotsUpdatedAt || 0) || null;
+  // El resto de las listas por-item, con tombstones revocables y el mismo TTL.
+  ITEM_LISTS.forEach(function (L) {
+    var ts = L.field + 'UpdatedAt';
+    if (incoming[L.field] === undefined && cloud[L.field] === undefined) return;
+    var tombs = mergeTombstones(incoming[L.tomb], cloud[L.tomb])
+      .filter(function (e) { var t = (e && typeof e === 'object') ? e.ts : e; return (parseInt(t, 10) || 0) > tombCut; });
+    var merged = mergeByKey(
+      backfillUpdatedAt(incoming[L.field] || []),
+      backfillUpdatedAt(cloud[L.field] || []),
+      tombs, L.key);
+    if (L.dedupe) merged = dedupeByNaturalKey(merged, L.dedupe);
+    out[L.field] = merged;
+    out[L.tomb] = pruneRevokedByKey(tombs, merged, L.key);
+    out[ts] = Math.max(incoming[ts] || 0, cloud[ts] || 0) || null;
+  });
 
   // Generic last-writer-wins by convention: ANY field with a sibling
   // "<field>UpdatedAt" timestamp participates automatically. Keep whichever side
@@ -124,7 +160,7 @@ export function mergeDocs(cloud, incoming) {
     var m = /^(.+)UpdatedAt$/.exec(k);
     if (!m) return;
     var key = m[1];
-    if (key === 'transactions' || key === 'snapshots' || seen[key]) return;
+    if (key === 'transactions' || ITEM_LISTS.some(function (L) { return L.field === key; }) || seen[key]) return;
     seen[key] = 1;
     var ts = key + 'UpdatedAt';
     var cloudTs = cloud[ts] || 0, incTs = incoming[ts] || 0;

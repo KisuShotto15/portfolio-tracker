@@ -16,12 +16,12 @@ describe('mergeDocs: createdAt de una tx es inmutable', () => {
 });
 
 describe('mergeDocs LWW generico por convencion', () => {
-  it('un device viejo NO pisa recurring mas nuevo de la nube', () => {
-    const cloud = { recurring: [{ id: 1 }, { id: 2 }], recurringUpdatedAt: 100 };
-    const stale = { recurring: [{ id: 1 }], recurringUpdatedAt: 50 };
+  it('un device viejo NO pisa una lista LWW mas nueva de la nube', () => {
+    const cloud = { notePins: ['a', 'b'], notePinsUpdatedAt: 100 };
+    const stale = { notePins: ['a'], notePinsUpdatedAt: 50 };
     const out = mergeDocs(cloud, stale);
-    expect(out.recurring).toEqual([{ id: 1 }, { id: 2 }]);
-    expect(out.recurringUpdatedAt).toBe(100);
+    expect(out.notePins).toEqual(['a', 'b']);
+    expect(out.notePinsUpdatedAt).toBe(100);
   });
 
   it('un edit mas nuevo del device gana sobre la nube', () => {
@@ -147,5 +147,95 @@ describe('mergeDocs: snapshots se mergean por item (F2)', () => {
     const out = mergeDocs(cloud, inc);
     expect(out.snapshots).toHaveLength(1);
     expect(out.deletedSnapDates).toEqual([]);
+  });
+});
+
+describe('mergeDocs: wallets y reglas recurrentes por item', () => {
+  it('la wallet que creo un device offline ya no la borra el push del otro', () => {
+    const cloud = { manualWallets: [{ id: 1, name: 'Zinli', balance: 100, updatedAt: 200 }], manualWalletsUpdatedAt: 200 };
+    const stale = {
+      manualWallets: [{ id: 1, name: 'Zinli', balance: 100, updatedAt: 200 }, { id: 2, name: 'Ahorros', balance: 50, updatedAt: 150 }],
+      manualWalletsUpdatedAt: 150,
+    };
+    const out = mergeDocs(cloud, stale);
+    expect(out.manualWallets.map((w) => w.name)).toEqual(['Zinli', 'Ahorros']);
+  });
+
+  it('la MISMA wallet creada en dos devices se colapsa en una (si no, duplica el patrimonio)', () => {
+    // Ids distintos (Date.now de cada uno) para la misma wallet: dos filas tracker
+    // con el mismo nombre suman las mismas txs dos veces.
+    const cloud = { manualWallets: [{ id: 111, name: 'Ahorros', trackerOnly: true, balance: 0, updatedAt: 10 }] };
+    const inc = { manualWallets: [{ id: 222, name: 'ahorros', trackerOnly: true, balance: 0, updatedAt: 20 }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.manualWallets).toHaveLength(1);
+    expect(out.manualWallets[0].id).toBe(222);
+  });
+
+  it('renombrar en un device no parte la wallet en dos', () => {
+    const cloud = { manualWallets: [{ id: 1, name: 'Emily', updatedAt: 10 }] };
+    const inc = { manualWallets: [{ id: 1, name: 'Emily M', updatedAt: 20 }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.manualWallets).toEqual([{ id: 1, name: 'Emily M', updatedAt: 20 }]);
+  });
+
+  it('borrar una wallet viaja y no revive', () => {
+    const borrado = Date.now();
+    const cloud = { manualWallets: [{ id: 1, name: 'Zinli', updatedAt: borrado - 1000 }] };
+    const inc = { manualWallets: [], deletedWalletIds: [{ id: 1, ts: borrado }] };
+    expect(mergeDocs(cloud, inc).manualWallets).toEqual([]);
+  });
+
+  it('editar el monto de una regla no borra la regla que creo el otro device', () => {
+    const cloud = {
+      recurring: [{ id: 1, label: 'Netflix', amount: 12, updatedAt: 100 }, { id: 2, label: 'Gym', amount: 30, updatedAt: 100 }],
+      recurringUpdatedAt: 100,
+    };
+    const stale = { recurring: [{ id: 1, label: 'Netflix', amount: 15, updatedAt: 300 }], recurringUpdatedAt: 300 };
+    const out = mergeDocs(cloud, stale);
+    expect(out.recurring.map((r) => r.id)).toEqual([1, 2]);
+    expect(out.recurring.find((r) => r.id === 1).amount).toBe(15);
+  });
+
+  it('lastRun mas nuevo gana: la regla no se re-ejecuta por una copia vieja', () => {
+    const cloud = { recurring: [{ id: 1, lastRun: '2026-09', updatedAt: 300 }] };
+    const inc = { recurring: [{ id: 1, lastRun: '2026-08', updatedAt: 100 }] };
+    expect(mergeDocs(cloud, inc).recurring[0].lastRun).toBe('2026-09');
+  });
+
+  it('borrar una regla viaja y no revive', () => {
+    const borrado = Date.now();
+    const cloud = { recurring: [{ id: 1, label: 'Netflix', updatedAt: borrado - 1000 }] };
+    const inc = { recurring: [], deletedRuleIds: [{ id: 1, ts: borrado }] };
+    expect(mergeDocs(cloud, inc).recurring).toEqual([]);
+  });
+
+  it('las wallets de exchange y on-chain tambien se mergean por item', () => {
+    const cloud = {
+      exchangeWallets: [{ id: 1, name: 'Binance', balance: 500, updatedAt: 200 }], exchangeWalletsUpdatedAt: 200,
+      onchainWallets: [{ id: 1, label: 'Trezor', address: '0xAA', updatedAt: 200 }], onchainWalletsUpdatedAt: 200,
+    };
+    const stale = {
+      exchangeWallets: [{ id: 1, name: 'Binance', balance: 500, updatedAt: 200 }, { id: 2, name: 'OKX', balance: 20, updatedAt: 5 }],
+      exchangeWalletsUpdatedAt: 5,
+      onchainWallets: [{ id: 1, label: 'Trezor', address: '0xAA', updatedAt: 200 }, { id: 2, label: 'Fria', address: '0xBB', updatedAt: 5 }],
+      onchainWalletsUpdatedAt: 5,
+    };
+    const out = mergeDocs(cloud, stale);
+    expect(out.exchangeWallets.map((w) => w.name)).toEqual(['Binance', 'OKX']);
+    expect(out.onchainWallets.map((w) => w.label)).toEqual(['Trezor', 'Fria']);
+  });
+
+  it('la misma direccion on-chain cargada en dos devices queda una sola vez', () => {
+    const cloud = { onchainWallets: [{ id: 1, label: 'Trezor', address: '0xAA', updatedAt: 10 }] };
+    const inc = { onchainWallets: [{ id: 2, label: 'Fria', address: '0xaa', updatedAt: 20 }] };
+    const out = mergeDocs(cloud, inc);
+    expect(out.onchainWallets).toHaveLength(1);
+    expect(out.onchainWallets[0].label).toBe('Fria');
+  });
+
+  it('una lista que el cliente no mando no se pierde', () => {
+    const cloud = { manualWallets: [{ id: 1, name: 'Zinli', updatedAt: 10 }], manualWalletsUpdatedAt: 10 };
+    const out = mergeDocs(cloud, { dashGoal: 5, dashGoalUpdatedAt: 1 });
+    expect(out.manualWallets.map((w) => w.name)).toEqual(['Zinli']);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -302,13 +302,13 @@ describe('renameWalletRefsCore', () => {
   it('reetiqueta tambien las reglas recurrentes', () => {
     const rules = [{ id: 1, wallet: 'Emily' }, { id: 2, wallet: 'Cash' }];
     const res = renameWalletRefsCore([], rules, 'Emily', 'Emily M');
-    expect(res.rules).toBe(1);
+    expect(res.rules).toEqual([{ id: 1, wallet: 'Emily M' }]);
     expect(rules.map((r) => r.wallet)).toEqual(['Emily M', 'Cash']);
   });
 
   it('no toca nada si el nombre no cambia', () => {
     const txs = [{ id: 1, wallet: 'Emily' }];
-    expect(renameWalletRefsCore(txs, [], 'Emily', 'Emily')).toEqual({ txs: [], rules: 0 });
+    expect(renameWalletRefsCore(txs, [], 'Emily', 'Emily')).toEqual({ txs: [], rules: [] });
     expect(txs[0].wallet).toBe('Emily');
   });
 
@@ -320,14 +320,14 @@ describe('renameWalletRefsCore', () => {
 
   it('ignora nombres vacios en cualquiera de los dos lados', () => {
     const txs = [{ id: 1, wallet: '' }, { id: 2, wallet: 'Emily' }];
-    expect(renameWalletRefsCore(txs, [], '', 'Emily M')).toEqual({ txs: [], rules: 0 });
-    expect(renameWalletRefsCore(txs, [], 'Emily', '')).toEqual({ txs: [], rules: 0 });
+    expect(renameWalletRefsCore(txs, [], '', 'Emily M')).toEqual({ txs: [], rules: [] });
+    expect(renameWalletRefsCore(txs, [], 'Emily', '')).toEqual({ txs: [], rules: [] });
     expect(txs[1].wallet).toBe('Emily');
   });
 
   it('aguanta listas nulas y entradas nulas', () => {
-    expect(renameWalletRefsCore(null, null, 'A', 'B')).toEqual({ txs: [], rules: 0 });
-    expect(renameWalletRefsCore([null, undefined], [null], 'A', 'B')).toEqual({ txs: [], rules: 0 });
+    expect(renameWalletRefsCore(null, null, 'A', 'B')).toEqual({ txs: [], rules: [] });
+    expect(renameWalletRefsCore([null, undefined], [null], 'A', 'B')).toEqual({ txs: [], rules: [] });
   });
 
   it('el saldo del tracker sobrevive el renombre', () => {
@@ -425,5 +425,88 @@ describe('backfillSnapUpdatedAt', () => {
   it('snapKey es la fecha', () => {
     expect(snapKey({ id: 1, date: '2026-01-05' })).toBe('2026-01-05');
     expect(snapKey(null)).toBeFalsy();
+  });
+});
+
+describe('mergeByKey (merge por-item de wallets y reglas)', () => {
+  it('EL BUG: lo que agrego el device offline ya no lo borra la lista del otro', () => {
+    const nube = [{ id: 1, name: 'Zinli', updatedAt: 200 }];
+    const tel = [{ id: 1, name: 'Zinli', updatedAt: 200 }, { id: 2, name: 'Ahorros', updatedAt: 150 }];
+    expect(mergeByKey(tel, nube, [], itemId).map((w) => w.name)).toEqual(['Zinli', 'Ahorros']);
+  });
+
+  it('la edicion mas nueva gana item por item', () => {
+    const local = [{ id: 1, amount: 15, updatedAt: 300 }];
+    const nube = [{ id: 1, amount: 12, updatedAt: 100 }, { id: 2, amount: 30, updatedAt: 100 }];
+    const out = mergeByKey(local, nube, [], itemId);
+    expect(out.find((r) => r.id === 1).amount).toBe(15);
+    expect(out.find((r) => r.id === 2).amount).toBe(30);
+  });
+
+  it('empate: gana la nube', () => {
+    const out = mergeByKey([{ id: 1, v: 'local', updatedAt: 10 }], [{ id: 1, v: 'nube', updatedAt: 10 }], [], itemId);
+    expect(out[0].v).toBe('nube');
+  });
+
+  it('el tombstone mata al item que sigue vivo del otro lado', () => {
+    const out = mergeByKey([], [{ id: 1, updatedAt: 100 }], [{ id: 1, ts: 150 }], itemId);
+    expect(out).toEqual([]);
+  });
+
+  it('pero no al que se volvio a crear despues del borrado', () => {
+    const out = mergeByKey([{ id: 1, updatedAt: 200 }], [], [{ id: 1, ts: 150 }], itemId);
+    expect(out).toHaveLength(1);
+  });
+
+  it('el tombstone revocado se descarta', () => {
+    const tombs = [{ id: 1, ts: 150 }, { id: 2, ts: 150 }];
+    expect(pruneRevokedByKey(tombs, [{ id: 1, updatedAt: 200 }], itemId)).toEqual([{ id: 2, ts: 150 }]);
+  });
+
+  it('aguanta listas nulas y entradas sin clave', () => {
+    expect(mergeByKey(null, null, null, itemId)).toEqual([]);
+    expect(mergeByKey([null, {}], [], [], itemId)).toEqual([]);
+  });
+
+  it('backfillUpdatedAt congela el updatedAt en el id', () => {
+    const items = [{ id: 1700 }, { id: 1800, updatedAt: 5 }];
+    expect(backfillUpdatedAt(items)).toBe(1);
+    expect(items[0].updatedAt).toBe(1700);
+    expect(items[1].updatedAt).toBe(5);
+  });
+});
+
+describe('dedupeByNaturalKey (misma wallet creada en dos dispositivos)', () => {
+  it('dos ids distintos con el mismo nombre quedan en UNA fila', () => {
+    // Si no, dos trackers con el mismo nombre suman las MISMAS txs: el patrimonio
+    // se duplica sin que nada lo avise.
+    const ws = [{ id: 111, name: 'Ahorros', updatedAt: 10 }, { id: 222, name: 'ahorros', updatedAt: 20 }];
+    const out = dedupeByNaturalKey(ws, walletNameKey);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe(222);
+  });
+
+  it('empate de updatedAt: gana el id mas chico, igual en cliente y servidor', () => {
+    const a = [{ id: 111, name: 'A', updatedAt: 10 }, { id: 222, name: 'a', updatedAt: 10 }];
+    const b = [{ id: 222, name: 'a', updatedAt: 10 }, { id: 111, name: 'A', updatedAt: 10 }];
+    expect(dedupeByNaturalKey(a, walletNameKey)[0].id).toBe(111);
+    expect(dedupeByNaturalKey(b, walletNameKey)[0].id).toBe(111);   // no depende del orden
+  });
+
+  it('nombres distintos no se tocan y se respeta el orden', () => {
+    const ws = [{ id: 1, name: 'Zinli' }, { id: 2, name: 'Efectivo' }, { id: 3, name: 'Emily' }];
+    expect(dedupeByNaturalKey(ws, walletNameKey).map((w) => w.name)).toEqual(['Zinli', 'Efectivo', 'Emily']);
+  });
+
+  it('una wallet sin nombre no colapsa contra otra sin nombre', () => {
+    const ws = [{ id: 1 }, { id: 2, name: '' }];
+    expect(dedupeByNaturalKey(ws, walletNameKey)).toHaveLength(2);
+  });
+
+  it('las on-chain se colapsan por direccion, no por etiqueta', () => {
+    const ws = [{ id: 1, label: 'Trezor', address: '0xAA', updatedAt: 10 }, { id: 2, label: 'Fria', address: '0xaa', updatedAt: 20 }];
+    const out = dedupeByNaturalKey(ws, onchainAddrKey);
+    expect(out).toHaveLength(1);
+    expect(out[0].label).toBe('Fria');
   });
 });

@@ -1652,6 +1652,98 @@ await boot();
 f29 = await fechasLocal();
 check('y tras recargar sigue borrado', !f29.includes(snapB) && f29.includes(snapA), JSON.stringify(f29));
 
+// ── escenario 30: wallets y reglas creadas en dos dispositivos (F2) ─────────
+console.log('E2E wallets y reglas — merge por-item entre dispositivos');
+const mesHoy30 = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+// La compu ya subio Zinli y la regla de Netflix (marca alta). El telefono, sin
+// conexion, tiene ademas Ahorros y la regla del Gym (marca baja): antes su lista
+// entera perdia el LWW de campo y las dos cosas desaparecian sin aviso.
+// lastRun en el mes en curso: la regla no dispara txs durante el test.
+const reglaNet = { id: 9101, label: 'Netflix', dayOfMonth: 5, wallet: 'Zinli', type: 'Debit', category: 'Subscriptions', currency: 'USD', amount: 12, lastRun: mesHoy30, updatedAt: 9101 };
+const reglaGym = { id: 9102, label: 'Gym', dayOfMonth: 7, wallet: 'Zinli', type: 'Debit', category: 'Health', currency: 'USD', amount: 30, lastRun: mesHoy30, updatedAt: 9102 };
+cloudDoc = {
+  transactions: [], deletedTxIds: [], snapshots: [],
+  manualWallets: [{ id: 8801, name: 'Zinli', trackerOnly: false, balance: 100, updatedAt: 8801 }],
+  manualWalletsUpdatedAt: 90000,
+  recurring: [{ ...reglaNet }],
+  recurringUpdatedAt: 90000,
+};
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  transactions: [], deletedTxIds: [], deletedSnapDates: [], deletedWalletIds: [], deletedRuleIds: [],
+  snapshots: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+  manualWallets: [ { id: 8801, name: 'Zinli', trackerOnly: false, balance: 100, updatedAt: 8801 },
+                   { id: 8802, name: 'Ahorros', trackerOnly: false, balance: 50, updatedAt: 8802 } ],
+  recurring: ${JSON.stringify([reglaNet, reglaGym])},
+  manualWalletsUpdatedAt: 8802, recurringUpdatedAt: 8802, transactionsUpdatedAt: 8802 })))`);
+await boot();
+const nombresLocal = async () => JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).map(function(w){return w.name;}))"));
+const reglasLocal = async () => JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').recurring||[]).map(function(r){return r.label;}))"));
+check('la wallet que el telefono creo offline sobrevive al pull', (await nombresLocal()).includes('Ahorros'), JSON.stringify(await nombresLocal()));
+check('y la de la nube sigue estando', (await nombresLocal()).includes('Zinli'), JSON.stringify(await nombresLocal()));
+check('la regla que creo el telefono tambien sobrevive', (await reglasLocal()).includes('Gym'), JSON.stringify(await reglasLocal()));
+check('y la regla de la nube sigue estando', (await reglasLocal()).includes('Netflix'), JSON.stringify(await reglasLocal()));
+await waitFor(() => (cloudDoc.manualWallets || []).some((w) => w.name === 'Ahorros')
+  && (cloudDoc.recurring || []).some((r) => r.label === 'Gym'), 10000, 150, 'el push de lo que solo tenia el telefono')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('la nube termina con las dos wallets', (cloudDoc.manualWallets || []).length === 2, JSON.stringify((cloudDoc.manualWallets || []).map((w) => w.name)));
+check('y con las dos reglas', (cloudDoc.recurring || []).length === 2, JSON.stringify((cloudDoc.recurring || []).map((r) => r.label)));
+
+// Editar la wallet en un dispositivo no puede borrar la del otro.
+cloudDoc.manualWallets.push({ id: 8803, name: 'Efectivo', trackerOnly: false, balance: 20, updatedAt: 91000 });
+cloudDoc.manualWalletsUpdatedAt = 91000;
+await ev('forcePull()'); await sleep(700);
+const trasPull30 = await nombresLocal();
+check('una wallet nueva del otro dispositivo baja sin pisar las locales',
+  ['Zinli', 'Ahorros', 'Efectivo'].every((n) => trasPull30.includes(n)), JSON.stringify(trasPull30));
+
+// Borrar una wallet tiene que viajar: sin tombstone el proximo pull la resucita.
+await ev("renderWallets()"); await sleep(200);
+await ev(btnFila('Ahorros', 'Delete'));
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar wallet');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
+await sleep(500);
+check('el borrado de la wallet deja tombstone',
+  (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').deletedWalletIds||[]).some(function(e){return e.id===8802;})")) === true,
+  await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').deletedWalletIds||[])"));
+await waitFor(() => !(cloudDoc.manualWallets || []).some((w) => w.name === 'Ahorros'), 10000, 150, 'el push del borrado de la wallet')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('y la nube la borra tambien', !(cloudDoc.manualWallets || []).some((w) => w.name === 'Ahorros'), JSON.stringify((cloudDoc.manualWallets || []).map((w) => w.name)));
+cloudDoc = mergeDocs(cloudDoc, { manualWallets: [{ id: 8802, name: 'Ahorros', balance: 50, updatedAt: 8802 }], manualWalletsUpdatedAt: 8802 });
+check('un push viejo no resucita la wallet borrada', !(cloudDoc.manualWallets || []).some((w) => w.name === 'Ahorros'), JSON.stringify((cloudDoc.manualWallets || []).map((w) => w.name)));
+
+// Lo mismo con una regla recurrente.
+await ev('deleteRecurringRule(9102)');
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar regla');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
+await sleep(500);
+await waitFor(() => !(cloudDoc.recurring || []).some((r) => r.label === 'Gym'), 10000, 150, 'el push del borrado de la regla')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('borrar una regla viaja a la nube', !(cloudDoc.recurring || []).some((r) => r.label === 'Gym'), JSON.stringify((cloudDoc.recurring || []).map((r) => r.label)));
+cloudDoc = mergeDocs(cloudDoc, { recurring: [{ ...reglaGym }], recurringUpdatedAt: 8802 });
+check('y un push viejo no la resucita', !(cloudDoc.recurring || []).some((r) => r.label === 'Gym'), JSON.stringify((cloudDoc.recurring || []).map((r) => r.label)));
+
+// La MISMA wallet creada en los dos dispositivos: dos ids para la misma cosa. Si
+// quedaran las dos filas, un tracker sumaria sus txs dos veces en el patrimonio.
+cloudDoc.manualWallets.push({ id: 7001, name: 'Comun', trackerOnly: true, balance: 0, updatedAt: 92000 });
+cloudDoc.manualWalletsUpdatedAt = 92000;
+await ev("openWalletForm('tracker')"); await sleep(250);
+await ev("document.getElementById('wm-name').value='Comun';document.getElementById('wm-type').value='tracker';saveManualWallet()");
+await sleep(400);
+await waitFor(() => (cloudDoc.manualWallets || []).filter((w) => (w.name || '').toLowerCase() === 'comun').length === 1, 10000, 150, 'el merge de la wallet duplicada')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('la misma wallet creada en dos dispositivos queda como UNA en la nube',
+  (cloudDoc.manualWallets || []).filter((w) => (w.name || '').toLowerCase() === 'comun').length === 1,
+  JSON.stringify((cloudDoc.manualWallets || []).map((w) => w.name)));
+await ev('forcePull()'); await sleep(700);
+check('y como una sola en el dispositivo',
+  (await nombresLocal()).filter((n) => (n || '').toLowerCase() === 'comun').length === 1, JSON.stringify(await nombresLocal()));
+
+await boot();
+const finalNombres = await nombresLocal(), finalReglas = await reglasLocal();
+check('tras recargar: la wallet borrada sigue borrada', !finalNombres.includes('Ahorros'), JSON.stringify(finalNombres));
+check('la regla borrada sigue borrada', !finalReglas.includes('Gym'), JSON.stringify(finalReglas));
+check('y lo que no se borro sigue ahi', finalNombres.includes('Zinli') && finalReglas.includes('Netflix'), JSON.stringify([finalNombres, finalReglas]));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
