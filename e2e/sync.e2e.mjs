@@ -1914,6 +1914,38 @@ await sleep(500);
 sh33 = await snapHoy33();
 check('un income real sigue saliendo entero (650)', sh33 && sh33.derivedIncome === 650, JSON.stringify(sh33));
 
+// ── escenario 34: borrar un snapshot recalcula el income del siguiente (F6) ─
+// El recalculo existia y funcionaba, pero solo al EDITAR. Al borrar no se
+// llamaba: el snapshot siguiente conservaba un income calculado contra uno que ya
+// no existe, y el ingreso que vivia en el borrado desaparecia del acumulado.
+console.log('E2E borrar un snapshot — el siguiente se recalcula');
+cloudDoc = {};
+const sA34 = finMes(3), sB34 = finMes(2), sC34 = finMes(1);
+const id34 = (d) => Date.parse(d + 'T23:59:59');
+// Sin transacciones: el income derivado es la pura variacion de patrimonio.
+// A=1000, B=1500 (deriva 500), C=2000 (deriva 500 contra B).
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  transactions: [], deletedTxIds: [], deletedSnapDates: [], recurring: [], recurringLog: [],
+  manualWallets: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+  snapshots: [ { id: ${id34(sA34)}, date: '${sA34}', total: 1000, updatedAt: ${id34(sA34)} },
+               { id: ${id34(sB34)}, date: '${sB34}', total: 1500, derivedIncome: 500, updatedAt: ${id34(sB34)} },
+               { id: ${id34(sC34)}, date: '${sC34}', total: 2000, derivedIncome: 500, updatedAt: ${id34(sC34)} } ],
+  snapshotsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+const der34 = async (fecha) => JSON.parse(await ev(`(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).find(function(x){return x.date==='${fecha}';});return JSON.stringify(s?s.derivedIncome:null);})()`));
+check('antes de borrar, el del medio deriva 500', (await der34(sB34)) === 500, String(await der34(sB34)));
+
+await ev(`deleteSnapshot(${id34(sB34)})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar snapshot');
+const aviso34 = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m[m.length-1].querySelector('.modal-info').textContent;})()");
+check('el confirm avisa que se recalcula el siguiente', /income derived for/.test(aviso34) && aviso34.indexOf(sC34) >= 0, aviso34);
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
+await sleep(500);
+
+check('el snapshot del medio se fue', (await der34(sB34)) === null, String(await der34(sB34)));
+// Ahora el periodo del ultimo va de A a C: 2000 - 1000 = 1000, no los 500 viejos.
+check('y el siguiente recalcula su income sobre el periodo largo', (await der34(sC34)) === 1000, String(await der34(sC34)));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

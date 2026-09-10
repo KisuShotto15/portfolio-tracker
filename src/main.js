@@ -3017,16 +3017,31 @@ window.dismissAutoSnapshot=function(id){
 
 function toggleHistPopup(btn){ var p=btn.parentNode.querySelector('.hist-popup'); if(!p) return; p.classList.toggle('open'); }
 window.toggleHistPopup=toggleHistPopup;
+// El snapshot que queda DESPUES del borrado: su income derivado esta calculado
+// contra el que se va, asi que al borrar deja de corresponder a ningun periodo
+// real (y el income que vivia en el borrado desaparece del acumulado). Es el
+// mismo snapshot que hay que recalcular, y el mismo recalculo que ya usa editar.
+function nextSnapAfter(date){
+  return (S.snapshots||[]).filter(function(s){ return s.date>date; })
+    .sort(function(a,b){ return a.date.localeCompare(b.date); })[0];
+}
 async function deleteSnapshot(id){
-  var ok=await appConfirm('Delete snapshot?','This action cannot be undone.','Delete');
+  var snap0=S.snapshots.find(function(s){ return s.id===id; }); if(!snap0) return;
+  var sig=nextSnapAfter(snap0.date);
+  var aviso='This action cannot be undone.';
+  // Solo se avisa cuando de verdad va a cambiar un numero que el usuario mira.
+  if(sig&&typeof sig.derivedIncome==='number')
+    aviso+='<span style="display:block;margin-top:9px;line-height:1.5">The income derived for <b style="color:#fff">'+escHtml(sig.date)+'</b> is recalculated over the longer period that this leaves behind.</span>';
+  var ok=await appConfirm('Delete snapshot?',aviso,'Delete');
   if(!ok) return;
-  var snap=S.snapshots.find(function(s){ return s.id===id; });
+  var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
   S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; });
   // Sin tombstone el borrado no viaja: el proximo pull lo encuentra vivo en la
   // nube y lo resucita. La clave es la fecha, igual que en el merge.
-  if(snap){ if(!S.deletedSnapDates) S.deletedSnapDates=[]; S.deletedSnapDates.push({id:snap.date,ts:stamp()}); }
+  if(!S.deletedSnapDates) S.deletedSnapDates=[];
+  S.deletedSnapDates.push({id:snap.date,ts:stamp()});
   S.snapshotsUpdatedAt=stamp();
-  if(snap&&snap.txId){
+  if(snap.txId){
     var linked=S.transactions.find(function(t){ return t.id===snap.txId; });
     var delLinked=linked&&await appConfirm('Delete linked transaction?',escHtml(linked.desc)+' <span style="color:#5DCAA5">'+fmtUSD(linked.amountUSD)+'</span>','Delete');
     if(delLinked){
@@ -3036,6 +3051,11 @@ async function deleteSnapshot(id){
       S.transactionsUpdatedAt=stamp();
     }
   }
+  // Despues de la tx enlazada: si se borro, esa plata sale del periodo y el
+  // recalculo tiene que verlo (la tx vivia dentro del periodo que ahora absorbe
+  // el snapshot siguiente).
+  var next=nextSnapAfter(snap.date);
+  if(next) recalcDerivedIncome(next);
   save(); renderEquityChart();
 }
 async function editSnapshot(id){
