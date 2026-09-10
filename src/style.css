@@ -787,12 +787,7 @@ input,select,textarea,button{font-family:inherit}
 /* Cuatro grupos (Exchanges, Trackers, Manual, Debts) en una sola fila. Entra
    porque .wm-acts salio del flujo: antes cada fila reservaba 126px para los
    botones y el nombre se quedaba sin lugar apenas la columna bajaba de ~330px. */
-/* Tres columnas como maximo, aunque haya cuatro grupos. Cobrar/Pagar pasaron a
-   vivir EN la fila (antes estaban dentro del panel, fuera del flujo): son ~115px
-   que ahora se le restan al nombre siempre. Con cuatro columnas la fila queda en
-   ~350px hasta a 1920px y el nombre se caia a 39-71px — o sea, ilegible o
-   invisible. Con tres pasa de 250px para arriba. */
-.wm-cols-4{grid-template-columns:repeat(3,1fr)}
+.wm-cols-4{grid-template-columns:repeat(4,1fr)}
 /* Cobrar/Pagar: el unico boton de la fila con texto, porque es el que se usa. */
 .wico.wsettle{width:auto;padding:0 9px;font-size:11px;font-weight:600;color:var(--txt2)}
 .wico.wsettle:hover{color:var(--txt)}
@@ -800,9 +795,6 @@ input,select,textarea,button{font-family:inherit}
    3 columnas piden ~640px y no entraban entre 721 y ~830px: la pagina se iba a
    scroll horizontal. A 2 columnas entra de sobra; ≤720px ya baja a 1. */
 @media(max-width:1280px){.wm-cols-4{grid-template-columns:1fr 1fr}}
-/* Y una sola columna por debajo de ~1050px: a dos, la fila vuelve a caer a ~330px
-   y el nombre se queda con 49px, que corta cualquier nombre real. */
-@media(max-width:1050px){.wm-cols-4{grid-template-columns:1fr}}
 @media(max-width:900px){.wm-cols-3{grid-template-columns:1fr 1fr}}
 .wm-group{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:7px 8px 11px;min-width:0}
 .wm-group-head{display:flex;align-items:baseline;justify-content:space-between;padding:13px 16px 11px}
@@ -866,15 +858,10 @@ input,select,textarea,button{font-family:inherit}
 /* El panel ya es la superficie: un fondo por boton se veia como chips sobre chip. */
 .wm-acts .wico{background:transparent}
 .wm-acts .wico:hover{background:rgba(255,255,255,.13)}
-/* Cobrar/Pagar NO entran al panel: se quedan en el flujo de la fila, a la izquierda
-   del monto. Son las acciones de todos los dias — esconderlas detras de un tap
-   cuesta mas de lo que ahorra. */
-.wm-settle{display:flex;gap:5px;align-items:center;flex-shrink:0;transition:opacity .14s}
-/* En una fila angosta el panel no cabe sin morder las pastillas, y media palabra
-   cortada bajo el borde diagonal se ve rota. Se desvanecen mientras el panel entra:
-   siguen a la vista con la fila en reposo, que es donde de verdad se usan.
-   pointer-events:none porque invisible no es lo mismo que inalcanzable. */
-.wm-row.wm-sel .wm-settle,.wm-row:focus-within .wm-settle{opacity:0;pointer-events:none}
+/* Cobrar/Pagar van DENTRO del panel, no en el flujo de la fila. Tenerlas en el
+   flujo se lee mejor, pero cuesta ~115px de ancho en todas las filas y a cuatro
+   columnas la fila mide 280px: ahi solo entran el chip, ~116px de nombre y el
+   monto. El nombre se quedaba en cero. Fuera del flujo no le quitan nada a nadie. */
 /* Un grupo sin wallets no necesita una tarjeta entera: se queda en el titulo y un
    boton chico. Debts no entra aca: su vacio lleva un texto que si explica algo. */
 .wm-group.is-empty{padding:4px 8px 6px}
@@ -1374,8 +1361,10 @@ input::placeholder{color:var(--txt3)}
   .wm-acts{padding:0 12px 0 28px;gap:4px;clip-path:polygon(20px 0,100% 0,100% 100%,0 100%)}
   .wm-acts .wico{width:28px;height:28px;border-radius:9px;flex-shrink:0}
   .wm-acts .wico svg{width:12px;height:12px}
-  /* Las pastillas de texto viven fuera del panel: se dimensionan aparte. */
-  .wm-settle .wico.wsettle{width:auto;height:28px;padding:0 11px;font-size:12px;background:rgba(255,255,255,.09);color:var(--txt)}
+  /* width:auto explicito: .wm-acts .wico de arriba empata en especificidad con
+     .wico.wsettle y gana por venir despues, asi que sin esto las pastillas de
+     texto quedarian cuadradas de 28px y "Lend"/"Collect" se desbordarian. */
+  .wm-acts .wico.wsettle{width:auto;height:28px;padding:0 11px;font-size:12px;background:rgba(255,255,255,.09);color:var(--txt)}
 
   /* Budget + Holdings hero font */
   .bdg-hero-val{font-size:38px}

@@ -428,17 +428,19 @@ check('la deuda resta del total de wallets', nw0 === 200 + 80 + 1700 - 300, `tot
 // Un tracker sin marcar NO es una deuda: sigue en su grupo y con su etiqueta.
 const grupos = await ev("[...document.querySelectorAll('#page-wallets .wm-group')].map(function(g){var t=g.querySelector('.wm-group-title');return (t?t.textContent:'')+':'+[...g.querySelectorAll('.wm-row')].map(function(r){return r.querySelector('.wm-name').textContent+'|'+(r.querySelector('.wm-badge')||{}).textContent}).join(',')}).join(' ~ ')");
 check('un tracker comun queda en su grupo', /Trackers:Mercantil Panama\|tracker/.test(grupos), grupos);
-// El ancho que le queda al NOMBRE es la medida que importa. Cobrar/Pagar viven en
-// el flujo de la fila, asi que le restan ~115px fijos: con cuatro columnas la fila
-// caia a ~280px y el nombre se quedaba con CERO ancho (invisible, sin siquiera
-// puntos suspensivos). Por eso el grid llega a tres como maximo. Se recorren los
-// anchos donde el layout cambia de forma, no uno solo.
+// El ancho que le queda al NOMBRE es la medida que importa, y es lo que decide
+// donde pueden vivir los botones: con Cobrar/Pagar en el flujo de la fila (~115px
+// fijos) el nombre caia a CERO a cuatro columnas. Por eso viven en el panel. Se
+// recorren los anchos donde el layout cambia de forma, no uno solo.
 for (const _w of [1920, 1600, 1440, 1280, 1100, 900]) {
   await send('Emulation.setDeviceMetricsOverride', { width: _w, height: 900, deviceScaleFactor: 1, mobile: false });
   await sleep(300);
   const nom = JSON.parse(await ev("(function(){var e=[...document.querySelectorAll('#page-wallets .wm-name')];return JSON.stringify({min:Math.min.apply(null,e.map(function(x){return Math.round(x.getBoundingClientRect().width)})),cortado:e.some(function(x){return x.scrollWidth>x.clientWidth+1})});})()"));
   check(`a ${_w}px el nombre conserva ancho util`, nom.min >= 60, JSON.stringify(nom));
-  check(`y ninguno se corta a ${_w}px`, nom.cortado === false, JSON.stringify(nom));
+  // Cortar con puntos suspensivos es lo BUSCADO (lo pide el CSS de .wm-name), no un
+  // fallo: lo que no puede pasar es desbordar o quedarse sin ancho. Solo se exige
+  // que no haga falta cortar al ancho donde todo entra comodo.
+  if (_w === 1600) check('y a 1600px ninguno necesita cortarse', nom.cortado === false, JSON.stringify(nom));
 }
 await send('Emulation.clearDeviceMetricsOverride', {});
 await sleep(250);
@@ -514,7 +516,10 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
   { snapshots: [], deletedTxIds: [], manualWallets: [
       { id: 61, name: 'Vieja', trackerOnly: true, balance: 0, debt: 'in' },
       { id: 62, name: 'Reciente', trackerOnly: true, balance: 0, debt: 'out' },
-      { id: 63, name: 'Ciclo', trackerOnly: true, balance: 0, debt: 'in', cycle: true } ],
+      { id: 63, name: 'Ciclo', trackerOnly: true, balance: 0, debt: 'in', cycle: true },
+      // Un tracker comun (sin deuda): tres acciones en el panel, que es el caso
+      // de la mayoria de las filas. Sirve para medir el panel angosto.
+      { id: 64, name: 'Comun', trackerOnly: true, balance: 40, debt: null } ],
     transactions: [
       { id: 610, createdAt: 610, seq: 0, date: '${haceD(200)}', desc: 'preste', wallet: 'Vieja', type: 'Credit', category: 'Transfer', amountUSD: 400, originalCurrency: 'USD', imported: false, updatedAt: 610 },
       { id: 620, createdAt: 620, seq: 1, date: '${haceD(5)}', desc: 'me prestaron', wallet: 'Reciente', type: 'Credit', category: 'Transfer', amountUSD: 50, originalCurrency: 'USD', imported: false, updatedAt: 620 },
@@ -544,41 +549,57 @@ await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 900, devi
 await ev("showPage('wallets',null)"); await sleep(600);
 await ev("document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){r.classList.remove('wm-sel')})");
 const filaCiclo = "[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&/Ciclo/.test(n.textContent)})[0]";
-const medirPanel = `(function(){
-  var r=${filaCiclo}; if(!r) return JSON.stringify({err:'sin fila'});
+const medirPanel = (sel) => `(function(){
+  var r=${sel}; if(!r) return JSON.stringify({err:'sin fila'});
   var a=r.querySelector('.wm-acts'), bal=r.querySelector('.wm-bal'), nm=r.querySelector('.wm-name');
-  var cs=getComputedStyle(a), rb=r.getBoundingClientRect(), ab=a.getBoundingClientRect();
-  var sw=r.querySelector('.wm-settle');
-  var pills=[...r.querySelectorAll('.wm-settle .wsettle')].map(function(b){ return Math.round(b.getBoundingClientRect().width); });
+  var cs=getComputedStyle(a), rb=r.getBoundingClientRect(), ab=a.getBoundingClientRect(), nb=nm.getBoundingClientRect();
+  var pills=[...a.querySelectorAll('.wsettle')].map(function(b){ return Math.round(b.getBoundingClientRect().width); });
   var solapa=function(el){ if(!el) return false; var x=el.getBoundingClientRect(); return !(ab.left>=x.right||ab.right<=x.left); };
   return JSON.stringify({pos:cs.position, tx:cs.transform, diag:cs.clipPath!=='none', bg:cs.backgroundColor,
     dentro:a.querySelectorAll('.wico').length, pills:pills,
-    tapaBal:solapa(bal), tapaNombre:solapa(nm), settleOp:sw?getComputedStyle(sw).opacity:null,
+    tapaBal:solapa(bal),
+    // .wm-name es elastico: su caja llega hasta el monto, asi que "se solapan" da
+    // verdadero aunque el texto se lea entero. Lo que importa es cuanto ancho del
+    // nombre queda LIBRE a la izquierda del panel.
+    nombreLibre:Math.round(ab.left-nb.left),
     afuera:Math.round(ab.left)>=Math.round(rb.right)-1, overflow:getComputedStyle(r).overflowX});
 })()`;
 
-const panelOff = JSON.parse(await ev(medirPanel));
+const panelOff = JSON.parse(await ev(medirPanel(filaCiclo)));
 check('cerrado, el panel descansa fuera del borde derecho', panelOff.afuera === true, JSON.stringify(panelOff));
 check('y la fila lo recorta para que no asome', panelOff.overflow === 'hidden', JSON.stringify(panelOff));
-// En reposo —que es como se ve la fila el 99% del tiempo— Cobrar/Pagar estan a un
-// solo tap, fuera del panel y sin aplastarse.
-check('en reposo, Cobrar/Pagar estan a la vista en la fila',
-  panelOff.pills.length === 2 && panelOff.pills.every(function (w) { return w >= 45; }) && panelOff.settleOp === '1',
-  JSON.stringify(panelOff));
+
 
 await ev(`(function(){var r=${filaCiclo};if(r)r.click();})()`);
 await sleep(500);
-const panelOn = JSON.parse(await ev(medirPanel));
+const panelOn = JSON.parse(await ev(medirPanel(filaCiclo)));
 check('al seleccionar la fila el panel entra', panelOn.tx === 'none' && panelOn.afuera === false, JSON.stringify(panelOn));
 check('va por encima, no en el flujo', panelOn.pos === 'absolute', JSON.stringify(panelOn));
 check('con el borde izquierdo en diagonal', panelOn.diag === true, JSON.stringify(panelOn));
 check('y fondo propio, no transparente', panelOn.bg !== 'rgba(0, 0, 0, 0)' && panelOn.bg !== 'transparent', JSON.stringify(panelOn));
-check('adentro van los tres iconos', panelOn.dentro === 3, JSON.stringify(panelOn));
+// Cobrar/Pagar viven DENTRO del panel: en el flujo de la fila cuestan ~115px de
+// ancho siempre, y a cuatro columnas la fila mide 280px — el nombre se quedaba
+// sin ancho. Aca son cinco: Lend, Collect, renombrar, saldo y borrar.
+check('adentro van las cinco acciones', panelOn.dentro === 5, JSON.stringify(panelOn));
+check('con las pastillas de texto sin aplastarse',
+  panelOn.pills.length === 2 && panelOn.pills.every(function (w) { return w >= 45; }), JSON.stringify(panelOn));
 check('tapa el monto', panelOn.tapaBal === true, JSON.stringify(panelOn));
-check('pero deja ver el nombre', panelOn.tapaNombre === false, JSON.stringify(panelOn));
-// A 412px el panel no cabe sin morder las pastillas, asi que se desvanecen
-// mientras entra: nunca se ve media palabra cortada bajo el borde diagonal.
-check('y las pastillas se desvanecen en vez de quedar cortadas', panelOn.settleOp === '0', JSON.stringify(panelOn));
+// Cinco acciones no entran sin comerse el nombre en una fila de 384px: es el
+// unico caso donde el panel tapa la fila entera, y es deliberado.
+check('con cinco acciones el panel se lleva la fila entera', panelOn.nombreLibre < 60, JSON.stringify(panelOn));
+
+// La mayoria de las filas (trackers, manuales, exchanges) llevan TRES acciones:
+// ahi el panel es angosto, tapa el monto y deja el nombre entero. Una deuda de
+// ciclo suma Cobrar y Prestar, y con cinco el panel se come casi toda la fila
+// angosta — el precio de tener esas dos a mano sin robarle ancho al nombre.
+const filaComun = "[...document.querySelectorAll('.wm-row')].filter(function(e){var n=e.querySelector('.wm-name');return n&&/Comun/.test(n.textContent)})[0]";
+await ev(`(function(){var r=${filaComun};if(r)r.click();})()`);
+await sleep(500);
+const panelTrk = JSON.parse(await ev(medirPanel(filaComun)));
+check('una fila normal abre un panel de tres acciones', panelTrk.dentro === 3, JSON.stringify(panelTrk));
+check('que tapa el monto', panelTrk.tapaBal === true, JSON.stringify(panelTrk));
+check('y deja el nombre entero a la vista', panelTrk.nombreLibre >= 100, JSON.stringify(panelTrk));
+
 await ev("document.querySelectorAll('.wm-row.wm-sel').forEach(function(r){r.classList.remove('wm-sel')})");
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
 

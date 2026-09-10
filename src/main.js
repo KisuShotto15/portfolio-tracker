@@ -3827,22 +3827,21 @@ function renderWallets(){
       var dAge=daysBetweenISO(debtSinceCore(S.transactions,name,mw?(mw.balance||0):0),localToday());
       if(dAge!=null) meta+='<span class="wm-age'+(dAge>=DEBT_STALE_DAYS?' is-stale':'')+'">'+debtAgeLabel(dAge)+' old</span>';
     }
-    var bal='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
-    var settle='',acts='';
+    var right='<span class="wm-bal"'+(isDebt?' style="color:#E24B4A"':'')+'>'+(isDebt?'-':'')+fmtUSD(total)+'</span>';
+    var acts='';
     if(mw){
-      // Cobrar/Pagar quedan EN la fila, no en el panel: son las acciones de todos
-      // los dias y esconderlas detras de un tap cuesta mas de lo que ahorra.
-      // stopPropagation porque ahora estan en el flujo: sin el, el tap tambien
-      // alternaria la seleccion de la fila y el panel se abriria de fondo.
+      // Cobrar/Pagar van dentro del panel, con el resto. En el flujo de la fila se
+      // leen mejor, pero cuestan ~115px de ancho SIEMPRE, y a cuatro columnas la
+      // fila mide 280px: el nombre se quedaba sin ancho. Ver el comentario del
+      // grid en style.css.
       // El boton de sumar solo aparece si el wallet se marco como ciclo: en una
       // deuda de una sola vez seria un boton que no se usa nunca.
-      if(kind&&mw.cycle) settle+='<button class="wico wsettle" onclick="event.stopPropagation();settleTracker('+mw.id+',1)">'+(isDebt?'Borrow':'Lend')+'</button>';
-      if(kind&&total>0) settle+='<button class="wico wsettle" onclick="event.stopPropagation();settleTracker('+mw.id+')">'+(isDebt?'Pay':'Collect')+'</button>';
+      if(kind&&mw.cycle) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+',1)">'+(isDebt?'Borrow':'Lend')+'</button>';
+      if(kind&&total>0) acts+='<button class="wico wsettle" onclick="settleTracker('+mw.id+')">'+(isDebt?'Pay':'Collect')+'</button>';
       acts+='<button class="wico" title="Rename" onclick="renameManualWallet('+mw.id+')">'+icT+'</button>';
       acts+='<button class="wico" title="Edit balance" onclick="editTrackerBal('+mw.id+')">'+icP+'</button>';
       acts+='<button class="wico del" title="Delete" onclick="deleteManualWallet('+mw.id+')">'+icX+'</button>';
     }
-    var right=(settle?'<span class="wm-settle">'+settle+'</span>':'')+bal;
     return wmRow(isDebt?'#E24B4A':'#A78BFA',escHtml(name).slice(0,1).toUpperCase(),'',escHtml(name),meta,right,acts,walletLogo(name));
   }
   var trRows=trackerNames.map(function(n){ return trkRow(n,null); }).join('');
