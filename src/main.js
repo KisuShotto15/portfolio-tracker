@@ -2968,10 +2968,18 @@ async function recordSnapshot(){
 // el patrimonio, derivarla otra vez la contaria dos veces.
 //   income derivado = Δ + gastos - income ya registrado
 // Es lo que alimenta monthIncome() → grafico mensual, Budget y KPI Net Profit.
+//
+// Piso 0, aca adentro y no en cada caller: un mes de puro gasto deriva exactamente
+// 0 (Δ=-gasto → income=0); que de NEGATIVO significa que el patrimonio cayo mas de
+// lo que anotaste — plata que se fue sin registrar, o un total mal estimado. Eso no
+// es "income negativo" (no significa nada: el Budget mostraba un Income en rojo y
+// el Net Profit y el Health Score heredaban el disparate); es un faltante, y el
+// cierre de mes ya lo muestra en su linea "Unexplained". El piso vivia solo en el
+// snapshot automatico: el manual y el recalculo al editar lo dejaban pasar.
 function derivedIncomeFor(prevSnap,snap){
   var f=investmentFlow(prevSnap,snap);
   var profit=Math.round(((snap.total-prevSnap.total)+f.invOut-f.invIn)*100)/100;
-  return Math.round((profit+periodNetSpend(prevSnap,snap)-periodLoggedIncome(prevSnap,snap))*100)/100;
+  return Math.max(0,Math.round((profit+periodNetSpend(prevSnap,snap)-periodLoggedIncome(prevSnap,snap))*100)/100);
 }
 
 // Snapshot de cierre de mes: el ULTIMO DIA del mes, de noche. Corre en el boot,
@@ -2994,11 +3002,8 @@ function autoMonthSnapshot(hour,minHour,todayISO){
   var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   var prev=sorted[sorted.length-1];
   // Sin snapshot previo no hay periodo: este es la linea base y no deriva income.
-  // Piso 0: un mes de puro gasto deriva exactamente 0 (Δ=-gasto → income=0); que
-  // de NEGATIVO significa que el patrimonio cayo mas que lo anotado — plata que se
-  // fue sin registrar, o un total mal estimado. Eso no es "income negativo": es un
-  // faltante, y el cierre de mes ya lo muestra en su linea "Unexplained".
-  if(prev) snap.derivedIncome=Math.max(0,derivedIncomeFor(prev,snap));
+  // (El piso 0 esta dentro de derivedIncomeFor: vale para los tres caminos.)
+  if(prev) snap.derivedIncome=derivedIncomeFor(prev,snap);
   snap.updatedAt=S.snapshotsUpdatedAt=stamp();
   S.snapshots.push(snap);
   save();

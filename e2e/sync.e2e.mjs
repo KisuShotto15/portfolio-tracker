@@ -1864,6 +1864,56 @@ await waitFor(() => cloudDoc.hiddenTools && cloudDoc.hiddenTools.profit === true
 check('esconder una tool en el dispositivo si llega a la nube', cloudDoc.hiddenTools && cloudDoc.hiddenTools.profit === true, JSON.stringify(cloudDoc.hiddenTools));
 check('y el campo viaja con su marca de tiempo', (cloudDoc.hiddenToolsUpdatedAt || 0) > 0, String(cloudDoc.hiddenToolsUpdatedAt));
 
+// ── escenario 33: el income derivado nunca es negativo (F5) ────────────────
+// El piso de cero existia solo en el snapshot automatico de cierre de mes. Por el
+// camino manual y por el recalculo al editar, un patrimonio que cayo mas de lo
+// anotado daba un income NEGATIVO: el Budget mostraba Income en rojo y el Net
+// Profit y el Health Score heredaban el disparate.
+console.log('E2E income derivado — piso en cero en los tres caminos');
+cloudDoc = {};
+const hoy33 = dU(0), viejo33 = dU(30), gasto33 = dU(20);
+const idViejo33 = Date.parse(viejo33 + 'T12:00:00'), idGasto33 = Date.parse(gasto33 + 'T12:00:00');
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  deletedTxIds: [], deletedSnapDates: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+  manualWallets: [ { id: 73, name: 'Efectivo', trackerOnly: false, balance: 900, updatedAt: ${idViejo33} } ],
+  snapshots: [ { id: ${idViejo33}, date: '${viejo33}', total: 2000, updatedAt: ${idViejo33} } ],
+  transactions: [ { id: ${idGasto33}, createdAt: ${idGasto33}, seq: 0, date: '${gasto33}', desc: 'mercado', wallet: 'Efectivo', type: 'Debit', category: 'Groceries', amountUSD: 50, originalCurrency: 'USD', imported: false, updatedAt: ${idGasto33} } ],
+  snapshotsUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+
+// Camino 1: snapshot manual con un total MUY por debajo del anterior.
+// Δ = 1000 - 2000 = -1000, mas 50 de gasto del periodo → -950 sin piso.
+await ev('recordSnapshot()');
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de anotar snapshot');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];b.querySelector('#_ami').value='1000';b.querySelector('#_amo').click();})()");
+await sleep(500);
+const snapHoy33 = async () => JSON.parse(await ev(`(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).find(function(x){return x.date==='${hoy33}';});return JSON.stringify(s||null);})()`));
+let sh33 = await snapHoy33();
+check('el snapshot manual queda anotado', sh33 && sh33.total === 1000, JSON.stringify(sh33));
+check('y su income derivado es 0, no -950', sh33 && sh33.derivedIncome === 0, JSON.stringify(sh33));
+
+// Y eso es lo que ve el usuario: el Budget del mes no muestra un Income negativo.
+await ev("showPage('budget',null)"); await sleep(400);
+const income33 = await ev("(function(){var e=[...document.querySelectorAll('.bdg-stat')].find(function(x){return x.querySelector('.bdg-stat-l').textContent==='Income';});return e?e.querySelector('.bdg-stat-v').textContent:null;})()");
+check('Budget no muestra un Income negativo', income33 !== null && income33.indexOf('-') < 0 && income33.indexOf('−') < 0, String(income33));
+
+// Camino 2: editarlo a la baja recalcula, y tambien tiene piso.
+// Δ = 1500 - 2000 = -500, mas 50 → -450 sin piso.
+await ev(`editSnapshot(${sh33.id})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de editar snapshot (baja)');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];var i=b.querySelector('input');i.value='1500';i.dispatchEvent(new Event('input',{bubbles:true}));b.querySelector('#_amo').click();})()");
+await sleep(500);
+sh33 = await snapHoy33();
+check('editarlo a la baja tampoco deja el income en negativo', sh33 && sh33.total === 1500 && sh33.derivedIncome === 0, JSON.stringify(sh33));
+
+// Y el piso no aplasta lo que SI es income: Δ = 2600 - 2000 = 600, mas 50 → 650.
+await ev(`editSnapshot(${sh33.id})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de editar snapshot (alza)');
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];var i=b.querySelector('input');i.value='2600';i.dispatchEvent(new Event('input',{bubbles:true}));b.querySelector('#_amo').click();})()");
+await sleep(500);
+sh33 = await snapHoy33();
+check('un income real sigue saliendo entero (650)', sh33 && sh33.derivedIncome === 650, JSON.stringify(sh33));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
