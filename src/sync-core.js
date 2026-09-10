@@ -264,3 +264,31 @@ export function dedupeByNaturalKey(items, keyOf){
   });
   return order.map(function(k){ return typeof k === 'string' ? by[k] : k; });
 }
+
+// ── Restaurar un backup ─────────────────────────────────────────────────────
+// Restaurar tiene que ser una vuelta atras de verdad. Reemplazar el estado local
+// no alcanza: el merge conserva POR DISENO todo item que exista en la nube y no
+// en lo que llega, asi que lo anotado despues del backup volvia solo en el
+// siguiente pull — el dialogo decia "reemplaza todos los datos" y no borraba nada.
+// Devuelve, por lista, las lapidas de lo que hay en el dispositivo y NO en el
+// archivo. Una lista que el archivo no trae (backup viejo, anterior a esa
+// funcion) no se toca: ahi no hay forma de saber si estaba vacia o no existia.
+// Lo que solo vive en OTRO dispositivo y nunca llego hasta aca no se puede
+// lapidar: no aparece ni en el archivo ni en el estado local.
+export function restoreTombstonesCore(local, file, lists, ts){
+  var out = {};
+  (lists || []).forEach(function(L){
+    if(!Array.isArray(file[L.field])) return;
+    var keep = {};
+    file[L.field].forEach(function(it){ var k = L.keyOf(it); if(k != null && k !== '') keep[k] = 1; });
+    var tombs = [], seen = {};
+    ((local && local[L.field]) || []).forEach(function(it){
+      var k = L.keyOf(it);
+      if(k == null || k === '' || keep[k] || seen[k]) return;
+      seen[k] = 1;
+      tombs.push({ id: k, ts: ts });
+    });
+    if(tombs.length) out[L.tomb] = tombs;
+  });
+  return out;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -508,5 +508,66 @@ describe('dedupeByNaturalKey (misma wallet creada en dos dispositivos)', () => {
     const out = dedupeByNaturalKey(ws, onchainAddrKey);
     expect(out).toHaveLength(1);
     expect(out[0].label).toBe('Fria');
+  });
+});
+
+describe('restoreTombstonesCore (restaurar un backup borra de verdad)', () => {
+  const LISTS = [
+    { field: 'transactions', tomb: 'deletedTxIds', keyOf: itemId },
+    { field: 'snapshots', tomb: 'deletedSnapDates', keyOf: snapKey },
+    { field: 'manualWallets', tomb: 'deletedWalletIds', keyOf: itemId },
+  ];
+
+  it('EL BUG F3: lo anotado despues del backup se lapida en vez de volver solo', () => {
+    // Sin lapida, el merge conserva la tx 2 (existe en la nube y no en el archivo)
+    // y el restore se deshace solo en el siguiente pull.
+    const local = { transactions: [{ id: 1 }, { id: 2 }] };
+    const file = { transactions: [{ id: 1 }] };
+    expect(restoreTombstonesCore(local, file, LISTS, 500)).toEqual({ deletedTxIds: [{ id: 2, ts: 500 }] });
+  });
+
+  it('lapida tambien snapshots (por fecha) y wallets (por id)', () => {
+    const local = {
+      transactions: [], snapshots: [{ id: 9, date: '2026-08-31' }, { id: 8, date: '2026-07-31' }],
+      manualWallets: [{ id: 1, name: 'Zinli' }, { id: 2, name: 'Ahorros' }],
+    };
+    const file = { transactions: [], snapshots: [{ id: 8, date: '2026-07-31' }], manualWallets: [{ id: 1, name: 'Zinli' }] };
+    const out = restoreTombstonesCore(local, file, LISTS, 700);
+    expect(out.deletedSnapDates).toEqual([{ id: '2026-08-31', ts: 700 }]);
+    expect(out.deletedWalletIds).toEqual([{ id: 2, ts: 700 }]);
+    expect(out.deletedTxIds).toBe(undefined);   // nada que borrar: no ensucia el doc
+  });
+
+  it('lo que el archivo SI trae no se lapida', () => {
+    const local = { transactions: [{ id: 1 }, { id: 2 }] };
+    const file = { transactions: [{ id: 2 }, { id: 1 }] };   // mismo set, otro orden
+    expect(restoreTombstonesCore(local, file, LISTS, 1)).toEqual({});
+  });
+
+  it('una lista que el backup no trae NO se toca', () => {
+    // Backup viejo, anterior a esa lista: no hay forma de saber si estaba vacia.
+    const local = { transactions: [{ id: 1 }], manualWallets: [{ id: 7, name: 'Zinli' }] };
+    const file = { transactions: [{ id: 1 }] };
+    expect(restoreTombstonesCore(local, file, LISTS, 1)).toEqual({});
+  });
+
+  it('una lista vacia en el archivo SI lapida todo lo local', () => {
+    const local = { transactions: [{ id: 1 }, { id: 2 }] };
+    const file = { transactions: [] };
+    expect(restoreTombstonesCore(local, file, LISTS, 3).deletedTxIds).toEqual([{ id: 1, ts: 3 }, { id: 2, ts: 3 }]);
+  });
+
+  it('no repite lapidas ni lapida items sin clave', () => {
+    const local = { transactions: [{ id: 5 }, { id: 5 }, {}, null] };
+    const file = { transactions: [] };
+    expect(restoreTombstonesCore(local, file, LISTS, 2).deletedTxIds).toEqual([{ id: 5, ts: 2 }]);
+  });
+
+  it('la lapida le gana a la copia vieja de la nube, y no a una edicion posterior', () => {
+    // Es lo que hace que el restore sea una vuelta atras real sin romper lo que
+    // otro dispositivo anote DESPUES.
+    const tomb = restoreTombstonesCore({ transactions: [{ id: 2, updatedAt: 10 }] }, { transactions: [] }, LISTS, 500).deletedTxIds;
+    expect(mergeByKey([], [{ id: 2, updatedAt: 10 }], tomb, itemId)).toEqual([]);
+    expect(mergeByKey([], [{ id: 2, updatedAt: 900 }], tomb, itemId)).toHaveLength(1);
   });
 });

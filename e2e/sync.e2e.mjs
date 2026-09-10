@@ -1744,6 +1744,79 @@ check('tras recargar: la wallet borrada sigue borrada', !finalNombres.includes('
 check('la regla borrada sigue borrada', !finalReglas.includes('Gym'), JSON.stringify(finalReglas));
 check('y lo que no se borro sigue ahi', finalNombres.includes('Zinli') && finalReglas.includes('Netflix'), JSON.stringify([finalNombres, finalReglas]));
 
+// ── escenario 31: restaurar un backup borra de verdad (F3) ──────────────────
+// El bug: el dialogo decia "reemplaza TODOS los datos" pero el restore no creaba
+// lapidas, y todo lo anotado despues del backup volvia solo en el proximo pull.
+console.log('E2E restaurar backup — vuelta atras real');
+const diaVieja = '2026-01-10', diaNueva = '2026-02-20';
+cloudDoc = {
+  transactions: [
+    { id: 1101, createdAt: 1101, seq: 0, date: diaVieja, desc: 'del backup', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 10, originalCurrency: 'USD', imported: false, updatedAt: 1101 },
+    { id: 1102, createdAt: 1102, seq: 1, date: diaNueva, desc: 'despues del backup', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 25, originalCurrency: 'USD', imported: false, updatedAt: 1102 },
+  ],
+  transactionsUpdatedAt: 1102, deletedTxIds: [],
+  manualWallets: [{ id: 8801, name: 'Zinli', trackerOnly: false, balance: 100, updatedAt: 8801 },
+                  { id: 8804, name: 'Nueva', trackerOnly: false, balance: 70, updatedAt: 8804 }],
+  manualWalletsUpdatedAt: 8804,
+  snapshots: [{ id: 6001, date: '2026-01-31', total: 500, updatedAt: 6001 }],
+  snapshotsUpdatedAt: 6001, recurring: [], exchangeWallets: [], onchainWallets: [],
+};
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+const txsLocal = async () => JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.id;}))"));
+await waitFor(async () => (await txsLocal()).length === 2, 8000, 150, 'el dispositivo con las dos txs de la nube')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+
+// El backup: solo lo que existia el 10-ene (una tx, una wallet, sin snapshots).
+await ev(`(function(){
+  var S=JSON.parse(localStorage.getItem('ft13')||'{}');
+  var doc=Object.assign({},S,{
+    transactions:(S.transactions||[]).filter(function(t){return t.id===1101;}),
+    manualWallets:(S.manualWallets||[]).filter(function(w){return w.id===8801;}),
+    snapshots:[] });
+  window.__bk=new File([JSON.stringify(doc)],'backup.json',{type:'application/json'});
+  return 1;})()`);
+await ev('importJSON(window.__bk)');
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 4000, 60, 'el confirm de restaurar');
+const avisoR = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m[m.length-1].querySelector('.modal-info').textContent;})()");
+check('el dialogo dice cuantas txs se borran', /Deletes\s.*1 transaction/.test(avisoR), avisoR);
+check('y que tambien se lleva el snapshot y la wallet', /1 snapshot/.test(avisoR) && /1 wallet/.test(avisoR), avisoR);
+check('y aclara que no toca lo de otros dispositivos que nunca llego', /never synced here is not touched/.test(avisoR), avisoR);
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
+await sleep(600);
+
+check('tras restaurar solo queda la tx del backup', JSON.stringify(await txsLocal()) === '[1101]', JSON.stringify(await txsLocal()));
+check('la wallet creada despues tambien se fue',
+  (await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).map(function(w){return w.name;}))")) === '["Zinli"]',
+  await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).map(function(w){return w.name;}))"));
+check('y el snapshot posterior al backup', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).length")) === 0);
+check('el restore deja lapida de lo que borro',
+  (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').deletedTxIds||[]).some(function(e){return e.id===1102;})")) === true,
+  await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').deletedTxIds||[])"));
+
+await waitFor(() => !(cloudDoc.transactions || []).some((t) => t.id === 1102), 10000, 150, 'el push del restore')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('la nube tampoco la conserva', !(cloudDoc.transactions || []).some((t) => t.id === 1102), JSON.stringify((cloudDoc.transactions || []).map((t) => t.id)));
+check('ni la wallet ni el snapshot posteriores',
+  !(cloudDoc.manualWallets || []).some((w) => w.name === 'Nueva') && (cloudDoc.snapshots || []).length === 0,
+  JSON.stringify([(cloudDoc.manualWallets || []).map((w) => w.name), (cloudDoc.snapshots || []).length]));
+
+// Un dispositivo que estaba offline vuelve con su copia: la lapida la mata.
+cloudDoc = mergeDocs(cloudDoc, {
+  transactions: [{ id: 1102, desc: 'despues del backup', updatedAt: 1102 }], transactionsUpdatedAt: 1102,
+  manualWallets: [{ id: 8804, name: 'Nueva', updatedAt: 8804 }], manualWalletsUpdatedAt: 8804,
+});
+check('un push viejo no revive lo restaurado',
+  !(cloudDoc.transactions || []).some((t) => t.id === 1102) && !(cloudDoc.manualWallets || []).some((w) => w.name === 'Nueva'),
+  JSON.stringify([(cloudDoc.transactions || []).map((t) => t.id), (cloudDoc.manualWallets || []).map((w) => w.name)]));
+
+// Pero lo que se anote DESPUES del restore no lo mata la lapida.
+cloudDoc = mergeDocs(cloudDoc, { transactions: [{ id: 1102, desc: 'reescrita despues', updatedAt: Date.now() + 60000 }] });
+check('y lo anotado despues del restore si sobrevive', (cloudDoc.transactions || []).some((t) => t.id === 1102), JSON.stringify((cloudDoc.transactions || []).map((t) => t.id)));
+
+await boot();
+check('tras recargar, el restore sigue puesto', JSON.stringify(await txsLocal()) === '[1101,1102]' || JSON.stringify(await txsLocal()) === '[1102,1101]', JSON.stringify(await txsLocal()));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

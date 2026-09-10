@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -188,6 +188,12 @@ var PER_ITEM_LISTS={
 };
 // Estas listas quedan fuera del LWW de campo: las mergea el bloque por-item del pull.
 function lwwPairs(){ return tsFields().filter(function(k){ return !PER_ITEM_LISTS[k.slice(0,-9)]; }).map(function(ts){ return [ts.slice(0,-9), ts]; }); }
+// La misma tabla como lista, con la funcion que saca la clave de cada item.
+function perItemLists(){
+  return Object.keys(PER_ITEM_LISTS).map(function(f){
+    return { field:f, tomb:PER_ITEM_LISTS[f], keyOf:(f==='snapshots')?snapKey:itemId };
+  });
+}
 // Marca un item de esas listas: sin su updatedAt propio, la copia vieja de otro
 // dispositivo le gana al cambio en el proximo merge y lo revierte.
 function touchItem(field,item){ var t=stamp(); if(item) item.updatedAt=t; S[field+'UpdatedAt']=t; return t; }
@@ -4076,6 +4082,24 @@ function exportAllJSON(){
   var a=document.createElement('a'); a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(S,null,2)); a.download='portfolio_backup_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
 }
 
+// Que se lleva el restore, en criollo. El dialogo decia "reemplaza TODOS los
+// datos" cuando en realidad no borraba nada; ahora borra, asi que tiene que decir
+// exactamente cuanto.
+var RESTORE_LABELS={deletedTxIds:['transaction','transactions'],deletedSnapDates:['snapshot','snapshots'],
+  deletedWalletIds:['wallet','wallets'],deletedExchangeIds:['exchange wallet','exchange wallets'],
+  deletedOnchainIds:['on-chain wallet','on-chain wallets'],deletedRuleIds:['recurring rule','recurring rules']};
+function restoreImpact(tombs){
+  var partes=[];
+  Object.keys(RESTORE_LABELS).forEach(function(k){
+    var nn=(tombs[k]||[]).length;
+    if(nn) partes.push('<b style="color:#fff">'+nn+'</b> '+RESTORE_LABELS[k][nn===1?0:1]);
+  });
+  var txt=partes.length
+    ?'Deletes '+(partes.length>1?partes.slice(0,-1).join(', ')+' and '+partes[partes.length-1]:partes[0])+' logged after the backup.'
+    :'Nothing you logged after the backup is deleted: the file already has it all.';
+  return '<span style="display:block;margin-top:9px;line-height:1.5">'+txt
+    +' Anything logged on another device that never synced here is not touched.</span>';
+}
 function importJSON(file){
   if(!file) return;
   var st=document.getElementById('json-status');
@@ -4084,19 +4108,30 @@ function importJSON(file){
     try{
       var parsed=JSON.parse(e.target.result);
       if(!parsed.transactions&&!parsed.portfolio){ st.textContent='Invalid backup file.'; st.style.color='#E24B4A'; return; }
-      if(!await appConfirm('Restore backup?','This replaces ALL current data with the file, on this device and in the cloud.','Restore')) return;
-      S=Object.assign({},S,parsed);
+      // Lo que hay hoy y NO esta en el archivo: sin lapidas, el merge lo devuelve
+      // en el proximo pull y el restore no revierte nada. Se calcula ANTES de
+      // reemplazar el estado, y se le muestra al usuario para que sepa que se lleva.
+      var _lists=perItemLists();
+      var _tombs=restoreTombstonesCore(S,parsed,_lists,0);
+      if(!await appConfirm('Restore backup?','This replaces your data with the file, on this device and in the cloud.'+restoreImpact(_tombs),'Restore')) return;
       // Re-estampar todo con un timestamp fresco para que el restore GANE el
       // last-writer-wins del servidor; si no, el merge autoritativo conserva la
       // nube (mas nueva) y el restore se revierte solo en el siguiente pull.
       var n=stamp();
+      _tombs=restoreTombstonesCore(S,parsed,_lists,n);   // ahora si, con el stamp del restore
+      S=Object.assign({},S,parsed);
       tsFields().forEach(function(f){ S[f]=n; });
       // createdAt PRIMERO: el re-estampado deja a todas las txs con el mismo
       // updatedAt, asi que si se derivara despues el orden del backup se perderia.
       if(Array.isArray(S.transactions)) backfillTxCreatedAt(S.transactions);
-      if(Array.isArray(S.transactions)) S.transactions.forEach(function(t){ t.updatedAt=n; });
-      save(); populateWalletSelects(); updateRateUI(); renderSummary();
-      st.textContent='Restored: '+(S.transactions||[]).length+' transactions, '+(S.portfolio||[]).length+' holdings.';
+      // Cada item de las listas por-item tambien lleva el stamp nuevo: si no, el
+      // item viejo del archivo pierde contra la copia mas nueva de la nube y esa
+      // parte del restore no se aplica.
+      _lists.forEach(function(L){ if(Array.isArray(S[L.field])) S[L.field].forEach(function(it){ if(it) it.updatedAt=n; }); });
+      Object.keys(_tombs).forEach(function(tk){ S[tk]=(Array.isArray(S[tk])?S[tk]:[]).concat(_tombs[tk]); });
+      save(); populateWalletSelects(); updateRateUI(); renderWallets(); renderTx(); renderSummary();
+      var _borr=Object.keys(_tombs).reduce(function(a,k){ return a+_tombs[k].length; },0);
+      st.textContent='Restored: '+(S.transactions||[]).length+' transactions, '+(S.portfolio||[]).length+' holdings'+(_borr?' · '+_borr+' item'+(_borr===1?'':'s')+' logged after the backup deleted':'')+'.';
       st.style.color='#5DCAA5';
       document.getElementById('json-inp').value='';
     }catch(err){ st.textContent='Error: '+err.message; st.style.color='#E24B4A'; }
