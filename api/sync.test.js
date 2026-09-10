@@ -239,3 +239,41 @@ describe('mergeDocs: wallets y reglas recurrentes por item', () => {
     expect(out.manualWallets.map((w) => w.name)).toEqual(['Zinli']);
   });
 });
+
+describe('mergeDocs: campos sin marca de tiempo (F4)', () => {
+  it('EL BUG: un device que nunca hizo el fetch ya no borra los holdings de la nube', () => {
+    // walletHoldings no tenia sibling UpdatedAt, asi que no entraba al LWW y
+    // ganaba el ultimo en subir: la lista vacia se llevaba la buena.
+    const cloud = { walletHoldings: [{ symbol: 'ETH', balanceUsd: 900 }], walletHoldingsUpdatedAt: 500 };
+    const nuevo = { walletHoldings: [], walletHoldingsUpdatedAt: null };
+    expect(mergeDocs(cloud, nuevo).walletHoldings).toEqual([{ symbol: 'ETH', balanceUsd: 900 }]);
+  });
+
+  it('pero un fetch mas nuevo si actualiza los holdings', () => {
+    const cloud = { walletHoldings: [{ symbol: 'ETH', balanceUsd: 900 }], walletHoldingsUpdatedAt: 500 };
+    const fresh = { walletHoldings: [{ symbol: 'ETH', balanceUsd: 950 }], walletHoldingsUpdatedAt: 900 };
+    expect(mergeDocs(cloud, fresh).walletHoldings[0].balanceUsd).toBe(950);
+  });
+
+  it('las tools ocultas tampoco las decide el ultimo en subir', () => {
+    const cloud = { hiddenTools: { p2p: true }, hiddenToolsUpdatedAt: 500 };
+    const stale = { hiddenTools: {}, hiddenToolsUpdatedAt: 100 };
+    expect(mergeDocs(cloud, stale).hiddenTools).toEqual({ p2p: true });
+  });
+
+  it('la version de esquema nunca baja', () => {
+    expect(mergeDocs({ schemaVersion: 5 }, { schemaVersion: 3 }).schemaVersion).toBe(5);
+    expect(mergeDocs({ schemaVersion: 3 }, { schemaVersion: 5 }).schemaVersion).toBe(5);
+  });
+
+  it('y no se inventa si ninguno la trae', () => {
+    expect('schemaVersion' in mergeDocs({}, {})).toBe(false);
+  });
+
+  it('un flag de migracion ya puesto no se apaga', () => {
+    // El caso real: exchangeMigrated:null esta en los defaults de S, asi que un
+    // device que nunca migro no omite el campo — lo manda explicitamente en null.
+    const out = mergeDocs({ zelleMigrated: 1, exchangeMigrated: 1 }, { zelleMigrated: 1, exchangeMigrated: null });
+    expect(out.exchangeMigrated).toBe(1);
+  });
+});

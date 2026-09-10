@@ -84,7 +84,12 @@ var S = {
   trezorAddress:'', trezorAddressUpdatedAt:null,
   exchangeWallets:[], exchangeWalletsUpdatedAt:null, // wallets de exchange por usuario
   exchangeMigrated:null, // marca que ya se migro Bibi/Trezor a exchangeWallets
-  walletHoldings:[],   walletHoldingsUpdated:null,
+  // walletHoldingsUpdated es la hora que se muestra en pantalla ("3:45 PM"), no
+  // una marca de sync. Sin walletHoldingsUpdatedAt este campo no entraba al LWW y
+  // ganaba el ULTIMO en subir: un dispositivo que nunca hizo el fetch borraba los
+  // holdings de la nube, y si justo tomabas un snapshot, ese cero quedaba
+  // congelado ahi para siempre.
+  walletHoldings:[],   walletHoldingsUpdated:null, walletHoldingsUpdatedAt:null,
   onchainWallets:[],   onchainWalletsUpdatedAt:null,
   // Holdings manuales de cripto: pones la cantidad y el precio se trae de CoinGecko.
   // NO cuentan para el net worth ni el P&L; solo alimentan la linea "+Holdings".
@@ -133,8 +138,14 @@ var S = {
   categoryBudgetAmtsByMonth:{}, categoryBudgetAmtsByMonthUpdatedAt:null,
   // Ultimo mes cuyo cierre ya viste. Evita que el resumen vuelva a aparecer en cada
   // arranque (y que reaparezca en el otro dispositivo, via LWW).
-  lastCloseSeen:null, lastCloseSeenUpdatedAt:null
+  lastCloseSeen:null, lastCloseSeenUpdatedAt:null,
+  // Tools ocultas de la tab Tools. Lo escribe toggleTool (tools.js).
+  hiddenTools:{}, hiddenToolsUpdatedAt:null
 };
+// Campos que NO llevan marca de tiempo y NO pueden retroceder. La version de
+// esquema solo sube (bajarla re-dispara las migraciones, y con dos dispositivos
+// eso rebota sin fin); un flag de migracion ya puesto no se vuelve a apagar.
+var MONOTONIC_FLAGS=['zelleMigrated','budgetPctMigrated','exchangeMigrated'];
 var mChart=null, cChart=null, eChart=null, undoStack=[], redoStack=[];
 
 // Lazy-load Chart.js (205KB) only when a chart actually needs to render.
@@ -358,6 +369,11 @@ async function pullFromCloud(quiet){
       lwwPairs().forEach(function(p){
         if(localFieldWins(cloud[p[1]], S[p[1]])){ delete rest[p[0]]; delete rest[p[1]]; }
       });
+      // Los campos sin marca de tiempo se toman tal cual llegan (gana el ultimo en
+      // subir). Para estos eso no sirve: bajar la version de esquema re-dispara las
+      // migraciones en cada arranque, y apagar un flag ya puesto las repite.
+      if('schemaVersion' in rest) rest.schemaVersion=Math.max(parseInt(rest.schemaVersion,10)||0,parseInt(S.schemaVersion,10)||0);
+      MONOTONIC_FLAGS.forEach(function(f){ if(S[f]&&!rest[f]) delete rest[f]; });
       S=Object.assign({},S,rest);
       _pullChanged=(stateSig()!==before);
       if(_pullChanged) saveLocal();
@@ -731,13 +747,18 @@ async function fetchCoinPrices(force){
 function holdingsTotalUsd(){ return holdingsTotalUsdCore(S.walletHoldings, S.manualHoldings, S.coinPrices); }
 async function fetchWalletHoldings(){ if(!canFetchExchanges()) return;
   var wallets = S.onchainWallets||[];
-  if(!wallets.length){ S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); save(); return []; }
+  if(!wallets.length){
+    if(!(S.walletHoldings||[]).length) return [];   // ya estaba vacio: no pisar la nube con un vacio nuevo
+    S.walletHoldings=[]; S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    S.walletHoldingsUpdatedAt=stamp(); save(); return [];
+  }
   var r=await fetch(ANKR_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({wallets:wallets})});
   if(!r.ok){ var e=await r.json().catch(function(){return{};}); throw new Error(e.error||'Proxy error '+r.status); }
   var data=await r.json();
   if(data.error) throw new Error(data.error);
   S.walletHoldings=Array.isArray(data)?data:[];
   S.walletHoldingsUpdated=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  S.walletHoldingsUpdatedAt=stamp();
   save(); return S.walletHoldings;
 }
 function renderWalletHoldings(){

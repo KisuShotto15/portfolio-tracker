@@ -83,6 +83,9 @@ window.toggleTool=function(id){
   var S = _getState();
   if(!S.hiddenTools) S.hiddenTools={};
   S.hiddenTools[id]=!S.hiddenTools[id];
+  // Sin el sibling UpdatedAt este campo queda fuera del LWW y gana el ultimo
+  // dispositivo que suba: esconder una tool en uno la reaparecia en el otro.
+  if(_stamp) S.hiddenToolsUpdatedAt=_stamp();
   _save();
   renderToolToggles();
 };

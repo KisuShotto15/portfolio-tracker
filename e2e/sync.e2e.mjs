@@ -48,6 +48,7 @@ function isPortFree(port) {
 
 let cloudDoc = {};          // "fila" del usuario en el backend simulado
 let pullCount = 0;          // se incrementa en cada GET /api/sync respondido: marca que bootAfterAuth hizo su pull
+let failGet = false;        // simula un arranque sin poder leer la nube (el push sale igual)
 let failures = [];
 function check(name, cond, extra) {
   const ok = !!cond;
@@ -126,7 +127,11 @@ ws.onmessage = async (e) => {
   try {
     if (req.url.includes('/api/sync')) {
       if (req.method === 'OPTIONS') await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 204, responseHeaders: hdr, body: '' });
-      else if (req.method === 'GET') { pullCount++; await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ data: cloudDoc })) }); }
+      else if (req.method === 'GET') {
+        pullCount++;
+        if (failGet) await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 503, responseHeaders: hdr, body: b64(JSON.stringify({ error: 'Sync read failed, retry' })) });
+        else await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ data: cloudDoc })) });
+      }
       else { cloudDoc = mergeDocs(cloudDoc, JSON.parse(req.postData || '{}')); await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ data: cloudDoc })) }); }
     } else if (req.url.includes('/auth/v1/')) {
       await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ access_token: 'fake', refresh_token: 'fake', user: { email: 'e2e@test' } })) });
@@ -1816,6 +1821,48 @@ check('y lo anotado despues del restore si sobrevive', (cloudDoc.transactions ||
 
 await boot();
 check('tras recargar, el restore sigue puesto', JSON.stringify(await txsLocal()) === '[1101,1102]' || JSON.stringify(await txsLocal()) === '[1102,1101]', JSON.stringify(await txsLocal()));
+
+// ── escenario 32: campos sin marca de tiempo (F4) ───────────────────────────
+// El bug: walletHoldings (y las tools ocultas) no tenian sibling UpdatedAt, asi
+// que quedaban fuera del last-writer-wins y ganaba el ULTIMO en subir. Un
+// dispositivo que nunca leyo la nube subia su lista vacia y borraba la buena.
+console.log('E2E campos sin marca de tiempo — el ultimo en subir ya no gana');
+const holdNube = { symbol: 'ETH', balance: 0.3, balanceUsd: 900, network: 'eth', walletLabel: 'Trezor' };
+cloudDoc = {
+  transactions: [], deletedTxIds: [], snapshots: [], manualWallets: [], recurring: [],
+  onchainWallets: [], exchangeWallets: [],
+  // Tal cual los dejaba un cliente viejo: con la hora que se muestra en pantalla
+  // y SIN marca de sync. Es justo lo que hacia que el vacio del otro los pisara.
+  walletHoldings: [holdNube], walletHoldingsUpdated: '3:45 PM',
+  hiddenTools: { p2p: true },
+  schemaVersion: 99,
+};
+// El telefono arranca sin poder leer la nube (el GET falla) y anota un gasto: su
+// push sale con walletHoldings vacio, hiddenTools vacio y su propia schemaVersion.
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+failGet = true;
+await boot();
+failGet = false;
+check('el dispositivo arranco sin los datos de la nube',
+  (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').walletHoldings||[]).length")) === 0);
+await ev('openTxForm()'); await sleep(300);
+await ev("document.getElementById('tx-desc').value='E2E F4';document.getElementById('tx-amount').value='9';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()");
+await waitFor(() => (cloudDoc.transactions || []).some((t) => t.desc === 'E2E F4'), 12000, 150, 'el push del dispositivo sin datos')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('el push de un dispositivo que nunca leyo la nube NO borra los holdings',
+  (cloudDoc.walletHoldings || []).length === 1 && cloudDoc.walletHoldings[0].balanceUsd === 900,
+  JSON.stringify(cloudDoc.walletHoldings));
+check('ni las tools ocultas', JSON.stringify(cloudDoc.hiddenTools) === '{"p2p":true}', JSON.stringify(cloudDoc.hiddenTools));
+check('ni baja la version de esquema', cloudDoc.schemaVersion === 99, String(cloudDoc.schemaVersion));
+
+// Y lo que el dispositivo SI cambia a proposito sigue llegando: el arreglo no es
+// congelar el campo, es que lleve marca de tiempo.
+await ev("showPage('tools',null)"); await sleep(300);
+await ev("toggleTool('profit')");
+await waitFor(() => cloudDoc.hiddenTools && cloudDoc.hiddenTools.profit === true, 12000, 150, 'el push de la tool oculta')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+check('esconder una tool en el dispositivo si llega a la nube', cloudDoc.hiddenTools && cloudDoc.hiddenTools.profit === true, JSON.stringify(cloudDoc.hiddenTools));
+check('y el campo viaja con su marca de tiempo', (cloudDoc.hiddenToolsUpdatedAt || 0) > 0, String(cloudDoc.hiddenToolsUpdatedAt));
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

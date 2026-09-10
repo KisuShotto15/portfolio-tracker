@@ -173,6 +173,15 @@ export function mergeDocs(cloud, incoming) {
     }
   });
 
+  // Campos sin timestamp: el merge se queda con lo que acaba de llegar. Para
+  // estos eso no sirve (espejo de MONOTONIC_FLAGS en main.js): la version de
+  // esquema solo sube, y un flag de migracion ya puesto no se vuelve a apagar.
+  var sv = Math.max(parseInt(incoming.schemaVersion, 10) || 0, parseInt(cloud.schemaVersion, 10) || 0);
+  if (sv) out.schemaVersion = sv;
+  ['zelleMigrated', 'budgetPctMigrated', 'exchangeMigrated'].forEach(function (f) {
+    if (cloud[f] && !incoming[f]) out[f] = cloud[f];
+  });
+
   return out;
 }
 
