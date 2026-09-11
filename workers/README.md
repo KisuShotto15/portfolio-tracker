@@ -35,6 +35,6 @@ Secretos que usa: `BOT_TOKEN` y las mismas claves de Binance.
    claves del tracker son otras: viven en el `localStorage` de cada dispositivo
    (`ft13_xk`) y no tienen nada que ver con estas.
 
-La app pide los saldos por sus propios proxies (`api/binance-balance.js`,
-`api/bybit-balance.js`, `api/okx-balance.js`), que exigen el JWT de Supabase del
-usuario. Esos son los que hay que mirar si algo de saldos deja de funcionar.
+La app pide los saldos por su propio proxy (`api/balance.js?ex=binance|bybit|okx|ankr`,
+antes cuatro archivos separados), que exige el JWT de Supabase del usuario. Ese es
+el que hay que mirar si algo de saldos deja de funcionar.
