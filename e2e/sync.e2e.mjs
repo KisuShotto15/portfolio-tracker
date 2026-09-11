@@ -2135,6 +2135,67 @@ const enNube38 = Object.keys(legacy38).filter((k) => k in cloudDoc);
 check('y la nube tampoco los conserva', enNube38.length === 0, JSON.stringify(enNube38));
 check('la wallet de exchange sigue en la nube', (cloudDoc.exchangeWallets || []).length === 1, JSON.stringify(cloudDoc.exchangeWallets));
 
+// ── escenario 39: el nombre de una wallet no ejecuta codigo (F17) ──────────
+// Las alertas arman su texto con el nombre de la wallet y la etiqueta de la regla
+// recurrente, y ese texto iba directo a innerHTML. Una wallet llamada
+// `<img src=x onerror=...>` ejecutaba en la app — y como las wallets sincronizan,
+// lo hacia en los dos dispositivos, con la sesion de Supabase adentro.
+console.log('E2E nombres en las alertas — texto, no HTML');
+cloudDoc = {};
+const malo39 = '<img src=x onerror="window.__xss=1">';
+const viejo39 = dU(120), idTx39 = Date.parse(viejo39 + 'T12:00:00');
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  deletedTxIds: [], deletedSnapDates: [], snapshots: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+  manualWallets: [ { id: 88, name: ${JSON.stringify(malo39)}, trackerOnly: true, debt: 'out', balance: 0, updatedAt: Date.now() } ],
+  transactions: [ { id: ${idTx39}, createdAt: ${idTx39}, seq: 0, date: '${viejo39}', desc: 'prestamo', wallet: ${JSON.stringify(malo39)}, type: 'Credit', category: 'Savings', amountUSD: 200, originalCurrency: 'USD', imported: false, updatedAt: ${idTx39} } ],
+  manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await ev('window.__xss=undefined');
+await boot();
+await ev("showPage('summary',null);renderSummary()"); await sleep(400);
+const alerta39 = await ev("[...document.querySelectorAll('.alert-item')].map(e=>e.textContent).join(' ~ ')");
+check('la alerta de deuda vieja aparece', /You owe/.test(alerta39), alerta39);
+check('el nombre se ve como TEXTO, tal cual se escribio', alerta39.indexOf(malo39) >= 0, alerta39);
+check('y no se colo ninguna etiqueta al DOM',
+  (await ev("document.querySelectorAll('.alert-item img').length")) === 0);
+check('el onerror no corrio', (await ev('window.__xss')) === undefined, String(await ev('window.__xss')));
+// El mismo texto pasa por la barra compacta del header (renderHealthScore).
+await ev('renderHealthScore()'); await sleep(250);
+check('tampoco se cuela por la barra compacta del header',
+  (await ev('window.__xss')) === undefined && (await ev("document.querySelectorAll('.hbm-alert-item img').length")) === 0);
+
+// ── escenario 40: las lapidas no dependen de la lista de transacciones (F27) ─
+// El merge de tombstones vivia DENTRO de un if(cloud.transactions): un doc de la
+// nube sin lista descartaba sus lapidas y el borrado hecho en el otro dispositivo
+// no llegaba nunca.
+console.log('E2E lapidas — llegan aunque la nube no traiga la lista');
+const idTx40 = Date.now() - 5000;
+const seed40 = `localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  deletedTxIds: [], deletedWalletIds: [], manualWallets: [ { id: 91, name: 'Zinli', balance: 100, updatedAt: ${idTx40} } ],
+  transactions: [ { id: ${idTx40}, createdAt: ${idTx40}, seq: 0, date: '${dU(0)}', desc: 'E2E la borro el otro', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 8, originalCurrency: 'USD', imported: false, updatedAt: ${idTx40} } ],
+  manualWalletsUpdatedAt: ${idTx40}, transactionsUpdatedAt: ${idTx40} })))`;
+// El push del escenario anterior sigue en vuelo: cuando el servidor responde, la
+// app adopta el doc merged y re-escribe localStorage, pisando lo que sembremos.
+// Se re-siembra hasta que quede, en vez de adivinar un sleep.
+// El doc puede traer ademas lo del escenario anterior (la nube lo conserva): se
+// mira SOLO lo sembrado aca, y de paso sirve para probar que lo demas no se cae.
+const estado40 = `(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');
+  return ((S.transactions||[]).some(function(t){return t.desc==='E2E la borro el otro';})?'tx':'-')
+    +':'+((S.manualWallets||[]).some(function(w){return w.name==='Zinli';})?'w':'-');})()`;
+await waitFor(async () => { await ev(seed40); return (await ev(estado40)) === 'tx:w'; }, 8000, 400, 'sembrar el estado del escenario 40')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+check('antes del pull, la tx y la wallet estan', (await ev(estado40)) === 'tx:w', String(await ev(estado40)));
+const otros40 = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length");
+
+// La nube: SOLO las lapidas, sin ninguna de las dos listas.
+cloudDoc = { deletedTxIds: [{ id: idTx40, ts: Date.now() }], deletedWalletIds: [{ id: 91, ts: Date.now() }] };
+await ev('forcePull()'); await sleep(700);
+const tras40 = JSON.parse(await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify({txs:(S.transactions||[]).map(function(t){return t.desc;}),ws:(S.manualWallets||[]).map(function(w){return w.name;})});})()"));
+check('el borrado de la tx llega igual', tras40.txs.indexOf('E2E la borro el otro') < 0, JSON.stringify(tras40));
+check('y el de la wallet tambien', tras40.ws.indexOf('Zinli') < 0, JSON.stringify(tras40));
+// Y una lista ausente NO es una lista vacia: lo que no tiene lapida sigue vivo.
+check('lo que no se borro sobrevive a la lista ausente', tras40.txs.length === otros40 - 1, JSON.stringify(tras40) + ' antes:' + otros40);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

@@ -390,13 +390,15 @@ async function pullFromCloud(quiet){
       seedClock(cloud); // advance our logical clock past anything the cloud has seen
       var before=stateSig(); // detectar si el merge realmente cambia algo → evita re-render inutil cada 25s
       // Transactions: per-tx last-writer-wins merge
-      if(cloud.transactions){
-        var tombs=mergeTombstones(S.deletedTxIds,cloud.deletedTxIds);
-        S.transactions=mergeTxArrays(S.transactions,cloud.transactions,tombs);
-        backfillTxCreatedAt(S.transactions);   // las que llegan sin createdAt se congelan aca
-        S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
-        S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
-      }
+      // Sin el `|| []`: todo esto vivia dentro de un if(cloud.transactions), asi
+      // que un doc de la nube sin lista de transacciones descartaba sus lapidas y
+      // el borrado hecho en el otro dispositivo NUNCA llegaba. La lista puede
+      // faltar; el borrado que viene con ella, no.
+      var tombs=mergeTombstones(S.deletedTxIds,cloud.deletedTxIds);
+      S.transactions=mergeTxArrays(S.transactions,cloud.transactions||[],tombs);
+      backfillTxCreatedAt(S.transactions);   // las que llegan sin createdAt se congelan aca
+      S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
+      S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
       // Replace all other fields normally
       var rest=Object.assign({},cloud);
       delete rest.transactions;
@@ -408,10 +410,12 @@ async function pullFromCloud(quiet){
         if(f==='transactions') return;
         var tk=PER_ITEM_LISTS[f], keyOf=(f==='snapshots')?snapKey:itemId;
         delete rest[f]; delete rest[f+'UpdatedAt']; delete rest[tk];
-        if(!cloud[f]) return;
+        // Igual que con las transacciones: que la nube no traiga la lista no
+        // puede hacer que se pierdan sus tombstones (el borrado del otro
+        // dispositivo). Lista ausente = lista vacia para el merge.
         backfillUpdatedAt(S[f]); backfillUpdatedAt(cloud[f]);
         var tb=mergeTombstones(S[tk],cloud[tk]);
-        S[f]=mergeByKey(S[f]||[],cloud[f],tb,keyOf);
+        S[f]=mergeByKey(S[f]||[],cloud[f]||[],tb,keyOf);
         // Duplicados creados en dos dispositivos: dos filas para la misma wallet
         // duplican su saldo en el patrimonio.
         if(f==='manualWallets'||f==='exchangeWallets') S[f]=dedupeByNaturalKey(S[f],walletNameKey);
@@ -888,7 +892,7 @@ function renderWalletHoldings(){
       +'<div class="hld-hero-val">'+fmtUSD(grand)+'</div>'
       +'<div class="hld-hero-meta">'+assets.length+' assets · '+wallets.length+' wallets · '+netCount+' networks</div>'
       +'<div class="hld-stats">'
-        +'<div class="hld-stat"><span class="hld-stat-l">Largest</span><span class="hld-stat-v">'+largest.symbol+' <span class="hld-stat-x">'+(grand>0?Math.round(largest.balanceUsd/grand*100):0)+'%</span></span></div>'
+        +'<div class="hld-stat"><span class="hld-stat-l">Largest</span><span class="hld-stat-v">'+escHtml(largest.symbol)+' <span class="hld-stat-x">'+(grand>0?Math.round(largest.balanceUsd/grand*100):0)+'%</span></span></div>'
         +'<div class="hld-stat"><span class="hld-stat-l">Stablecoins</span><span class="hld-stat-v">'+fmtShortUSD(stableUsd)+' <span class="hld-stat-x">'+(grand>0?Math.round(stableUsd/grand*100):0)+'%</span></span></div>'
         +'<div class="hld-stat"><span class="hld-stat-l">Networks</span><span class="hld-stat-v">'+netCount+'</span></div>'
       +'</div>'
@@ -897,7 +901,7 @@ function renderWalletHoldings(){
       +'<span class="cleg" style="margin:0">Allocation by asset</span>'
       +'<div class="hld-donut-wrap">'
         +'<div class="hld-donut"><canvas id="hld-donut"></canvas><div class="hld-donut-center"><b>'+assets.length+'</b><span>assets</span></div></div>'
-        +'<div class="hld-legend">'+assets.slice(0,6).map(function(a){ return '<div class="hld-leg-item"><i style="background:'+tokenColor(a.symbol)+'"></i><span class="hld-leg-name">'+(TOKEN_NAME[a.symbol]||a.symbol)+'</span><span class="hld-leg-val">'+(grand>0?(a.balanceUsd/grand*100).toFixed(1):0)+'%</span></div>'; }).join('')+'</div>'
+        +'<div class="hld-legend">'+assets.slice(0,6).map(function(a){ return '<div class="hld-leg-item"><i style="background:'+tokenColor(a.symbol)+'"></i><span class="hld-leg-name">'+escHtml(TOKEN_NAME[a.symbol]||a.symbol)+'</span><span class="hld-leg-val">'+(grand>0?(a.balanceUsd/grand*100).toFixed(1):0)+'%</span></div>'; }).join('')+'</div>'
       +'</div>'
     +'</div>'
   +'</div>';
@@ -960,9 +964,9 @@ function renderOnchainWallets(){
     return '<div class="hld-wrow" onclick="selectHldRow(this)">'
       +'<span class="hld-wbadge" style="--nc:'+cc+'">'+cl+'</span>'
       +'<span class="hld-wlabel">'+escHtml(w.label)+'</span>'
-      +'<span class="hld-waddr">'+addr+'</span>'
+      +'<span class="hld-waddr">'+escHtml(addr)+'</span>'
       +(tot>0?'<span class="hld-wval">'+fmtUSD(tot)+'</span>':'')
-      +'<button class="hld-wbtn" onclick="copyAddr(\''+w.address+'\')" title="Copy address">⎘</button>'
+      +'<button class="hld-wbtn" onclick="copyAddr(\''+escHtml(w.address)+'\')" title="Copy address">⎘</button>'
       +'<button class="hld-wbtn del" onclick="deleteOnchainWallet('+w.id+')" title="Remove">✕</button>'
       +'</div>';
   }).join('');
@@ -2105,7 +2109,7 @@ function renderHealthScore(){
       var clickAttr=a.onClick?' onclick="'+a.onClick+'"':'';
       return '<div class="hbm-alert-item"'+clickAttr+'>'
         +'<span class="hbm-dot" style="background:'+dot+';margin-top:3px;flex-shrink:0"></span>'
-        +'<div><div class="hbm-alert-msg">'+a.msg+'</div><div class="hbm-alert-action">'+a.action+'</div></div>'
+        +'<div><div class="hbm-alert-msg">'+escHtml(a.msg)+'</div><div class="hbm-alert-action">'+escHtml(a.action)+'</div></div>'
       +'</div>';
     }).join('');
     var alertDrop=aAlerts.length>0?'<div id="alerts-drop-m" class="hbm-drop"><div class="hbm-alerts-list">'+alertItems+'</div></div>':'';
@@ -2300,6 +2304,11 @@ function maybeShowMonthClose(){
   if(!S.transactions.some(function(t){ return t.date.slice(0,7)===closed; })) return;
   window.showMonthClose(closed);
 }
+// OJO: msg y action son TEXTO PLANO. Los dos renderers (este popup y el del
+// header movil) los escapan con escHtml antes de meterlos al innerHTML, porque
+// llevan nombres que escribe el usuario — una wallet llamada
+// `<img src=x onerror=...>` ejecutaba codigo en la app, y como las wallets
+// sincronizan, lo hacia en los dos dispositivos. No metas HTML en estos campos.
 function getActiveAlerts(){
   var alerts=[];
   var now=new Date();
@@ -2413,7 +2422,7 @@ function getActiveAlerts(){
   // numero es una estimacion hasta que lo mires.
   (S.snapshots||[]).forEach(function(s){
     if(!s.auto) return;
-    var caidos=(s.staleExchanges||[]).map(escHtml).join(', ');
+    var caidos=(s.staleExchanges||[]).join(', ');   // el escape va en el render
     alerts.push({
       sev:'warn',
       msg:'Month-close snapshot created · '+fmtDate(s.date),
@@ -2462,7 +2471,7 @@ function renderAlerts(){
   var items=alerts.map(function(a){
     var icon=a.sev==='crit'?'⚠':a.sev==='info'?'↻':'!';
     var clickAttr=a.onClick?' onclick="'+a.onClick+'" style="cursor:pointer"':'';
-    return '<div class="alert-item alert-'+a.sev+'"'+clickAttr+'><div class="alert-icon">'+icon+'</div><div class="alert-body"><div class="alert-msg">'+a.msg+'</div><div class="alert-action">'+a.action+'</div></div></div>';
+    return '<div class="alert-item alert-'+a.sev+'"'+clickAttr+'><div class="alert-icon">'+icon+'</div><div class="alert-body"><div class="alert-msg">'+escHtml(a.msg)+'</div><div class="alert-action">'+escHtml(a.action)+'</div></div></div>';
   }).join('');
   var hasCrit=alerts.some(function(a){ return a.sev==='crit'; });
   var label=alerts.length===1?'1 alert':alerts.length+' alerts';
@@ -4170,7 +4179,11 @@ function populateWalletSelects(){
   ['tx-wallet','tf-wallet'].forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
     var cur=el.value; var isF=id.startsWith('tf');
-    el.innerHTML=(isF?'<option value="">Wallet</option>':'')+names.map(function(n){ return '<option>'+n+'</option>'; }).join('');
+    // escHtml: Chrome parsea etiquetas dentro de <option> y les dispara el
+    // onerror. Una wallet llamada `<img src=x onerror=...>` ejecutaba aca, no en
+    // la fila (esa ya escapaba). El value del select no cambia: el texto que
+    // parsea el navegador sigue siendo el nombre tal cual.
+    el.innerHTML=(isF?'<option value="">Wallet</option>':'')+names.map(function(n){ return '<option>'+escHtml(n)+'</option>'; }).join('');
     if(cur) el.value=cur;
   });
 }
