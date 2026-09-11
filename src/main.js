@@ -4,7 +4,7 @@ import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, 
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
-  debtSinceCore, daysBetweenISO, noteMemoryCore, autoSnapshotDueCore,
+  debtSinceCore, daysBetweenISO, noteMemoryCore, autoSnapshotDueCore, staleExchangesCore,
   GROUP_ESSENTIAL, GROUP_BUSINESS, GROUP_LIFESTYLE, EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS } from './finance-core.js';
 import { healthScoreCore } from './health-core.js';
 import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER, showAuthOverlay, hideAuthOverlay, renderPasskeys } from './auth.js';
@@ -2396,10 +2396,17 @@ function getActiveAlerts(){
   // numero es una estimacion hasta que lo mires.
   (S.snapshots||[]).forEach(function(s){
     if(!s.auto) return;
+    var caidos=(s.staleExchanges||[]).map(escHtml).join(', ');
     alerts.push({
       sev:'warn',
       msg:'Month-close snapshot created · '+fmtDate(s.date),
-      action:'Placeholder '+fmtUSD(s.total)+' — verify the real amount in History · tap to dismiss',
+      // Con un exchange caido el total quedo corto y hay que decir cual: "verifica
+      // el monto" no sirve si no se sabe que mirar.
+      // "sin saldo fresco" cubre los dos casos con la verdad: el que no respondio
+      // (sumo 0) y el que respondio hace nueve horas (sumo un numero viejo).
+      action:'Placeholder '+fmtUSD(s.total)+' — verify the real amount in History'
+        +(caidos?' · no fresh balance from '+caidos+' when it was taken':'')
+        +' · tap to dismiss',
       onClick:'dismissAutoSnapshot('+s.id+')'
     });
   });
@@ -2969,12 +2976,32 @@ function appConfirm(title,bodyHtml,okLabel){
     document.addEventListener('keydown',onKey);
   });
 }
+// El auto-refresh de exchanges corre cada 5h (BINANCE_AUTO_MS): una lectura de
+// mas de 6h significa que al menos un intento fallo.
+var STALE_BAL_MS=6*60*60*1000;
+function staleExchanges(){ return staleExchangesCore(S.exchangeWallets,Date.now(),STALE_BAL_MS); }
+// Aviso para el dialogo del snapshot. Separa los dos casos porque el error es
+// distinto: el que no responde resta de mas (suma 0), el viejo suma un numero
+// que ya no es. Sin esto, "verifica el monto" no dice QUE verificar.
+function staleExchangeWarning(list){
+  if(!list||!list.length) return '';
+  var sin=list.filter(function(x){ return x.missing; }).map(function(x){ return x.name; });
+  var viejos=list.filter(function(x){ return !x.missing; });
+  var partes=[];
+  if(sin.length) partes.push('<b style="color:#fff">'+sin.map(escHtml).join('</b>, <b style="color:#fff">')+'</b> '+(sin.length===1?'is':'are')+' not reporting a balance, so '+(sin.length===1?'it counts':'they count')+' as $0 here.');
+  viejos.forEach(function(x){
+    var h=Math.round(x.ageMs/3600000);
+    partes.push('<b style="color:#fff">'+escHtml(x.name)+'</b> was last read '+h+'h ago.');
+  });
+  return '<span style="display:block;margin-top:9px;line-height:1.5;color:#EF9F27">'+partes.join(' ')
+    +' Refresh it in Wallets first, or this number is frozen wrong.</span>';
+}
 async function recordSnapshot(){
   var auto=getTotalBalance();
   var hasPrev=S.snapshots&&S.snapshots.length>0;
   var res=await appPrompt(
     'Record portfolio snapshot',
-    'Auto-sum from wallets: <b style="color:#fff">'+fmtUSD(auto)+'</b>',
+    'Auto-sum from wallets: <b style="color:#fff">'+fmtUSD(auto)+'</b>'+staleExchangeWarning(staleExchanges()),
     auto.toFixed(2),
     // Ya no crea ninguna transaccion: decide si se le atribuye income al periodo
     // (se guarda en el snapshot como derivedIncome/netProfit).
@@ -3062,6 +3089,11 @@ function autoMonthSnapshot(hour,minHour,todayISO){
   // (txInPeriodCore): con el id del momento de creacion, un snapshot fechado el 31
   // se tragaba dentro de su periodo las transacciones del mes siguiente.
   var snap={id:Date.parse(date+'T23:59:59'),date:date,total:getTotalBalance(),holdingsValue:holdingsTotalUsd(),auto:true};
+  // Quien no estaba respondiendo EN ESE MOMENTO. Se guarda en el snapshot y no se
+  // recalcula al renderizar la alerta: para cuando la leas, el exchange puede
+  // estar andando de nuevo y el total igual quedo mal.
+  var caidos=staleExchanges();
+  if(caidos.length) snap.staleExchanges=caidos.map(function(x){ return x.name; });
   var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   var prev=sorted[sorted.length-1];
   // Sin snapshot previo no hay periodo: este es la linea base y no deriva income.

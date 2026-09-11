@@ -433,3 +433,23 @@ export function autoSnapshotDueCore(snapshots, todayISO, hour, minHour) {
   return target;
 }
 
+
+// Wallets de exchange cuyo saldo NO es de fiar en este momento. Si la consulta a
+// un exchange falla, su saldo queda en "—" y ese wallet aporta CERO al patrimonio:
+// la fila lo muestra, pero el numero grande de arriba no dice nada. Tomar un
+// snapshot asi congela un patrimonio mal PARA SIEMPRE — y el cierre de mes corre
+// solo, de noche, sin que nadie este mirando.
+// Dos casos distintos, porque el aviso tiene que decir cual es:
+//   missing:true  → no hay lectura (nunca respondio, o la ultima fallo): suma 0.
+//   missing:false → hay lectura, pero vieja: suma un numero viejo.
+export function staleExchangesCore(wallets, now, maxAgeMs) {
+  var out = [];
+  (wallets || []).forEach(function (w) {
+    if (!w) return;
+    var name = w.name || 'Exchange';
+    if (w.balance == null || !w.fetchedAt) { out.push({ name: name, missing: true, ageMs: null }); return; }
+    var age = now - w.fetchedAt;
+    if (age > maxAgeMs) out.push({ name: name, missing: false, ageMs: age });
+  });
+  return out;
+}

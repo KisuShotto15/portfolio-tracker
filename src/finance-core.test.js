@@ -7,7 +7,7 @@ import {
   lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceCore, catPaceAlertCore, dashMonthsCore,
   rollOnCore, migrateRolloverCore, histAllocPctCore, debtSinceCore, daysBetweenISO,
-  noteMemoryCore, monthEndISO, autoSnapshotDueCore,
+  noteMemoryCore, monthEndISO, autoSnapshotDueCore, staleExchangesCore,
   EXPENSE_CATS_DASH, BUDGET_CATS, NEUTRAL_CATS,
 } from './finance-core.js';
 
@@ -699,5 +699,52 @@ describe('snapshot automatico de cierre de mes', () => {
 
   it('cruza el fin de anio', () => {
     expect(autoSnapshotDueCore([snap('2025-12-02')], '2025-12-31', 22)).toBe('2025-12-31');
+  });
+});
+
+describe('staleExchangesCore (un exchange caido sale del patrimonio sin aviso)', () => {
+  const H = 60 * 60 * 1000, ahora = 1_000_000_000_000, MAX = 6 * H;
+
+  it('sin lectura: suma 0 al patrimonio y hay que decirlo', () => {
+    const ws = [{ name: 'Binance', balance: null, fetchedAt: null }];
+    expect(staleExchangesCore(ws, ahora, MAX)).toEqual([{ name: 'Binance', missing: true, ageMs: null }]);
+  });
+
+  it('lectura vieja: el numero existe pero es de otro momento', () => {
+    const ws = [{ name: 'Bybit', balance: 500, fetchedAt: ahora - 9 * H }];
+    const out = staleExchangesCore(ws, ahora, MAX);
+    expect(out).toHaveLength(1);
+    expect(out[0].missing).toBe(false);
+    expect(out[0].ageMs).toBe(9 * H);
+  });
+
+  it('lectura fresca: no molesta', () => {
+    expect(staleExchangesCore([{ name: 'OKX', balance: 10, fetchedAt: ahora - H }], ahora, MAX)).toEqual([]);
+  });
+
+  it('un saldo de 0 real no es un saldo faltante', () => {
+    // 0 es un saldo legitimo; null es "no se pudo leer". Confundirlos haria que el
+    // aviso salga siempre y deje de significar algo.
+    expect(staleExchangesCore([{ name: 'OKX', balance: 0, fetchedAt: ahora }], ahora, MAX)).toEqual([]);
+  });
+
+  it('un saldo sin fetchedAt cuenta como sin lectura', () => {
+    // Viene de la migracion vieja (trezorBalance): hay numero, pero nadie sabe de cuando.
+    const out = staleExchangesCore([{ name: 'Trezor', balance: 300, fetchedAt: null }], ahora, MAX);
+    expect(out[0].missing).toBe(true);
+  });
+
+  it('varios a la vez, en orden, y los sanos afuera', () => {
+    const ws = [
+      { name: 'Binance', balance: null, fetchedAt: null },
+      { name: 'OKX', balance: 40, fetchedAt: ahora - H },
+      { name: 'Bybit', balance: 500, fetchedAt: ahora - 7 * H },
+    ];
+    expect(staleExchangesCore(ws, ahora, MAX).map((x) => x.name)).toEqual(['Binance', 'Bybit']);
+  });
+
+  it('aguanta listas nulas y entradas nulas', () => {
+    expect(staleExchangesCore(null, ahora, MAX)).toEqual([]);
+    expect(staleExchangesCore([null], ahora, MAX)).toEqual([]);
   });
 });

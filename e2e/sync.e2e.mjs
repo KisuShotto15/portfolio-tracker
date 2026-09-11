@@ -2058,6 +2058,54 @@ check('al poder guardar de nuevo, el aviso se va',
 check('y el estado local vuelve a guardarse',
   (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.desc==='E2E con disco';})")) === true);
 
+// ── escenario 37: un exchange caido no entra callado al snapshot (F19) ──────
+// El bug: si la consulta a un exchange falla, su saldo queda en "—" y ese wallet
+// aporta CERO al patrimonio. La fila lo muestra; el numero grande, no. Un
+// snapshot tomado en ese momento congela el total mal para siempre — y el cierre
+// de mes corre solo, de noche, sin que nadie mire.
+console.log('E2E exchange caido — el snapshot lo dice antes de guardar');
+cloudDoc = {};
+const finMes37 = finMes(0);
+const dia37 = finMes37.slice(0, 8) + '05';
+const idSnap37 = Date.parse(dia37 + 'T12:00:00');
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  transactions: [], deletedTxIds: [], deletedSnapDates: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [],
+  manualWallets: [ { id: 77, name: 'Efectivo', trackerOnly: false, balance: 1000, updatedAt: Date.now() } ],
+  exchangeWallets: [
+    { id: 501, name: 'Binance', type: 'binance', balance: null, updated: null, fetchedAt: null, updatedAt: Date.now() },
+    { id: 502, name: 'Bybit', type: 'bybit', balance: 500, updated: '6:00 AM', fetchedAt: Date.now() - 9*3600*1000, updatedAt: Date.now() },
+    { id: 503, name: 'OKX', type: 'okx', balance: 40, updated: '9:00 AM', fetchedAt: Date.now() - 3600*1000, updatedAt: Date.now() } ],
+  snapshots: [ { id: ${idSnap37}, date: '${dia37}', total: 900, updatedAt: ${idSnap37} } ],
+  snapshotsUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), exchangeWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+
+await ev('recordSnapshot()');
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de anotar snapshot');
+const aviso37 = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m[m.length-1].querySelector('.modal-info').textContent;})()");
+check('el dialogo nombra al exchange que no responde', /Binance is not reporting a balance/.test(aviso37), aviso37);
+check('y dice que ese suma $0 al total', /counts as \$0 here/.test(aviso37), aviso37);
+check('nombra tambien la lectura vieja, con su antiguedad', /Bybit was last read 9h ago/.test(aviso37), aviso37);
+check('no molesta con el que si esta fresco', aviso37.indexOf('OKX') < 0, aviso37);
+check('y dice que hacer antes de guardar', /Refresh it in Wallets first/.test(aviso37), aviso37);
+// Cancelar: no queremos anotar nada todavia.
+await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amc').click();})()");
+await sleep(300);
+
+// El cierre de mes automatico guarda QUIENES estaban caidos al tomarlo: cuando
+// leas la alerta, el exchange puede estar andando de nuevo y el total igual quedo mal.
+await ev(`autoMonthSnapshot(22,20,'${finMes37}')`); await sleep(400);
+const auto37 = JSON.parse(await ev(`(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).find(function(x){return x.date==='${finMes37}';});return JSON.stringify(s||null);})()`));
+check('el cierre automatico queda anotado', auto37 && auto37.auto === true, JSON.stringify(auto37));
+check('y se guarda quien no tenia saldo fresco al tomarlo',
+  auto37 && JSON.stringify(auto37.staleExchanges) === '["Binance","Bybit"]', JSON.stringify(auto37 && auto37.staleExchanges));
+// El total: Efectivo 1000 + Bybit 500 (viejo) + OKX 40, y Binance como 0.
+check('el total del snapshot deja a Binance en cero (por eso el aviso)', auto37 && auto37.total === 1540, String(auto37 && auto37.total));
+
+await ev("showPage('summary',null);renderSummary()"); await sleep(400);
+const alerta37 = await ev("[...document.querySelectorAll('.alert-item')].map(e=>e.textContent).join(' ~ ')");
+check('la alerta del cierre dice cual exchange fallo', /no fresh balance from Binance, Bybit when it was taken/.test(alerta37), alerta37);
+check('y sigue pidiendo verificar el monto', /verify the real amount/.test(alerta37), alerta37);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
