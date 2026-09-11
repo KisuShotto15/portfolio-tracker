@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "regions": ["sin1"],
+  "regions": ["gru1"],
   "crons": [
     { "path": "/api/backup", "schedule": "0 6 * * *" }
   ],

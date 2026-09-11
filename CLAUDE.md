@@ -97,6 +97,13 @@ No hay linter configurado. Despues de cualquier cambio en `src/` o `api/`, corre
 
 **api/ (Vercel serverless functions, una por archivo).** `sync.js` es la unica con merge complejo. `backup.js`/`restore.js` hacen snapshot/restore completo de `S` protegido con comparacion timing-safe. `blob-upload.js` sube adjuntos con whitelist de mime types. `*-balance.js` (ankr, binance, bybit, okx) son proxies a esas APIs porque no tienen CORS abierto para pedirlas desde el navegador. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
 
+**Region de las functions.** `vercel.json` fija `regions` en **`gru1` (Sao Paulo)**. Dos reglas
+que no se pueden romper: **(1) NUNCA una region de Estados Unidos** (`iad1`, `sfo1`, `cle1`,
+`pdx1`) — Binance bloquea las requests desde IPs de US y los proxies `*-balance.js` dejan de
+funcionar; **(2)** de las regiones que quedan, la unica americana es `gru1`, y es la mas cerca
+de Venezuela (antes estaba en `sin1`, Singapur: cada llamada a la nube cruzaba medio planeta).
+El plan Hobby permite UNA sola region.
+
 **Deploy.** Vercel cuenta CADA archivo de `api/` como una serverless function y el plan Hobby
 permite **12 por deployment** — pasarse rompe el build entero, no solo el archivo de mas. Por eso
 `.vercelignore` saca los `api/**/*.test.js` (son tests, no endpoints). Hoy quedan 10 functions
