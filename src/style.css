@@ -592,12 +592,14 @@ input,select,textarea,button{font-family:inherit}
 .bdg-carry.is-neg{color:#E24B4A}
 /* Limite en USD editable en el pie de la card. El punteado estaba SOLO en :hover,
    que en movil no existe: el campo se leia como texto plano y nadie se enteraba de
-   que era editable. Ahora se ve siempre en gris y se aclara al pasar por encima —
-   el mismo trato que el total del mes en el hero (.bdg-total-view). */
-.bdg-amt-wrap{display:inline-flex;align-items:baseline;color:inherit;font-family:var(--font-num);
-  border-bottom:1px dashed var(--line);transition:border-color .15s}
-.bdg-amt-wrap.is-fixed{color:var(--txt2)}
-.bdg-amt-wrap:hover{border-bottom-color:var(--txt3)}
+   que era editable. Ahora se ve siempre, y en el mismo violeta con el que el total
+   del mes marca un valor puesto a mano (.bdg-total-view.is-ovr): el numero y su
+   punteado dejan de confundirse con el gris del pie, que es texto y no se toca.
+   Un monto FIJO (no derivado del %) sube un tono: es el mismo valor, pinneado. */
+.bdg-amt-wrap{display:inline-flex;align-items:baseline;color:#C9AEFF;font-family:var(--font-num);
+  border-bottom:1px dashed rgba(155,112,240,.55);transition:border-color .15s,color .15s}
+.bdg-amt-wrap.is-fixed{color:#D9C6FF;border-bottom-color:rgba(155,112,240,.75)}
+.bdg-amt-wrap:hover{color:#D9C6FF;border-bottom-color:rgba(155,112,240,.85)}
 .bdg-amt-wrap:focus-within{border-bottom-color:var(--accent)}
 .bdg-amt-inp{font:inherit;color:inherit;background:transparent;border:none;border-radius:0;
   padding:0;text-align:left;cursor:text;-moz-appearance:textfield}
