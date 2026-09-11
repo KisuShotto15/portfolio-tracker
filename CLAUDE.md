@@ -95,18 +95,18 @@ No hay linter configurado. Despues de cualquier cambio en `src/` o `api/`, corre
 
 **Auth (src/auth.js).** Supabase GoTrue (email/password, OTP y passkeys/WebAuthn). `sbRefresh()` es tri-state (`true`/`false`/`'net'`) para distinguir "el usuario debe volver a loguearse" (credencial invalida) de "fallo de red" — un `'net'` nunca debe forzar logout.
 
-**api/ (Vercel serverless functions, una por archivo).** `sync.js` es la unica con merge complejo. `backup.js`/`restore.js` hacen snapshot/restore completo de `S` protegido con comparacion timing-safe. `blob-upload.js` sube adjuntos con whitelist de mime types. `*-balance.js` (ankr, binance, bybit, okx) son proxies a esas APIs porque no tienen CORS abierto para pedirlas desde el navegador. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
+**api/ (Vercel serverless functions, una por archivo).** `sync.js` es la unica con merge complejo. `backup.js`/`restore.js` hacen snapshot/restore completo de `S` protegido con comparacion timing-safe. `blob-upload.js` sube adjuntos con whitelist de mime types. `balance.js` es el proxy UNICO de saldos (`?ex=binance|bybit|okx|ankr`): esas APIs no mandan CORS abierto, asi que el navegador no las puede pedir directo. Eran cuatro archivos casi identicos = cuatro functions. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
 
 **Region de las functions.** `vercel.json` fija `regions` en **`gru1` (Sao Paulo)**. Dos reglas
 que no se pueden romper: **(1) NUNCA una region de Estados Unidos** (`iad1`, `sfo1`, `cle1`,
-`pdx1`) — Binance bloquea las requests desde IPs de US y los proxies `*-balance.js` dejan de
+`pdx1`) — Binance bloquea las requests desde IPs de US y `balance.js` deja de
 funcionar; **(2)** de las regiones que quedan, la unica americana es `gru1`, y es la mas cerca
 de Venezuela (antes estaba en `sin1`, Singapur: cada llamada a la nube cruzaba medio planeta).
 El plan Hobby permite UNA sola region.
 
 **Deploy.** Vercel cuenta CADA archivo de `api/` como una serverless function y el plan Hobby
 permite **12 por deployment** — pasarse rompe el build entero, no solo el archivo de mas. Por eso
-`.vercelignore` saca los `api/**/*.test.js` (son tests, no endpoints). Hoy quedan 10 functions
-reales: al agregar la 13ra hay que fusionar endpoints (los cuatro `*-balance.js` son candidatos
-obvios a un solo proxy con `?ex=`) o subir de plan. Vercel (`vercel.json`: build command, cron
+`.vercelignore` saca los `api/**/*.test.js` (son tests, no endpoints). Hoy quedan **7 functions**
+reales (eran 10: los cuatro `*-balance.js` se fusionaron en `balance.js?ex=`), asi que hay margen
+para cinco mas antes de tener que fusionar otra cosa o subir de plan. Vercel (`vercel.json`: build command, cron
 diario a `/api/backup`, headers de cache para `sw.js`/`manifest.json`/iconos) detras de Cloudflare en `portfolio.kisushotto.com`. `index.html` redirige a `kisushotto.com` si el hostname no coincide (protege contra acceso por el dominio `.vercel.app` crudo).

@@ -13,16 +13,19 @@ import { initAuth, sbGet, sbConsumeHashSession, sbRefresh, syncFetch, MULTIUSER,
 // PUBLICADA (el valor anunciado para el proximo dia habil, no el retraso de dolarapi),
 // sin geo-bloqueo, sin auth y con CORS abierto. Shape: {current:{date,usd,eur},...}.
 var RATE_URL      = 'https://rates.dolarvzla.com/bcv/current.json';
-var BINANCE_PROXY = 'https://portfolio-tracker-psi-hazel.vercel.app/api/binance-balance';
-var ANKR_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/ankr-balance';
+// Un solo endpoint para los cuatro proxies de saldo (?ex=): Vercel cuenta cada
+// archivo de api/ como una function y el plan Hobby permite 12.
+var BAL_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/balance?ex=';
+var BINANCE_PROXY = BAL_PROXY+'binance';
+var ANKR_PROXY    = BAL_PROXY+'ankr';
 // Preview (.vercel.app): mismo-origen /api/sync → ese deployment (con env de
 // Supabase) responde multi-usuario, sin CORS. Produccion (portfolio.kisushotto.com
 // via Cloudflare): la URL absoluta del proyecto Vercel, como siempre.
 var SYNC_PROXY    = location.hostname.endsWith('.vercel.app')
   ? '/api/sync'
   : 'https://portfolio-tracker-psi-hazel.vercel.app/api/sync';
-var BYBIT_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/bybit-balance';
-var OKX_PROXY     = 'https://portfolio-tracker-psi-hazel.vercel.app/api/okx-balance';
+var BYBIT_PROXY   = BAL_PROXY+'bybit';
+var OKX_PROXY     = BAL_PROXY+'okx';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
 var PRICE_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/prices';
 // Tasa USDT/VES del monitor P2P (mediana top-20 merchants BDV, lo fetchea 24/7).
