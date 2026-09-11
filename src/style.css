@@ -611,7 +611,6 @@ input,select,textarea,button{font-family:inherit}
 .bdg-amt-inp::placeholder{color:var(--txt3)}
 .bdg-scope-btn{font-size:10.5px;padding:3px 10px;border-radius:99px;border:1px solid var(--line-soft);background:transparent;color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s}
 .bdg-scope-btn.on{border-color:var(--accent);color:#fff;background:rgba(155,112,240,0.14)}
-.bdg-scope-btn.reset{color:#E24B4A}
 /* Todas/Ninguna manda sobre el resto de la fila: se separa con un divisor para
    que no se lea como una categoria mas. */
 .bdg-scope-btn.roll-all{font-weight:600;color:var(--txt2);margin-right:6px;padding-right:13px;border-right:0;position:relative}

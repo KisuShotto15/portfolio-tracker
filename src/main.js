@@ -1320,6 +1320,7 @@ function editTx(id){
   var rr=document.getElementById('tx-rec-row'); if(rr) rr.style.display='none'; // recurrente no aplica al editar una tx
   document.getElementById('tx-date').value=t.date;
   document.getElementById('tx-desc').value=t.desc;
+  ensureWalletOption(document.getElementById('tx-wallet'),t.wallet);
   document.getElementById('tx-wallet').value=t.wallet||'';
   document.getElementById('tx-type').value=t.type;
   document.getElementById('tx-cat').value=t.category; updateCatHint();
@@ -2471,8 +2472,14 @@ function getActiveAlerts(){
   // 7. Cierre de mes creado solo. El total sale del auto-sum de wallets de hoy,
   // no del ultimo dia del mes, y las wallets manuales no se rastrean solas: el
   // numero es una estimacion hasta que lo mires.
-  (S.snapshots||[]).forEach(function(s){
-    if(!s.auto) return;
+  // Antes empujaba una alerta POR cada snapshot sin verificar: tres meses sin
+  // mirarlo = tres alertas identicas tapando todo lo demas. Ahora avisa por el mas
+  // reciente y dice cuantos quedan atras; al descartarlo aparece el siguiente.
+  var autoSnaps=(S.snapshots||[]).filter(function(s){ return s.auto; })
+    .sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+  if(autoSnaps.length){
+    var s=autoSnaps[0];
+    var atras=autoSnaps.length-1;
     var caidos=(s.staleExchanges||[]).join(', ');   // el escape va en el render
     alerts.push({
       sev:'warn',
@@ -2483,10 +2490,11 @@ function getActiveAlerts(){
       // (sumo 0) y el que respondio hace nueve horas (sumo un numero viejo).
       action:'Placeholder '+fmtUSD(s.total)+' — verify the real amount in History'
         +(caidos?' · no fresh balance from '+caidos+' when it was taken':'')
+        +(atras?' · '+atras+' older one'+(atras===1?'':'s')+' still to verify':'')
         +' · tap to dismiss',
       onClick:'dismissAutoSnapshot('+s.id+')'
     });
-  });
+  }
 
   // 5. Transacciones recurrentes auto-agregadas (info, descartable)
   (S.recurringLog||[]).forEach(function(a){
@@ -2704,6 +2712,7 @@ window.editRecurringRule=function(id){
   // asi generaba txs con wallet:'' que nunca se debitan del tracker.
   // Si el wallet de la regla ya no existe, el select queda en blanco a proposito:
   // mejor que el usuario lo vea y elija, a que se guarde uno inventado.
+  ensureWalletOption(document.getElementById('tx-wallet'),r.wallet);
   document.getElementById('tx-wallet').value=r.wallet||'';
   document.getElementById('tx-type').value=r.type||'Debit';
   document.getElementById('tx-cat').value=r.category||''; updateCatHint();
@@ -2849,16 +2858,22 @@ function renderInsights(month){
     var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
     var dayOfMonth=now.getDate();
     var daysLeft=Math.max(1,daysInMonth-dayOfMonth+1);
-    var budget=budgetTotalFor(month)||600;
+    // Sin presupuesto del mes no se inventa uno: antes caia a 600 (el default de
+    // S.budgetTotal) y las dos fichas comparaban tu gasto contra un plan que no
+    // existe — "te pasaste por $40" de un presupuesto que nunca pusiste.
+    var budget=budgetTotalFor(month), hayPlan=budget>0;
     var remaining=budget-spent;
     var perDay=remaining>0?remaining/daysLeft:0;
     var projected=dayOfMonth>0?spent/dayOfMonth*daysInMonth:0;
-    var overBudget=projected>budget;
+    var overBudget=hayPlan&&projected>budget;
     var dailyAvg=dayOfMonth>0?spent/dayOfMonth:0;
     blocks=''
       +tile('Daily average', fmtUSD(dailyAvg), '', 'over '+dayOfMonth+(dayOfMonth===1?' day':' days'))
-      +tile('Left per day', remaining>0?fmtUSD(perDay):'—', remaining>0?'#5DCAA5':'#E24B4A', daysLeft+' days left · '+fmtUSD(Math.max(0,remaining))+' left')
-      +tile('Projected spend', fmtUSD(projected), overBudget?'#E24B4A':'#5DCAA5', overBudget?'over by '+fmtUSD(projected-budget):'under by '+fmtUSD(budget-projected))
+      +tile('Left per day', hayPlan&&remaining>0?fmtUSD(perDay):'—',
+            hayPlan?(remaining>0?'#5DCAA5':'#E24B4A'):'',
+            hayPlan?daysLeft+' days left · '+fmtUSD(Math.max(0,remaining))+' left':'no budget set for '+monthName(month,true))
+      +tile('Projected spend', fmtUSD(projected), hayPlan?(overBudget?'#E24B4A':'#5DCAA5'):'',
+            hayPlan?(overBudget?'over by '+fmtUSD(projected-budget):'under by '+fmtUSD(budget-projected)):'by the end of the month')
       +vsTile;
   }else{
     blocks=tile('Spent', fmtUSD(spent), '', 'in '+monthName(month))+vsTile;
@@ -3341,14 +3356,12 @@ window.toggleRolloverAll=function(month){
 };
 // Scope de edicion: 'default' escribe el % global, 'month' escribe el override
 // del mes visible. Solo afecta la edicion; la vista siempre muestra el efectivo.
-// Fila de scope + presets del Budget (Default / <mes> only / 3-mo avg / 50-30-20).
-// En la practica el flujo es "Default y ajusto a mano", asi que la fila se oculta
-// en vez de borrarse: poner esto en true la devuelve entera, sin tocar nada mas.
-// Con la fila oculta, _budEditScope se queda en 'default' — no hay forma de
-// cambiarlo — asi que editar un % siempre escribe el valor global.
-var BUDGET_SCOPE_UI=false;
-var _budEditScope='default';
-window._budScope=function(s){ if(!BUDGET_SCOPE_UI) return; _budEditScope=s; renderBudget(); };
+// La fila de scope y sus presets (Default / <mes> only / 3-mo avg / 50-30-20)
+// vivian apagados detras de un flag en false: cinco botones que no se dibujaban
+// nunca y un _budEditScope que solo podia valer 'default'. Se fueron. El reparto
+// por gasto promedio no se perdio: seedMonthPlan ya lo hace solo en cada mes nuevo.
+// _budResetMonth se queda: es la unica forma de sacar el override de un mes (que
+// hoy SI se crea con solo editar un %), aunque todavia no tenga boton propio.
 window._budResetMonth=function(){
   var touched=false;
   if(S.categoryBudgetPctsByMonth&&S.categoryBudgetPctsByMonth[_budMonth]){
@@ -3427,8 +3440,8 @@ window.bdgPctCommit=function(el,cat){
   setTimeout(function(){ saveCategoryPct(cat,v); },0);
 };
 // Editar un % escribe SIEMPRE el mes visible, igual que el total del hero. Antes
-// escribia el global salvo que _budEditScope fuera 'month', y como la fila de
-// scope esta oculta (BUDGET_SCOPE_UI) ese scope no se podia elegir: planificar
+// escribia el global salvo que se eligiera un scope "solo este mes" — y esa fila
+// de botones estaba apagada, asi que no habia forma de elegirlo: planificar
 // septiembre reescribia agosto y todos los meses cerrados sin avisar.
 // Vaciar el campo guarda 0 para ESE mes (no hay presupuesto para esa categoria
 // este mes), no un hueco que vuelva a heredar el default: para volver al default
@@ -3484,35 +3497,9 @@ function _budHistAvg(anchor){
   });
   return avg;
 }
-// Recomendaciones: 'hist' = % segun tu gasto promedio real; '503020' = 50%
-// esenciales / 30% estilo de vida / 10% business (10% libre como colchon),
-// repartido dentro de cada grupo proporcional al historial (equitativo sin datos).
-window.applyBudgetRec=function(kind){
-  var avg=_budHistAvg(_budMonth), pcts={};
-  if(kind==='hist'){
-    pcts=histAllocPctCore(avg,budgetTotalFor(_budMonth))||{};
-  } else {
-    [[GROUP_ESSENTIAL,50],[GROUP_LIFESTYLE,30],[GROUP_BUSINESS,10]].forEach(function(g){
-      var cats=g[0], share=g[1];
-      var sum=cats.reduce(function(s,c){ return s+avg[c]; },0);
-      cats.forEach(function(c){
-        var w=sum>0?avg[c]/sum:1/cats.length;
-        var p=parseFloat((share*w).toFixed(1));
-        if(p>0) pcts[c]=p;
-      });
-    });
-  }
-  if(!Object.keys(pcts).length) return;
-  if(_budEditScope==='month'&&_budMonth){
-    if(!S.categoryBudgetPctsByMonth) S.categoryBudgetPctsByMonth={};
-    S.categoryBudgetPctsByMonth[_budMonth]=pcts;
-    S.categoryBudgetPctsByMonthUpdatedAt=stamp();
-  } else {
-    S.categoryBudgetPcts=pcts;
-    S.categoryBudgetPctsUpdatedAt=stamp();
-  }
-  save(); renderBudget();
-};
+// applyBudgetRec ('3-mo avg' y '50/30/20') se fue con los botones que la
+// llamaban: era el unico camino hacia ella. El reparto por gasto promedio sigue
+// vivo donde importa — seedMonthPlan lo aplica solo al estrenar un mes.
 window._budMonthSel=function(v){ _budMonth=v; renderBudget(); };
 // getMonths() solo lista meses CON transacciones; el Budget suma el mes en curso,
 // que se planifica antes de gastar.
@@ -3618,7 +3605,6 @@ function renderBudget(){
   // Categories grid — header con scope de edicion (default vs solo este mes)
   var mShort=month?monthName(month,true):'';
   var monthOvr=(S.categoryBudgetPctsByMonth||{})[month]||null;
-  var hasOvr=!!(monthOvr&&Object.keys(monthOvr).length)||totOvr;
   // Medidor de asignacion total: cuanto % del presupuesto esta repartido entre
   // las categorias (con overrides del mes visible) y cuanto falta/sobra para 100%.
   var sumPctHead=BUDGET_CATS.reduce(function(s,c){ return s+catPctShown(c,month); },0);
@@ -3635,18 +3621,7 @@ function renderBudget(){
     // Un solo contenedor para TODOS los chips: antes eran dos <span> block-level
     // y cada boton caia en su propia linea.
     +'<span class="bdg-acts">'
-    // La fila de scope hoy esta apagada (BUDGET_SCOPE_UI) pero el rollover se ve igual.
     +'<button class="bdg-scope-btn roll-tgl'+(_rolloverUI?' on':'')+'" title="Carry into '+mShort+' whatever was left over (or overspent) last month. Now: '+rollN+' of '+BUDGET_CATS.length+' categories. Chosen month by month." onclick="window._budRolloverUI()">Rollover</button>'
-    +(BUDGET_SCOPE_UI
-      ?'<button class="bdg-scope-btn'+(_budEditScope!=='month'?' on':'')+'" onclick="window._budScope(\'default\')">Default</button>'
-        +'<button class="bdg-scope-btn'+(_budEditScope==='month'?' on':'')+'" onclick="window._budScope(\'month\')">'+mShort+' only</button>'
-        +(hasOvr?'<button class="bdg-scope-btn reset" onclick="window._budResetMonth()">Reset '+mShort+'</button>':'')
-        +'<button class="bdg-scope-btn" title="Allocate % from your 3-month average spend" onclick="applyBudgetRec(\'hist\')">3-mo avg</button>'
-        +'<button class="bdg-scope-btn" title="50% essentials / 30% lifestyle / 10% business" onclick="applyBudgetRec(\'503020\')">50/30/20</button>'
-      // Con la fila oculta no queda ningun boton: el Reset se saco de la cabecera
-      // a pedido. window._budResetMonth() sigue existiendo para quitar a mano un
-      // override de mes viejo (hoy no hay forma de crear uno nuevo desde la UI).
-      :'')
     +'</span></div>'
     // La barra pasa a ser una regla de ancho completo bajo el titulo: separa la
     // cabecera de las cards y a 100% se lee de punta a punta.
@@ -4242,17 +4217,37 @@ function populateCatSelects(){
   var tf=document.getElementById('tf-cat');
   if(tf){ var cur=tf.value; tf.innerHTML='<option value="">Category</option>'+opts+'<option value="'+NO_CAT+'">\u2014 No category</option>'; tf.value=cur; }
 }
+// Conserva como opcion un wallet que ya no existe (renombrado, borrado, o de una
+// tx vieja): sin esto el <select> no encuentra el valor, se queda vacio, y guardar
+// la tx le borra el wallet sin decir nada.
+function ensureWalletOption(sel,name){
+  if(!sel||!name) return;
+  for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===name) return; }
+  sel.insertAdjacentHTML('beforeend','<option>'+escHtml(name)+'</option>');
+}
 function populateWalletSelects(){
-  var names=['Binance','Cash'];
-  S.manualWallets.forEach(function(w){ if(names.indexOf(w.name)<0) names.push(w.name); });
+  // Arrancaba en ['Binance','Cash'] escritos a mano: el selector ofrecia dos
+  // wallets que podian no existir, y anotar ahi dejaba la tx apuntando a un nombre
+  // sin nada detras. Ahora la lista sale de las wallets que EXISTEN — las manuales
+  // y las de exchange. (Que una tx no mueva el saldo de un exchange es otra cosa:
+  // ese saldo lo da la API, no la suma de sus txs.)
+  var names=[];
+  S.manualWallets.forEach(function(w){ if(w.name&&names.indexOf(w.name)<0) names.push(w.name); });
+  (S.exchangeWallets||[]).forEach(function(w){ if(w.name&&names.indexOf(w.name)<0) names.push(w.name); });
+  // El filtro ofrece ademas los nombres que ya usan transacciones viejas (un
+  // 'Binance' historico, una wallet borrada): si no, esas txs no se pueden filtrar.
+  var huerfanos=[];
+  S.transactions.forEach(function(t){ if(t.wallet&&names.indexOf(t.wallet)<0&&huerfanos.indexOf(t.wallet)<0) huerfanos.push(t.wallet); });
   ['tx-wallet','tf-wallet'].forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
     var cur=el.value; var isF=id.startsWith('tf');
+    var lista=isF?names.concat(huerfanos):names.slice();
+    if(!isF&&cur&&lista.indexOf(cur)<0) lista.push(cur);   // no vaciar lo ya elegido
     // escHtml: Chrome parsea etiquetas dentro de <option> y les dispara el
     // onerror. Una wallet llamada `<img src=x onerror=...>` ejecutaba aca, no en
     // la fila (esa ya escapaba). El value del select no cambia: el texto que
     // parsea el navegador sigue siendo el nombre tal cual.
-    el.innerHTML=(isF?'<option value="">Wallet</option>':'')+names.map(function(n){ return '<option>'+escHtml(n)+'</option>'; }).join('');
+    el.innerHTML=(isF?'<option value="">Wallet</option>':'')+lista.map(function(n){ return '<option>'+escHtml(n)+'</option>'; }).join('');
     if(cur) el.value=cur;
   });
 }
@@ -4881,12 +4876,13 @@ var MIGRATIONS=[
   }},
   { v:3, fn:function(){ // balanceOverride congelado → rebase a base viva
     var frozen=S.manualWallets.filter(function(w){ return w.trackerOnly&&w.balanceOverride!=null; });
-    if(!frozen.length) return;
+    if(!frozen.length) return false;
     frozen.forEach(function(w){ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((w.balanceOverride-txBal).toFixed(2)); w.balanceOverride=null; touchItem('manualWallets',w); });
+    return true;   // hay que guardar: ver runMigrations
   }},
-  // De aca para abajo, SIEMPRE append: runMigrations referencia MIGRATIONS[2] (la
-  // v3, que corre en cada boot) por indice, y toma la ultima entrada como version
-  // vigente. Insertar en el medio rompe las dos cosas.
+  // El orden de esta lista ya no es carga: runMigrations busca la v3 por su
+  // numero de version y saca la version vigente del maximo, no de la ultima
+  // entrada. Igual conviene appendear, pero insertar en el medio ya no rompe nada.
   { v:4, fn:function(){ // owed:true → debt:'out' (el flag paso a tener tres estados)
     var hit=S.manualWallets.filter(function(w){ return w.owed===true; });
     S.manualWallets.forEach(function(w){ if('owed' in w){ if(w.owed===true) w.debt='out'; delete w.owed; touchItem('manualWallets',w); } });
@@ -4897,18 +4893,26 @@ var MIGRATIONS=[
     S.rolloverCats=next; S.rolloverCatsUpdatedAt=stamp();
   }},
 ];
+// Por numero de version, no por posicion en el array: MIGRATIONS[2] se rompia
+// solo con insertar una entrada mas arriba, y el fallo era silencioso (corria la
+// migracion equivocada en cada boot).
+function migrationV(v){ return MIGRATIONS.filter(function(m){ return m.v===v; })[0]; }
+function latestSchemaV(){ return MIGRATIONS.reduce(function(mx,m){ return m.v>mx?m.v:mx; },0); }
 function runMigrations(){
-  var cur=S.schemaVersion||0, ran=false;
-  MIGRATIONS.forEach(function(m){
+  var cur=S.schemaVersion||0, ran=false, last=latestSchemaV();
+  MIGRATIONS.slice().sort(function(a,b){ return a.v-b.v; }).forEach(function(m){
     if(m.v<=cur) return;
     try{ m.fn(); }catch(e){ console.error('migration v'+m.v+':',e); }
     ran=true;
   });
   // v3 (override rebase) debe correr en cada boot mientras existan overrides
   // (pueden llegar de un doc viejo via sync); por eso no se salta por version.
-  if(cur>=3){ try{ MIGRATIONS[2].fn(); }catch(e){} }
-  if(ran||cur<MIGRATIONS[MIGRATIONS.length-1].v){
-    S.schemaVersion=MIGRATIONS[MIGRATIONS.length-1].v;
+  // Y si rebaso algo hay que GUARDAR: el rebase vivia solo en memoria, asi que la
+  // respuesta de un push que salio antes (trae el override viejo) lo revertia al
+  // adoptarse, y el override volvia intacto en el proximo arranque.
+  if(cur>=3){ var m3=migrationV(3); if(m3){ try{ if(m3.fn()===true) ran=true; }catch(e){} } }
+  if(ran||cur<last){
+    S.schemaVersion=last;
     save();
   }
 }

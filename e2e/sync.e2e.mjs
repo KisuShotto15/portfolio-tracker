@@ -1146,6 +1146,12 @@ check('al limpiar vuelven las dos', (await ev("document.querySelectorAll('#tx-wr
 // ── 21 · Net Worth con fecha propia, wallet por defecto y duplicados ────────
 console.log('E2E snapshot, default y duplicados');
 cloudDoc = {};
+// Mismo formato que fmtDate() de la app (Sep 1, 2026), para buscar una fecha
+// dentro del texto de una alerta.
+const fmtDateE2E = (iso) => {
+  const p = iso.split('-');
+  return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 const dU = (n) => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - n);
   return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
 const hoy21 = dU(0), medio21 = dU(15), ayer21 = dU(1);
@@ -2313,6 +2319,69 @@ if (diaPasado42 < diaHoy42) {
   const txs42b = JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.date+'|'+t.desc;}))"));
   check('mover el dia hacia atras tampoco genera una tx vieja', txs42b.length === 0, JSON.stringify(txs42b));
 }
+
+// ── escenario 43: los cinco arreglos chicos del informe ────────────────────
+// F20 selector con wallets que no existen · F26 presupuesto de reserva 600 ·
+// F18 una alerta por cada snapshot automatico · F25 migracion por posicion.
+console.log('E2E arreglos chicos — selector, presupuesto inventado, alertas repetidas');
+cloudDoc = {};
+const ts43 = Date.now() - 12000;
+const mes43 = dU(0).slice(0, 7);
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    deletedTxIds: [], deletedSnapDates: [], deletedWalletIds: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [],
+    manualWallets: [ { id: 43001, name: 'Zinli', trackerOnly: true, balance: 0, updatedAt: ${ts43} },
+                     { id: 43002, name: 'Provincial', trackerOnly: true, balance: 50, balanceOverride: 500, updatedAt: ${ts43} } ],
+    exchangeWallets: [ { id: 43003, name: 'Binance', type: 'binance', balance: 10, updatedAt: ${ts43} } ],
+    transactions: [ { id: ${ts43}, createdAt: ${ts43}, seq: 0, date: '${dU(1)}', desc: 'E2E gasto huerfano', wallet: 'Wallet Vieja',
+                      type: 'Debit', category: 'Groceries', amountUSD: 30, originalCurrency: 'USD', imported: false, updatedAt: ${ts43} } ],
+    snapshots: [ { id: 43010, date: '${dU(70)}', total: 1000, auto: true, updatedAt: ${ts43} },
+                 { id: 43011, date: '${dU(40)}', total: 1100, auto: true, updatedAt: ${ts43} },
+                 { id: 43012, date: '${dU(10)}', total: 1200, auto: true, updatedAt: ${ts43} } ],
+    budgetTotal: 0, budgetTotalByMonth: {}, categoryBudgetPctsByMonth: {}, schemaVersion: 5,
+    budgetTotalUpdatedAt: ${ts43}, manualWalletsUpdatedAt: ${ts43}, exchangeWalletsUpdatedAt: ${ts43},
+    snapshotsUpdatedAt: ${ts43}, transactionsUpdatedAt: ${ts43} })))`);
+  return (await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return (S.snapshots||[]).length===3&&S.budgetTotal===0;})()")) === true;
+}, 8000, 400, 'sembrar el estado del escenario 43').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+
+// F20 · el selector de anotar solo ofrece wallets que existen
+await ev("showPage('transactions',null);openTxForm()"); await sleep(400);
+const opts43 = JSON.parse(await ev("JSON.stringify([...document.getElementById('tx-wallet').options].map(function(o){return o.value;}))"));
+check('el selector no ofrece "Cash", que no existe como wallet', opts43.indexOf('Cash') < 0, JSON.stringify(opts43));
+check('si ofrece las wallets manuales', opts43.indexOf('Zinli') >= 0 && opts43.indexOf('Provincial') >= 0, JSON.stringify(opts43));
+check('y la wallet de exchange, que si existe', opts43.indexOf('Binance') >= 0, JSON.stringify(opts43));
+// El filtro es el otro caso: ahi el nombre huerfano SI tiene que estar, o las txs
+// viejas que apuntan a una wallet borrada no se pueden filtrar.
+const optsF43 = JSON.parse(await ev("JSON.stringify([...document.getElementById('tf-wallet').options].map(function(o){return o.value;}))"));
+check('el filtro conserva el nombre de una wallet que ya no existe', optsF43.indexOf('Wallet Vieja') >= 0, JSON.stringify(optsF43));
+// Y editar esa tx no puede vaciarle el wallet en silencio.
+await ev(`editTx(${ts43})`); await sleep(300);
+check('editar una tx huerfana conserva su wallet', (await ev("document.getElementById('tx-wallet').value")) === 'Wallet Vieja',
+  await ev("document.getElementById('tx-wallet').value"));
+await ev("cancelEditTx();closeTxForm()"); await sleep(300);
+
+// F18 · una sola alerta por los tres snapshots sin verificar
+await ev("showPage('summary',null);renderSummary()"); await sleep(500);
+const av43 = JSON.parse(await ev("JSON.stringify([...document.querySelectorAll('.alert-item')].map(function(e){return e.textContent;}).filter(function(t){return t.indexOf('Month-close snapshot')>=0;}))"));
+check('tres snapshots automaticos dejan UNA alerta, no tres', av43.length === 1, JSON.stringify(av43));
+check('la alerta es la del mas reciente', av43.length === 1 && av43[0].indexOf(fmtDateE2E(dU(10))) >= 0, JSON.stringify(av43));
+check('y dice cuantos quedan atras', av43.length === 1 && /2 older ones still to verify/.test(av43[0]), JSON.stringify(av43));
+
+// F26 · sin presupuesto del mes no se inventa uno de 600
+await ev("showPage('budget',null);renderBudget()"); await sleep(600);
+const ins43 = await ev("(document.getElementById('insights-wrap')||{}).textContent||''");
+check('sin presupuesto, "Left per day" no inventa un numero', /Left per day\s*—/.test(ins43.replace(/\s+/g, ' ')), ins43.slice(0, 260));
+check('y lo dice en vez de comparar contra 600', /no budget set/.test(ins43), ins43.slice(0, 260));
+check('no aparece ningun "over by"/"under by" de un plan inexistente', !/over by|under by/.test(ins43), ins43.slice(0, 260));
+
+// F25 · la v3 sigue corriendo en cada boot (es la que rebasa un override viejo).
+// Se mira lo que SUBE, no localStorage: el rebase pasa en memoria y no guarda solo
+// (esperaba a la proxima edicion), asi que en el disco todavia esta el valor viejo.
+await ev('forcePush()'); await sleep(800);
+const prov43 = (cloudDoc.manualWallets || []).filter((w) => w.id === 43002)[0] || {};
+check('el override congelado se rebasa aunque el esquema ya este al dia', prov43.balanceOverride === null, JSON.stringify(prov43));
+check('y el balance queda en la base equivalente', prov43.balance === 500, JSON.stringify(prov43));
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
