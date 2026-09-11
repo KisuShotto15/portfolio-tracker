@@ -42,10 +42,11 @@ describe('mergeDocs LWW generico por convencion', () => {
   });
 
   it('campos fetched de API (sin UpdatedAt) NO entran al LWW: incoming sobreescribe', () => {
-    const cloud = { binanceBalance: 100, binanceUpdated: 'ayer' };
-    const inc = { binanceBalance: 200, binanceUpdated: 'hoy' };
+    const cloud = { coinPricesFetchedAt: 100, rateDate: 'ayer' };
+    const inc = { coinPricesFetchedAt: 200, rateDate: 'hoy' };
     const out = mergeDocs(cloud, inc);
-    expect(out.binanceBalance).toBe(200);
+    expect(out.coinPricesFetchedAt).toBe(200);
+    expect(out.rateDate).toBe('hoy');
   });
 
   it('categoryBudgets (objeto) respeta LWW como bloque', () => {
@@ -275,5 +276,43 @@ describe('mergeDocs: campos sin marca de tiempo (F4)', () => {
     // device que nunca migro no omite el campo — lo manda explicitamente en null.
     const out = mergeDocs({ zelleMigrated: 1, exchangeMigrated: 1 }, { zelleMigrated: 1, exchangeMigrated: null });
     expect(out.exchangeMigrated).toBe(1);
+  });
+});
+
+describe('mergeDocs: campos legacy muertos salen del doc (F28)', () => {
+  const legacy = {
+    binanceKey: '', binanceSecret: '', binanceBalance: null, binanceUpdated: null, binanceFetchedAt: null,
+    bibiBinanceKey: 'k', bibiBinanceSecret: 's', bibiBinanceBalance: 10, bibiBinanceUpdated: '2:31 AM', bibiBinanceFetchedAt: null,
+    bybitBalance: null, bybitUpdated: null, okxBalance: null, okxUpdated: null,
+    trezorBalance: 0, trezorUpdated: '2:31 AM', trezorAddress: '0xabc', trezorAddressUpdatedAt: null,
+  };
+
+  it('con exchangeMigrated puesto, el server los poda para siempre', () => {
+    // Sin esto el cliente los borra de su copia y el merge se los devuelve en el
+    // proximo pull: Object.assign conserva lo que esta en la nube y no en lo que llega.
+    const out = mergeDocs({ ...legacy, exchangeMigrated: 1 }, { exchangeMigrated: 1 });
+    Object.keys(legacy).forEach((k) => expect(k in out).toBe(false));
+    expect(out.exchangeMigrated).toBe(1);
+  });
+
+  it('los poda aunque el cliente todavia los mande', () => {
+    const out = mergeDocs({ exchangeMigrated: 1 }, { ...legacy, exchangeMigrated: 1 });
+    expect('trezorAddress' in out).toBe(false);
+    expect('bibiBinanceSecret' in out).toBe(false);
+  });
+
+  it('SIN exchangeMigrated no toca nada: todavia son la entrada de la migracion', () => {
+    // Borrarlos ahi perderia la direccion de Trezor y las claves de Bibi antes de
+    // que migrateExchangeWallets las convierta en wallets de exchange.
+    const out = mergeDocs(legacy, {});
+    expect(out.trezorAddress).toBe('0xabc');
+    expect(out.bibiBinanceKey).toBe('k');
+  });
+
+  it('no se lleva puesto nada que si se usa', () => {
+    const out = mergeDocs({ exchangeMigrated: 1, exchangeWallets: [{ id: 1, name: 'Binance', balance: 500 }], exchangeWalletsUpdatedAt: 9 }, { exchangeMigrated: 1 });
+    expect(out.exchangeWallets).toHaveLength(1);
+    expect(out.exchangeWallets[0].name).toBe('Binance');
+    expect(out.exchangeWallets[0].balance).toBe(500);   // updatedAt se rellena solo (merge por item)
   });
 });

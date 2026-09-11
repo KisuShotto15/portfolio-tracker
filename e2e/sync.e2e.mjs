@@ -2106,6 +2106,35 @@ const alerta37 = await ev("[...document.querySelectorAll('.alert-item')].map(e=>
 check('la alerta del cierre dice cual exchange fallo', /no fresh balance from Binance, Bybit when it was taken/.test(alerta37), alerta37);
 check('y sigue pidiendo verificar el monto', /verify the real amount/.test(alerta37), alerta37);
 
+// ── escenario 38: los campos legacy salen del doc (F28) ────────────────────
+// Saldos, horas y CLAVES sueltas de la epoca anterior a exchangeWallets. No los
+// lee nadie desde la migracion, pero seguian viajando en cada sync.
+console.log('E2E campos legacy — dejan de viajar en cada sync');
+const legacy38 = {
+  binanceKey: '', binanceSecret: '', binanceBalance: null, binanceUpdated: null, binanceFetchedAt: null,
+  bibiBinanceKey: 'k', bibiBinanceSecret: 's', bibiBinanceBalance: 10, bibiBinanceUpdated: '2:31 AM', bibiBinanceFetchedAt: null,
+  bybitBalance: null, bybitUpdated: null, okxBalance: null, okxUpdated: null,
+  trezorBalance: 0, trezorUpdated: '2:31 AM', trezorAddress: '', trezorAddressUpdatedAt: null,
+};
+cloudDoc = Object.assign({ transactions: [], deletedTxIds: [], snapshots: [], manualWallets: [], recurring: [],
+  exchangeWallets: [{ id: 901, name: 'Binance', type: 'binance', balance: 500, fetchedAt: Date.now(), updatedAt: Date.now() }],
+  exchangeWalletsUpdatedAt: Date.now(), exchangeMigrated: 1 }, legacy38);
+await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
+await boot();
+const sigue38 = async () => JSON.parse(await ev(`(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify(${JSON.stringify(Object.keys(legacy38))}.filter(function(k){return k in S;}));})()`));
+check('el dispositivo no se queda con ningun campo legacy', JSON.stringify(await sigue38()) === '[]', JSON.stringify(await sigue38()));
+check('y la wallet de exchange de verdad sigue entera',
+  (await ev("(function(){var w=(JSON.parse(localStorage.getItem('ft13')||'{}').exchangeWallets||[])[0];return w?w.name+':'+w.balance:null;})()")) === 'Binance:500');
+
+// Un push los poda tambien de la nube: si no, el proximo pull se los devuelve.
+await ev('openTxForm()'); await sleep(250);
+await ev("document.getElementById('tx-desc').value='E2E legacy';document.getElementById('tx-amount').value='4';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()");
+await waitFor(() => (cloudDoc.transactions || []).some((t) => t.desc === 'E2E legacy'), 12000, 200, 'el push tras el strip')
+  .catch((e) => console.warn(`  ! ${e.message}`));
+const enNube38 = Object.keys(legacy38).filter((k) => k in cloudDoc);
+check('y la nube tampoco los conserva', enNube38.length === 0, JSON.stringify(enNube38));
+check('la wallet de exchange sigue en la nube', (cloudDoc.exchangeWallets || []).length === 1, JSON.stringify(cloudDoc.exchangeWallets));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

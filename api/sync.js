@@ -173,6 +173,20 @@ export function mergeDocs(cloud, incoming) {
     }
   });
 
+  // Campos muertos desde que existe exchangeWallets (espejo de LEGACY_DEAD en
+  // main.js): saldos, horas y claves sueltas de cada exchange. El cliente los saca
+  // de su copia, pero si el servidor no los poda el merge se los devuelve en el
+  // proximo pull — Object.assign conserva lo que esta en la nube y no en lo que
+  // llega. Solo con exchangeMigrated puesto: antes de esa migracion son la entrada
+  // que crea las wallets de exchange.
+  if (out.exchangeMigrated) {
+    ['binanceKey', 'binanceSecret', 'binanceBalance', 'binanceUpdated', 'binanceFetchedAt',
+     'bibiBinanceBalance', 'bibiBinanceUpdated', 'bibiBinanceFetchedAt', 'bibiBinanceKey', 'bibiBinanceSecret',
+     'bybitBalance', 'bybitUpdated', 'okxBalance', 'okxUpdated',
+     'trezorBalance', 'trezorUpdated', 'trezorAddress', 'trezorAddressUpdatedAt',
+    ].forEach(function (k) { delete out[k]; });
+  }
+
   // Campos sin timestamp: el merge se queda con lo que acaba de llegar. Para
   // estos eso no sirve (espejo de MONOTONIC_FLAGS en main.js): la version de
   // esquema solo sube, y un flag de migracion ya puesto no se vuelve a apagar.

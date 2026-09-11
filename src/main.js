@@ -74,14 +74,9 @@ var S = {
   // aca (el mes visible), nunca el default: subirlo porque este mes salieron gastos
   // inesperados no debe reescribir el "me pase / no me pase" de los meses cerrados.
   budgetTotalByMonth:{}, budgetTotalByMonthUpdatedAt:null,
-  binanceKey:'', binanceSecret:'',
-  binanceBalance:null, binanceUpdated:null, binanceFetchedAt:null,
-  bibiBinanceBalance:null, bibiBinanceUpdated:null, bibiBinanceFetchedAt:null,
-  bibiBinanceKey:null, bibiBinanceSecret:null,
-  bybitBalance:null,   bybitUpdated:null,
-  okxBalance:null,     okxUpdated:null,
-  trezorBalance:null,  trezorUpdated:null,
-  trezorAddress:'', trezorAddressUpdatedAt:null,
+  // Los saldos y claves sueltos de Binance/Bibi/Bybit/OKX/Trezor que vivian aca
+  // los reemplazo exchangeWallets (ver migrateExchangeWallets). Ya no se declaran:
+  // la lista LEGACY_DEAD de mas abajo los saca del doc.
   exchangeWallets:[], exchangeWalletsUpdatedAt:null, // wallets de exchange por usuario
   exchangeMigrated:null, // marca que ya se migro Bibi/Trezor a exchangeWallets
   // walletHoldingsUpdated es la hora que se muestra en pantalla ("3:45 PM"), no
@@ -142,6 +137,24 @@ var S = {
   // Tools ocultas de la tab Tools. Lo escribe toggleTool (tools.js).
   hiddenTools:{}, hiddenToolsUpdatedAt:null
 };
+// Campos muertos desde que existe exchangeWallets: saldos, horas y CLAVES sueltas
+// de la epoca en que cada exchange tenia sus propios campos en S. Seguian viajando
+// en cada sync sin que nadie los leyera. Pesan poco (~60 bytes en un doc de 585 KB:
+// el 97% son transacciones), asi que esto no es una medida de tamano — es sacar
+// del documento sincronizado cuatro campos con forma de credencial y catorce que
+// no significan nada.
+// Se borran SOLO con exchangeMigrated puesto: hasta que esa migracion corre, son
+// la entrada de migrateExchangeWallets y borrarlos perderia la direccion de Trezor.
+// api/sync.js tiene la MISMA lista: el cliente los saca de su copia, el servidor
+// los saca del doc en la nube (si no, el merge se los devuelve en el proximo pull).
+var LEGACY_DEAD=['binanceKey','binanceSecret','binanceBalance','binanceUpdated','binanceFetchedAt',
+  'bibiBinanceBalance','bibiBinanceUpdated','bibiBinanceFetchedAt','bibiBinanceKey','bibiBinanceSecret',
+  'bybitBalance','bybitUpdated','okxBalance','okxUpdated',
+  'trezorBalance','trezorUpdated','trezorAddress','trezorAddressUpdatedAt'];
+function stripLegacyFields(){
+  if(!S.exchangeMigrated) return;
+  LEGACY_DEAD.forEach(function(k){ if(k in S) delete S[k]; });
+}
 // Campos que NO llevan marca de tiempo y NO pueden retroceder. La version de
 // esquema solo sube (bajarla re-dispara las migraciones, y con dos dispositivos
 // eso rebota sin fin); un flag de migracion ya puesto no se vuelve a apagar.
@@ -317,7 +330,7 @@ function flushSaveLocal(){
 }
 window.addEventListener('pagehide',flushSaveLocal);
 document.addEventListener('visibilitychange',function(){ if(document.hidden) flushSaveLocal(); });
-function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); Object.keys(PER_ITEM_LISTS).forEach(function(f){ backfillUpdatedAt(S[f]); }); }
+function loadLocal(){ try{ var s=localStorage.getItem('ft13'); if(s) S=Object.assign({},S,JSON.parse(s)); }catch(e){} seedClock(S); backfillTxCreatedAt(S.transactions); Object.keys(PER_ITEM_LISTS).forEach(function(f){ backfillUpdatedAt(S[f]); }); stripLegacyFields(); }
 
 // mergeTxArrays / dueMonths / vesToUsd / localFieldWins / maxObservedStamp / nextStamp
 // live in ./sync-core.js (pure, unit-tested).
@@ -414,6 +427,7 @@ async function pullFromCloud(quiet){
       if('schemaVersion' in rest) rest.schemaVersion=Math.max(parseInt(rest.schemaVersion,10)||0,parseInt(S.schemaVersion,10)||0);
       MONOTONIC_FLAGS.forEach(function(f){ if(S[f]&&!rest[f]) delete rest[f]; });
       S=Object.assign({},S,rest);
+      stripLegacyFields();   // la nube puede seguir trayendolos hasta que el server los pode
       _pullChanged=(stateSig()!==before);
       if(_pullChanged) saveLocal();
       _pullFailed=false; refreshSyncBanner();   // el texto cambia: baja bien, lo unico que no sube es el push
