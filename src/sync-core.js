@@ -141,6 +141,19 @@ export function dueMonths(rule, now){
   return out;
 }
 
+// El mes que hay que marcar como YA CORRIDO al crear (o al mover de dia) una
+// regla, para que no genere una transaccion con fecha atrasada: crear el dia 20
+// una regla de dia 5 insertaba en el acto una tx fechada el 5 de este mes, como
+// si la regla hubiera existido todo el mes. Solo se salta el mes en curso cuando
+// el dia YA paso; creada el mismo dia si corre (esa no es una fecha atrasada).
+// Devuelve 'YYYY-MM' o null (null = no hay nada que saltear).
+export function seedLastRun(dayOfMonth, now){
+  var y = now.getFullYear(), m = now.getMonth();
+  var lastDay = new Date(y, m + 1, 0).getDate();
+  var dom = Math.min(dayOfMonth || 1, lastDay);
+  return now.getDate() > dom ? y + '-' + String(m + 1).padStart(2, '0') : null;
+}
+
 // Una tx recurrente snapshotea r.wallet en el momento de generarse. Si la regla
 // todavia no tenia wallet (o la genero un dispositivo con una copia vieja de la
 // regla), la tx queda con wallet:'' y NUNCA se debita del tracker — aunque

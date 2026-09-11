@@ -590,12 +590,14 @@ input,select,textarea,button{font-family:inherit}
    parte del limite mismo. */
 .bdg-carry{display:block;margin-top:3px;font-size:10.5px;color:var(--green)}
 .bdg-carry.is-neg{color:#E24B4A}
-/* Limite en USD editable en el pie de la card. Mismo tratamiento que la pastilla
-   del %: sin caja, punteado al pasar por encima y borde de acento al enfocar. */
+/* Limite en USD editable en el pie de la card. El punteado estaba SOLO en :hover,
+   que en movil no existe: el campo se leia como texto plano y nadie se enteraba de
+   que era editable. Ahora se ve siempre en gris y se aclara al pasar por encima —
+   el mismo trato que el total del mes en el hero (.bdg-total-view). */
 .bdg-amt-wrap{display:inline-flex;align-items:baseline;color:inherit;font-family:var(--font-num);
-  border-bottom:1px dashed transparent;transition:border-color .15s}
+  border-bottom:1px dashed var(--line);transition:border-color .15s}
 .bdg-amt-wrap.is-fixed{color:var(--txt2)}
-.bdg-amt-wrap:hover{border-bottom-color:var(--line)}
+.bdg-amt-wrap:hover{border-bottom-color:var(--txt3)}
 .bdg-amt-wrap:focus-within{border-bottom-color:var(--accent)}
 .bdg-amt-inp{font:inherit;color:inherit;background:transparent;border:none;border-radius:0;
   padding:0;text-align:left;cursor:text;-moz-appearance:textfield}

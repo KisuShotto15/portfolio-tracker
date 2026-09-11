@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, STUCK_PUSH_MS } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, seedLastRun, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, STUCK_PUSH_MS } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -395,7 +395,9 @@ async function pullFromCloud(quiet){
       // el borrado hecho en el otro dispositivo NUNCA llegaba. La lista puede
       // faltar; el borrado que viene con ella, no.
       var tombs=mergeTombstones(S.deletedTxIds,cloud.deletedTxIds);
+      var _preTx=S.transactions;
       S.transactions=mergeTxArrays(S.transactions,cloud.transactions||[],tombs);
+      undoKeepNew('transactions',_preTx,S.transactions,itemId);
       backfillTxCreatedAt(S.transactions);   // las que llegan sin createdAt se congelan aca
       S.deletedTxIds=pruneRevokedTombstones(tombs,S.transactions);
       S.transactionsUpdatedAt=Math.max(S.transactionsUpdatedAt||0,cloud.transactionsUpdatedAt||0)||null;
@@ -415,12 +417,14 @@ async function pullFromCloud(quiet){
         // dispositivo). Lista ausente = lista vacia para el merge.
         backfillUpdatedAt(S[f]); backfillUpdatedAt(cloud[f]);
         var tb=mergeTombstones(S[tk],cloud[tk]);
+        var _pre=S[f]||[];
         S[f]=mergeByKey(S[f]||[],cloud[f]||[],tb,keyOf);
         // Duplicados creados en dos dispositivos: dos filas para la misma wallet
         // duplican su saldo en el patrimonio.
         if(f==='manualWallets'||f==='exchangeWallets') S[f]=dedupeByNaturalKey(S[f],walletNameKey);
         if(f==='onchainWallets') S[f]=dedupeByNaturalKey(S[f],onchainAddrKey);
         S[tk]=pruneRevokedByKey(tb,S[f],keyOf);
+        undoKeepNew(f,_pre,S[f],keyOf);
         S[f+'UpdatedAt']=Math.max(S[f+'UpdatedAt']||0,cloud[f+'UpdatedAt']||0)||null;
       });
       // For every timestamped field, keep local when it is strictly newer than
@@ -597,29 +601,64 @@ async function forcePush(){
 // structuredClone captura el snapshot mas rapido que stringify+parse (sigue siendo
 // sincrono: debe copiar ANTES de la mutacion). Cada entrada del stack se usa una vez.
 var _cloneTxs=(typeof structuredClone==='function')?structuredClone:function(a){ return JSON.parse(JSON.stringify(a)); };
-function snapshot(){ undoStack.push(_cloneTxs(S.transactions)); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
-// Marca con updatedAt fresco solo las tx que el undo/redo realmente cambio, para que
-// gane el merge last-writer-wins contra la nube (si no, la nube revierte el undo).
-function _bumpChangedUpdatedAt(prevTxs,newTxs){
-  var now=stamp(), prevById={};
-  prevTxs.forEach(function(t){ prevById[t.id]=t; });
-  newTxs.forEach(function(t){
-    var p=prevById[t.id];
-    if(!p||JSON.stringify(p)!==JSON.stringify(t)) t.updatedAt=now;
+// El undo era global en el boton pero parcial en el efecto: solo devolvia
+// S.transactions, asi que borrar una wallet, un snapshot o una regla no se
+// deshacia con nada. Cada entrada del stack guarda ahora TODAS las listas que se
+// mergean por item. exchangeWallets queda afuera a proposito: borrarla borra
+// tambien sus API keys de este dispositivo (xkDel) y esas el undo no las devuelve.
+function undoLists(){ return perItemLists().filter(function(l){ return l.field!=='exchangeWallets'; }); }
+function _undoState(){ var o={}; undoLists().forEach(function(l){ o[l.field]=_cloneTxs(S[l.field]||[]); }); return o; }
+function snapshot(){ undoStack.push(_undoState()); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
+// Marca con updatedAt fresco solo los items que el undo/redo realmente cambio, para que
+// ganen el merge last-writer-wins contra la nube (si no, la nube revierte el undo).
+function _bumpChangedUpdatedAt(prev,next,keyOf,now){
+  var prevByKey={};
+  prev.forEach(function(x){ prevByKey[keyOf(x)]=x; });
+  next.forEach(function(x){
+    var p=prevByKey[keyOf(x)];
+    if(!p||JSON.stringify(p)!==JSON.stringify(x)) x.updatedAt=now;
   });
 }
-// Cualquier tx que vuelve a existir tras un undo/redo NO debe seguir tombstoneada,
-// si no el merge (cliente/servidor) la filtra y el undo de un borrado se revierte solo.
-function _untombstoneExisting(){ if(!S.deletedTxIds||!S.deletedTxIds.length) return; S.deletedTxIds=pruneRevokedTombstones(S.deletedTxIds,S.transactions); }
-// Toda tx que desaparecio en un undo/redo necesita tombstone fresco (ej. redo de un
-// borrado); sin el, la nube la trae de vuelta en el proximo pull.
-function _tombstoneMissing(prevTxs,newTxs){
-  var ids={}; newTxs.forEach(function(t){ ids[t.id]=1; });
-  if(!S.deletedTxIds) S.deletedTxIds=[];
-  prevTxs.forEach(function(t){ if(!ids[t.id]) S.deletedTxIds.push({id:t.id,ts:stamp()}); });
+// Cualquier item que vuelve a existir tras un undo/redo NO debe seguir tombstoneado,
+// si no el merge (cliente/servidor) lo filtra y el undo de un borrado se revierte solo.
+function _untombstoneExisting(l){ if(!S[l.tomb]||!S[l.tomb].length) return; S[l.tomb]=pruneRevokedByKey(S[l.tomb],S[l.field],l.keyOf); }
+// Todo item que desaparecio en un undo/redo necesita tombstone fresco (ej. redo de un
+// borrado); sin el, la nube lo trae de vuelta en el proximo pull.
+function _tombstoneMissing(prev,next,l,now){
+  var live={}; next.forEach(function(x){ live[l.keyOf(x)]=1; });
+  if(!Array.isArray(S[l.tomb])) S[l.tomb]=[];
+  prev.forEach(function(x){ var k=l.keyOf(x); if(!live[k]) S[l.tomb].push({id:k,ts:now}); });
 }
-function doUndo(){ if(!undoStack.length) return; var prev=S.transactions; redoStack.push(_cloneTxs(S.transactions)); S.transactions=undoStack.pop(); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; var prev=S.transactions; undoStack.push(_cloneTxs(S.transactions)); S.transactions=redoStack.pop(); _bumpChangedUpdatedAt(prev,S.transactions); _tombstoneMissing(prev,S.transactions); _untombstoneExisting(); S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); updateUndoBtns(); }
+function _applyUndoState(st){
+  var now=stamp();
+  undoLists().forEach(function(l){
+    var prev=S[l.field]||[], next=st[l.field]||[];
+    _bumpChangedUpdatedAt(prev,next,l.keyOf,now);
+    S[l.field]=next;
+    _tombstoneMissing(prev,next,l,now);
+    _untombstoneExisting(l);
+    S[l.field+'UpdatedAt']=now;
+  });
+}
+// Lo que la app agrega SOLA (una recurrente, el snapshot de cierre de mes, o lo que
+// baja de otro dispositivo en un pull) no es una accion del usuario: deshacer la
+// ultima edicion no puede hacerlo desaparecer. Se inyecta en los estados ya
+// guardados, asi el undo lo deja donde esta en vez de tombstonearlo.
+function undoKeepAdded(field,items){
+  if(!items||!items.length||(!undoStack.length&&!redoStack.length)) return;
+  [undoStack,redoStack].forEach(function(st){
+    st.forEach(function(e){ if(e[field]) e[field]=e[field].concat(_cloneTxs(items)); });
+  });
+}
+function undoKeepNew(field,before,after,keyOf){
+  if(!undoStack.length&&!redoStack.length) return;
+  var had={}; (before||[]).forEach(function(x){ had[keyOf(x)]=1; });
+  undoKeepAdded(field,(after||[]).filter(function(x){ return !had[keyOf(x)]; }));
+}
+// afterPull re-renderiza la pagina activa: el undo ya no toca solo transacciones,
+// y el resto de las paginas se re-arma al entrar (showPage).
+function doUndo(){ if(!undoStack.length) return; var cur=_undoState(); _applyUndoState(undoStack.pop()); redoStack.push(cur); save(); afterPull(); updateUndoBtns(); }
+function doRedo(){ if(!redoStack.length) return; var cur=_undoState(); _applyUndoState(redoStack.pop()); undoStack.push(cur); save(); afterPull(); updateUndoBtns(); }
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 async function clearAllTx(){ if(!await appConfirm('Delete ALL transactions?','Can be undone with Undo.','Delete')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
@@ -981,6 +1020,7 @@ function saveOnchainWallet(){
   if(chain==='evm'&&!/^0x[0-9a-fA-F]{40}$/.test(addr)){ owStatus('Invalid EVM address (must be 0x + 40 hex chars)'); return; }
   if(chain==='btc'&&!/^([xyz]pub[A-Za-z0-9]{100,}|(bc1|[13])[a-zA-HJ-NP-Z0-9]{6,87})$/.test(addr)){ owStatus('Invalid Bitcoin address or xpub/zpub/ypub'); return; }
   owStatus('');
+  snapshot();
   S.onchainWallets=(S.onchainWallets||[]).concat([{id:Date.now(),label:label,chain:chain,address:addr,updatedAt:stamp()}]);
   S.onchainWalletsUpdatedAt=stamp();
   document.getElementById('ow-label').value='';
@@ -992,9 +1032,10 @@ async function deleteOnchainWallet(id){
   if(!w) return;
   var ok=await appConfirm('Delete wallet?',escHtml(w.label),'Delete');
   if(!ok) return;
+  snapshot(); // despues del confirm: cancelar no debe ensuciar el undo stack
   S.onchainWallets=(S.onchainWallets||[]).filter(function(x){ return x.id!==id; });
   tombstoneItem('onchainWallets',id);
-  save(); renderOnchainWallets();
+  save(); renderOnchainWallets(); showUndoToast('Wallet deleted');
 }
 function copyAddr(a){
   navigator.clipboard.writeText(a).then(function(){
@@ -1241,13 +1282,19 @@ async function addTx(){
 // Toast post-agregado con deshacer inmediato (el snapshot() de addTx ya dejo
 // el estado previo en el undo stack).
 var _txToastT=null;
-function showTxToast(){
+function showTxToast(){ showUndoToast('Transaction added'); }
+// El boton Undo vive en la barra de Transactions: borrar una wallet o un snapshot
+// pasa en otra pagina, donde no hay ningun boton que anuncie que eso se deshace.
+// El toast es el unico lugar donde ese camino se ve. textContent, no innerHTML:
+// el mensaje nunca lleva HTML.
+function showUndoToast(msg){
   var t=document.getElementById('tx-toast');
   if(!t){
     t=document.createElement('div'); t.id='tx-toast'; t.className='action-toast';
-    t.innerHTML='<span>Transaction added</span><button onclick="doUndo();hideTxToast()">Undo</button>';
+    t.innerHTML='<span></span><button onclick="doUndo();hideTxToast()">Undo</button>';
     document.body.appendChild(t);
   }
+  t.querySelector('span').textContent=msg;
   t.classList.add('show');
   clearTimeout(_txToastT); _txToastT=setTimeout(hideTxToast,4000);
 }
@@ -1586,8 +1633,9 @@ function updateTx(){
 }
 // Borrar una wallet NO borra sus transacciones: quedan apuntando a un nombre que
 // ya no existe y dejan de sumar a ningun saldo, asi que el patrimonio se mueve en
-// el acto. Ademas no hay undo (el stack solo guarda transacciones). El confirm
-// decia solo el nombre; ahora dice cuanto se mueve, que queda suelto y como volver.
+// el acto. El confirm decia solo el nombre; ahora dice cuanto se mueve, que queda
+// suelto y como volver. El borrado si se deshace (el undo guarda las wallets), pero
+// eso no evita el susto de ver el patrimonio moverse: el aviso sigue valiendo.
 function deleteWalletImpact(w){
   var lines=[];
   var val=w.trackerOnly?(w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name)):manualWalletUsd(w);
@@ -1613,16 +1661,18 @@ async function deleteManualWallet(id){
   var ok=await appConfirm('Delete wallet?',escHtml(w.name)+deleteWalletImpact(w),'Delete');
   if(!ok) return;
   w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
+  snapshot(); // despues del confirm: cancelar no debe ensuciar el undo stack
   S.manualWallets=S.manualWallets.filter(function(x){ return x.id!==id; });
   tombstoneItem('manualWallets',id);
-  save(); renderWallets(); populateWalletSelects();
+  save(); renderWallets(); populateWalletSelects(); showUndoToast('Wallet deleted');
 }
 // Reetiqueta las txs y las reglas que apuntaban al nombre viejo. Las txs tocadas
 // llevan updatedAt nuevo para GANAR el merge: sin eso, la copia con el nombre
 // viejo que tiene otro dispositivo revierte el renombre en el proximo pull.
-// A proposito NO pasa por snapshot()/undo: doUndo solo restaura S.transactions,
-// asi que deshacer devolveria los nombres viejos a las txs dejando la wallet con
-// el nuevo — exactamente el estado huerfano que este arreglo viene a evitar.
+// Ahora SI pasa por snapshot()/undo: el stack guarda wallets, txs y reglas juntas,
+// asi que deshacer las devuelve a las tres al mismo nombre. Cuando solo guardaba
+// S.transactions, deshacer dejaba las txs con el nombre viejo y la wallet con el
+// nuevo — el estado huerfano que este arreglo viene a evitar.
 function renameWalletRefs(oldName,newName){
   var res=renameWalletRefsCore(S.transactions,S.recurring,oldName,newName);
   var ut=stamp();
@@ -1644,13 +1694,14 @@ async function renameManualWallet(id){
     await appConfirm('Name already in use','Another wallet is already called '+escHtml(next)+'. Pick a different name.','OK');
     return;
   }
+  snapshot();
   w.name=next;
   renameWalletRefs(old,next);
   touchItem('manualWallets',w); save();
   renderWallets(); populateWalletSelects(); renderTx(); renderSummary();
 }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ w.balance=parseFloat(v.toFixed(2)); touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ snapshot(); w.balance=parseFloat(v.toFixed(2)); touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
@@ -1686,7 +1737,7 @@ async function settleTracker(id,sube){
   save(); renderWallets(); renderSummary(); renderTx();
   showTxToast();
 }
-async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · accepts sums (1000+2500)',cur,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
+async function editTrackerBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var cur=w.balanceOverride!=null?w.balanceOverride:calcTrackerBal(w.name); var r=await appPrompt('Set balance',escHtml(w.name)+' · accepts sums (1000+2500)',cur,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ snapshot(); var txBal=calcTrackerBal(w.name)-(w.balance||0); w.balance=parseFloat((v-txBal).toFixed(2)); w.balanceOverride=null; touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
 window.editTrackerBal=editTrackerBal;
 window.editManualWalletBal=editManualWalletBal;
 
@@ -2531,7 +2582,7 @@ function applyRecurring(){
   // Repara txs recurrentes ya generadas que quedaron sin wallet: sin esto nunca
   // se debitan del tracker aunque despues arregles la regla.
   var fixedW=backfillRecurringTxWallets(S.recurring,S.transactions);
-  var now=new Date(), added=[], touched=[], deleted=new Set((S.deletedTxIds||[]).map(tombId));
+  var now=new Date(), added=[], addedTxs=[], touched=[], deleted=new Set((S.deletedTxIds||[]).map(tombId));
   S.recurring.forEach(function(r){
     if(!r.amount||r.amount<=0||!r.dayOfMonth) return;
     var lastRunPrev=r.lastRun;
@@ -2549,7 +2600,8 @@ function applyRecurring(){
       if(deleted.has(txId)||deleted.has(oldId)){ r.lastRun=d.ym; return; }   // borrada por el usuario: no resucitar
       if(S.transactions.some(function(t){ return t.id===txId||t.id===oldId||(t.recurringId===r.id&&t.date===dateStr); })){ r.lastRun=d.ym; return; }
       var _gen=stamp();   // alta real de la recurrente: su id es deterministico por fecha, no dice cuando se genero
-      S.transactions.push({id:txId,createdAt:_gen,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,rateSrc:_rs,imported:false,receiptUrl:null,updatedAt:_gen,auto:true,recurringId:r.id});
+      var _rtx={id:txId,createdAt:_gen,seq:S.transactions.length,date:dateStr,desc:r.label,wallet:r.wallet||'',type:r.type||'Debit',category:r.category||'',amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:rateUsed,rateSrc:_rs,imported:false,receiptUrl:null,updatedAt:_gen,auto:true,recurringId:r.id};
+      S.transactions.push(_rtx); addedTxs.push(_rtx);
       r.lastRun=d.ym;
       added.push({id:txId,rid:r.id,label:r.label,date:dateStr,amountUSD:amtUSD,currency:cur,amount:r.amount,seen:false});
     });
@@ -2576,6 +2628,7 @@ function applyRecurring(){
     }
     // renderWallets: la tx nueva (o reparada) mueve el balance de los trackers —
     // sin esto, parado en la tab Wallets el monto queda viejo hasta cambiar de tab.
+    undoKeepAdded('transactions',addedTxs);
     save(); renderTx(); renderSummary(); renderAlerts(); renderWallets();
   }
 }
@@ -2687,25 +2740,36 @@ window.addRecurringRule=function(){
     category:document.getElementById('tx-cat').value,
     currency:document.getElementById('tx-cur').value,
     amount:amount};
+  snapshot();
   if(_editingRecId){
     var r=S.recurring.find(function(x){ return x.id===_editingRecId; });
-    if(r){ Object.assign(r,fields); touchItem('recurring',r); } // conserva id, lastRun -> no re-agrega tx ya creadas
+    // conserva id y lastRun -> no re-agrega tx ya creadas. Mover el dia a uno que
+    // ya paso este mes es el mismo caso que crear la regla: no debe disparar una tx
+    // atrasada. lastRun solo avanza, nunca retrocede.
+    if(r){
+      var _dayChanged=r.dayOfMonth!==day;
+      Object.assign(r,fields);
+      var _seed=_dayChanged?seedLastRun(day,new Date()):null;
+      if(_seed&&(!r.lastRun||r.lastRun<_seed)) r.lastRun=_seed;
+      touchItem('recurring',r);
+    }
     cancelEditRecurring();
     txMsg('Rule updated ✓',true);
   }else{
-    S.recurring.push(Object.assign({id:Date.now(),lastRun:null,updatedAt:stamp()},fields));
+    S.recurring.push(Object.assign({id:Date.now(),lastRun:seedLastRun(day,new Date()),updatedAt:stamp()},fields));
     document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value=''; document.getElementById('tx-rec-day').value='';
     txMsg('Rule created ✓',true);
   }
   S.recurringUpdatedAt=stamp(); save();
   renderTxRecList();
-  applyRecurring(); // si ya paso el dia este mes, se agrega de una
+  applyRecurring(); // el dia es hoy: se agrega de una (si ya paso, arranca el mes que viene)
 };
 window.deleteRecurringRule=async function(id){
   var r=(S.recurring||[]).find(function(x){ return x.id===id; }); if(!r) return;
   var amt=(r.currency==='VES'?'Bs ':'$')+r.amount;
   var ok=await appConfirm('Delete recurring rule?',escHtml(r.label)+' <span style="color:'+(r.type==='Credit'?'#5DCAA5':'#E24B4A')+'">'+amt+'</span>','Delete');
   if(!ok) return;
+  snapshot(); // despues del confirm: cancelar no debe ensuciar el undo stack
   S.recurring=(S.recurring||[]).filter(function(x){ return x.id!==id; }); tombstoneItem('recurring',id);
   // limpia las entradas del log que pertenecen a esta regla (por rid)
   if(Array.isArray(S.recurringLog)){
@@ -2714,7 +2778,7 @@ window.deleteRecurringRule=async function(id){
     if(S.recurringLog.length!==before) S.recurringLogUpdatedAt=stamp();
   }
   if(_editingRecId===id) cancelEditRecurring();
-  save(); renderTxRecList(); renderSummary();
+  save(); renderTxRecList(); renderSummary(); showUndoToast('Rule deleted');
 };
 
 function renderGoal(){
@@ -3058,6 +3122,7 @@ async function recordSnapshot(){
     }
     S.snapshots.splice(existing,1);
   }
+  snapshot();
   var nuevo={id:Date.now(),date:today,total:val,holdingsValue:holdingsTotalUsd()};
   S.snapshots.push(nuevo);
   var sorted=S.snapshots.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
@@ -3127,6 +3192,7 @@ function autoMonthSnapshot(hour,minHour,todayISO){
   if(prev) snap.derivedIncome=derivedIncomeFor(prev,snap);
   snap.updatedAt=S.snapshotsUpdatedAt=stamp();
   S.snapshots.push(snap);
+  undoKeepAdded('snapshots',[snap]);
   save();
 }
 window.autoMonthSnapshot=autoMonthSnapshot;
@@ -3149,13 +3215,14 @@ function nextSnapAfter(date){
 async function deleteSnapshot(id){
   var snap0=S.snapshots.find(function(s){ return s.id===id; }); if(!snap0) return;
   var sig=nextSnapAfter(snap0.date);
-  var aviso='This action cannot be undone.';
+  var aviso='Can be undone with Undo.';
   // Solo se avisa cuando de verdad va a cambiar un numero que el usuario mira.
   if(sig&&typeof sig.derivedIncome==='number')
     aviso+='<span style="display:block;margin-top:9px;line-height:1.5">The income derived for <b style="color:#fff">'+escHtml(sig.date)+'</b> is recalculated over the longer period that this leaves behind.</span>';
   var ok=await appConfirm('Delete snapshot?',aviso,'Delete');
   if(!ok) return;
   var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
+  snapshot(); // despues del confirm: cancelar no debe ensuciar el undo stack
   S.snapshots=S.snapshots.filter(function(s){ return s.id!==id; });
   // Sin tombstone el borrado no viaja: el proximo pull lo encuentra vivo en la
   // nube y lo resucita. La clave es la fecha, igual que en el merge.
@@ -3177,13 +3244,14 @@ async function deleteSnapshot(id){
   // el snapshot siguiente).
   var next=nextSnapAfter(snap.date);
   if(next) recalcDerivedIncome(next);
-  save(); renderEquityChart();
+  save(); renderEquityChart(); showUndoToast('Snapshot deleted');
 }
 async function editSnapshot(id){
   var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return;
   var r=await appPrompt('Edit snapshot','Value for '+snap.date,snap.total); if(!r) return;
   var val=parseFloat(r.value); if(isNaN(val)||val<0) return;
   snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; // re-fetch: un sync durante el await pudo reemplazar el array
+  snapshot();
   snap.total=val;
   snap.auto=false;   // revisado a mano: deja de pedir revision
   snap.updatedAt=stamp();
@@ -3745,6 +3813,7 @@ function saveManualWallet(){
     var txSum=S.transactions.reduce(function(s,t){ return (t.imported||t.wallet!==_old.name)?s:s+(t.type==='Credit'?1:-1)*t.amountUSD; },0);
     obj.balance=parseFloat(((_old.balance||0)-txSum).toFixed(2));
   }
+  snapshot();
   if(idx>=0) S.manualWallets[idx]=Object.assign(S.manualWallets[idx],obj); else S.manualWallets.push(obj);
   touchItem('manualWallets',idx>=0?S.manualWallets[idx]:obj);
   closeWalletForm();

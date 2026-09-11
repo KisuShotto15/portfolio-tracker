@@ -2196,6 +2196,124 @@ check('y el de la wallet tambien', tras40.ws.indexOf('Zinli') < 0, JSON.stringif
 // Y una lista ausente NO es una lista vacia: lo que no tiene lapida sigue vivo.
 check('lo que no se borro sobrevive a la lista ausente', tras40.txs.length === otros40 - 1, JSON.stringify(tras40) + ' antes:' + otros40);
 
+// ── escenario 41: deshacer alcanza a wallets, snapshots y reglas ────────────
+// El boton Undo estaba siempre disponible pero solo restauraba S.transactions:
+// borrar una wallet, un snapshot o una regla recurrente no se deshacia con nada.
+// Y el undo tiene que sobrevivir al sync: la lapida del borrado ya viajo a la
+// nube, asi que si el item vuelve sin revocarla, el proximo pull lo borra otra vez.
+console.log('E2E deshacer — wallets, snapshots y reglas');
+cloudDoc = {};
+const okModal41 = () => ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');if(!m.length)return 0;m[m.length-1].querySelector('#_amo').click();return 1;})()");
+const ts41 = Date.now() - 9000;
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    transactions: [], deletedTxIds: [], deletedWalletIds: [], deletedSnapDates: [], deletedRuleIds: [], recurringLog: [],
+    manualWallets: [ { id: 41001, name: 'E2E Undo Wallet', balance: 250, updatedAt: ${ts41} } ],
+    snapshots: [ { id: 41002, date: '${dU(40)}', total: 1000, updatedAt: ${ts41} },
+                 { id: 41003, date: '${dU(10)}', total: 1200, updatedAt: ${ts41} } ],
+    recurring: [ { id: 41004, label: 'E2E Undo Rule', dayOfMonth: 9, amount: 5, wallet: 'E2E Undo Wallet',
+                   type: 'Debit', category: 'Discretionary', currency: 'USD', lastRun: '${(function () { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })()}', updatedAt: ${ts41} } ],
+    manualWalletsUpdatedAt: ${ts41}, snapshotsUpdatedAt: ${ts41}, recurringUpdatedAt: ${ts41}, transactionsUpdatedAt: ${ts41} })))`);
+  return (await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return (S.manualWallets||[]).length===1&&(S.snapshots||[]).length===2&&(S.recurring||[]).length===1;})()")) === true;
+}, 8000, 400, 'sembrar el estado del escenario 41').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+const vivos41 = () => ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return ((S.manualWallets||[]).some(function(w){return w.id===41001;})?'w':'-')+((S.snapshots||[]).some(function(x){return x.id===41003;})?'s':'-')+((S.recurring||[]).some(function(r){return r.id===41004;})?'r':'-');})()");
+check('arranca con la wallet, el snapshot y la regla', (await vivos41()) === 'wsr', await vivos41());
+
+// Borrar los tres, cada uno por su camino real (con su confirmacion).
+await ev('deleteManualWallet(41001)');
+await waitFor(async () => (await okModal41()) === 1, 3000, 80, 'el confirm de borrar wallet');
+await sleep(300);
+const toast41 = await ev("(function(){var t=document.getElementById('tx-toast');return t&&t.classList.contains('show')?t.textContent:'';})()");
+check('el borrado avisa con un toast que ofrece deshacer', /Wallet deleted/.test(toast41) && /Undo/.test(toast41), toast41);
+await ev('deleteSnapshot(41003)');
+await waitFor(async () => (await okModal41()) === 1, 3000, 80, 'el confirm de borrar snapshot');
+await sleep(300);
+await ev('deleteRecurringRule(41004)');
+await waitFor(async () => (await okModal41()) === 1, 3000, 80, 'el confirm de borrar la regla');
+await sleep(300);
+check('los tres quedan borrados', (await vivos41()) === '---', await vivos41());
+// Las lapidas del borrado: son las que hay que revocar al deshacer.
+const lapidas41 = JSON.parse(await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify({w:S.deletedWalletIds||[],s:S.deletedSnapDates||[],r:S.deletedRuleIds||[]});})()"));
+check('y cada borrado deja su lapida para viajar', lapidas41.w.length === 1 && lapidas41.s.length === 1 && lapidas41.r.length === 1, JSON.stringify(lapidas41));
+const tsLapida41 = lapidas41.w[0].ts;
+
+// Tres undos: uno por cada borrado (el stack es uno solo para todas las listas).
+await ev('doUndo()'); await sleep(200);
+check('deshacer devuelve la regla', /r$/.test(await vivos41()), await vivos41());
+await ev('doUndo()'); await sleep(200);
+check('deshacer devuelve el snapshot', /s/.test(await vivos41()), await vivos41());
+await ev('doUndo()'); await sleep(300);
+check('deshacer devuelve la wallet', (await vivos41()) === 'wsr', await vivos41());
+const lapidas41b = JSON.parse(await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify({w:S.deletedWalletIds||[],s:S.deletedSnapDates||[],r:S.deletedRuleIds||[]});})()"));
+check('y revoca las lapidas de los tres', lapidas41b.w.length === 0 && lapidas41b.s.length === 0 && lapidas41b.r.length === 0, JSON.stringify(lapidas41b));
+
+// La lapida ya habia viajado: la nube todavia la tiene. Lo restaurado lleva
+// updatedAt mas nuevo, asi que le gana y no vuelve a desaparecer.
+cloudDoc = { deletedWalletIds: [{ id: 41001, ts: tsLapida41 }], deletedSnapDates: [{ id: dU(10), ts: tsLapida41 }], deletedRuleIds: [{ id: 41004, ts: tsLapida41 }] };
+await ev('forcePull()'); await sleep(700);
+check('y el sync no revierte el undo', (await vivos41()) === 'wsr', await vivos41());
+
+// Rehacer vuelve a borrar (y vuelve a poner las lapidas).
+await ev('doRedo()'); await sleep(300);
+check('rehacer vuelve a borrar la wallet', (await vivos41()).indexOf('w') < 0, await vivos41());
+check('con su lapida de vuelta', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').deletedWalletIds||[]).length")) === 1);
+
+// Lo que la app agrega sola (aca: un pull de otro dispositivo) no lo puede
+// borrar un undo de algo anterior.
+cloudDoc = { manualWallets: [{ id: 41009, name: 'E2E Del Otro', balance: 7, updatedAt: Date.now() }], manualWalletsUpdatedAt: Date.now() };
+await ev('forcePull()'); await sleep(700);
+check('llega una wallet del otro dispositivo', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).some(function(w){return w.id===41009;})")) === true);
+await ev('doUndo()'); await sleep(300);
+check('deshacer no se lleva puesto lo que bajo del sync',
+  (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).some(function(w){return w.id===41009;})")) === true,
+  await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).map(function(w){return w.name;}))"));
+
+// ── escenario 42: una regla nueva no genera una transaccion atrasada ────────
+// Crear el dia 20 una regla de dia 5 insertaba en el acto la tx del 5 de ESTE
+// mes, fechada hacia atras, como si la regla hubiera existido todo el mes.
+console.log('E2E regla nueva — sin transacciones con fecha atrasada');
+cloudDoc = {};
+const hoy42 = dU(0), diaHoy42 = new Date().getDate();
+const diaPasado42 = Math.max(1, diaHoy42 - 5);
+const mes42 = hoy42.slice(0, 7);
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    transactions: [], deletedTxIds: [], recurring: [], deletedRuleIds: [], recurringLog: [],
+    manualWallets: [ { id: 42001, name: 'E2E Rec Wallet', trackerOnly: true, balance: 0, updatedAt: ${ts41} } ],
+    manualWalletsUpdatedAt: ${ts41}, recurringUpdatedAt: ${ts41}, transactionsUpdatedAt: ${ts41} })))`);
+  return (await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return (S.recurring||[]).length===0&&(S.transactions||[]).length===0;})()")) === true;
+}, 8000, 400, 'sembrar el estado del escenario 42').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+await ev("showPage('transactions',null);openTxForm()"); await sleep(400);
+await ev(`document.getElementById('tx-recurring').checked=true;toggleTxRecurring();
+  document.getElementById('tx-desc').value='E2E Regla Atrasada';
+  document.getElementById('tx-amount').value='12';
+  document.getElementById('tx-rec-day').value='${diaPasado42}';
+  document.getElementById('tx-wallet').value='E2E Rec Wallet';
+  document.getElementById('tx-type').value='Debit';
+  document.getElementById('tx-cat').value='Discretionary';
+  addRecurringRule()`);
+await sleep(600);
+const regla42 = JSON.parse(await ev("JSON.stringify(((JSON.parse(localStorage.getItem('ft13')||'{}').recurring)||[])[0]||{})"));
+check('la regla se crea con su dia', regla42.dayOfMonth === diaPasado42, JSON.stringify(regla42));
+const txs42 = JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.date+'|'+t.desc;}))"));
+check('ninguna transaccion queda fechada antes de hoy', txs42.every((d) => d.slice(0, 10) >= hoy42), JSON.stringify(txs42));
+if (diaPasado42 < diaHoy42) {
+  check('el dia ya paso: no se genera nada este mes', txs42.length === 0, JSON.stringify(txs42));
+  check('y la regla queda marcada para arrancar el mes que viene', regla42.lastRun === mes42, JSON.stringify(regla42));
+} else {
+  console.log('  · hoy es dia 1: no hay dia pasado dentro del mes, el caso no aplica');
+}
+// Mover el dia de una regla que ya corrio tampoco puede generar una atrasada.
+if (diaPasado42 < diaHoy42) {
+  await ev("toggleTxRecList()"); await sleep(200);
+  await ev(`editRecurringRule(${regla42.id})`); await sleep(300);
+  await ev(`document.getElementById('tx-rec-day').value='${Math.max(1, diaPasado42 - 1)}';addTxOrUpdate()`); await sleep(600);
+  const txs42b = JSON.parse(await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.date+'|'+t.desc;}))"));
+  check('mover el dia hacia atras tampoco genera una tx vieja', txs42b.length === 0, JSON.stringify(txs42b));
+}
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

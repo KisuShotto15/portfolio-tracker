@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, STUCK_PUSH_MS } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, seedLastRun, STUCK_PUSH_MS } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -212,6 +212,9 @@ describe('tombstones revocables (regresion: undo de un borrado)', () => {
 describe('dueMonths (recurring schedule)', () => {
   const ym = r => r.map(o => o.ym);
 
+  // Sin lastRun = la regla nunca corrio. Una regla nueva ya no llega asi cuando el
+  // dia paso (addRecurringRule le siembra lastRun con seedLastRun); este caso cubre
+  // la puesta al dia de una regla vieja que quedo sin correr.
   it('new rule: due this month once the day has passed', () => {
     expect(ym(dueMonths({ dayOfMonth: 5 }, new Date(2026, 5, 23)))).toEqual(['2026-06']);
   });
@@ -226,6 +229,31 @@ describe('dueMonths (recurring schedule)', () => {
 
   it('does not re-run a month already processed', () => {
     expect(dueMonths({ dayOfMonth: 5, lastRun: '2026-06' }, new Date(2026, 5, 23))).toEqual([]);
+  });
+
+  // Regresion: crear el dia 20 una regla de dia 5 generaba EN EL ACTO la tx del 5
+  // de este mes, con fecha atrasada. seedLastRun marca el mes como ya corrido para
+  // que la primera sea la del mes que viene.
+  it('seedLastRun: el dia ya paso -> marca el mes en curso', () => {
+    expect(seedLastRun(5, new Date(2026, 8, 20))).toBe('2026-09');
+    expect(ym(dueMonths({ dayOfMonth: 5, lastRun: seedLastRun(5, new Date(2026, 8, 20)) }, new Date(2026, 8, 20)))).toEqual([]);
+  });
+
+  it('seedLastRun: el dia es hoy -> corre hoy (no es fecha atrasada)', () => {
+    expect(seedLastRun(5, new Date(2026, 8, 5))).toBe(null);
+    expect(ym(dueMonths({ dayOfMonth: 5, lastRun: seedLastRun(5, new Date(2026, 8, 5)) }, new Date(2026, 8, 5)))).toEqual(['2026-09']);
+  });
+
+  it('seedLastRun: el dia todavia no llega -> no saltea nada', () => {
+    expect(seedLastRun(28, new Date(2026, 8, 20))).toBe(null);
+  });
+
+  // Dia 31 en un mes de 30: el dia efectivo es el 30, asi que crearla el 30 todavia
+  // corre hoy. Sin el clamp, seedLastRun comparaba contra un dia que no existe y
+  // saltaba el mes de mas.
+  it('seedLastRun: clampea el dia al ultimo del mes', () => {
+    expect(seedLastRun(31, new Date(2026, 8, 30))).toBe(null);
+    expect(seedLastRun(31, new Date(2026, 8, 29))).toBe(null);
   });
 
   it('clamps day 31 to the last day of a short month', () => {
