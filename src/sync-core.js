@@ -316,6 +316,21 @@ export function restoreTombstonesCore(local, file, lists, ts){
 // bajar, pero si lleva minutos fallando se baja igual. El merge conserva lo local
 // mas nuevo (LWW por campo, por-item en las listas, tombstones en los borrados),
 // asi que bajar no pisa lo que este dispositivo todavia no subio.
+// ── Ritmo del pull automatico ───────────────────────────────────────────────
+// Cada pull es una invocacion de la serverless function. Con la pestana abierta
+// todo el dia, 25s fijos son ~1.100 llamadas por dispositivo por dia aunque no
+// cambie nada — y ese numero se multiplica por cada dispositivo que se suma.
+// Se espacia mientras la nube viene sin novedades (25s, 50s, 100s... hasta 5 min)
+// y vuelve al ritmo corto apenas algo cambia, se edita local, o el usuario vuelve
+// a la pestana. Lo que se pierde es latencia cuando NADA esta pasando.
+export var PULL_BASE_MS = 25000;
+export var PULL_MAX_MS = 5 * 60 * 1000;
+export function nextPullDelayCore(quietRounds, base, max) {
+  var b = base || PULL_BASE_MS, m = max || PULL_MAX_MS;
+  var n = Math.max(0, Math.min(quietRounds || 0, 20));   // cap: 2^n desborda rapido
+  return Math.min(b * Math.pow(2, n), m);
+}
+
 export const STUCK_PUSH_MS = 2 * 60 * 1000;
 export function autoPullAllowedCore(st, now, stuckMs){
   if(!st || st.inFlight || st.hidden || !st.online) return false;

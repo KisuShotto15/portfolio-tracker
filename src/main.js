@@ -1,5 +1,5 @@
 import './style.css';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, seedLastRun, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, STUCK_PUSH_MS } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, seedLastRun, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, nextPullDelayCore, STUCK_PUSH_MS } from './sync-core.js';
 import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
@@ -507,13 +507,29 @@ async function autoPull(){
   if(!autoPullAllowedCore({inFlight:_pullInFlight,hidden:document.hidden,online:navigator.onLine,
       dirty:_dirty,syncFailed:syncFailed,failingSince:_pushFailSince},Date.now(),_stuckPushMs)) return;
   _pullInFlight=true;
-  try{ await pullFromCloud(true); if(_pullChanged) afterPull(); } // solo re-render si la nube trajo algo nuevo
+  try{
+    await pullFromCloud(true);
+    if(_pullChanged){ afterPull(); _quietPulls=0; }   // solo re-render si la nube trajo algo nuevo
+    else _quietPulls++;
+  }
   finally{ _pullInFlight=false; }
 }
+// Ritmo adaptativo: 25s mientras pasan cosas, espaciandose hasta 5 min cuando la
+// nube viene vacia una y otra vez. Cada pull es una invocacion de la function, y
+// una pestana abierta todo el dia gastaba ~1.100 por dispositivo sin traer nada.
+var _quietPulls=0;
+function schedulePull(){
+  clearTimeout(_pullTimer);
+  _pullTimer=setTimeout(function(){ autoPull().then(schedulePull,schedulePull); }, nextPullDelayCore(_quietPulls));
+}
+// Cualquier senal de que SI esta pasando algo vuelve al ritmo corto: una edicion
+// local, volver a la pestana, o recuperar la conexion.
+function resetPullPace(){ _quietPulls=0; if(_pullTimer) schedulePull(); }
 
 window.addEventListener('online', function(){
   setSyncStatus('syncing','Reconnecting...');
   syncFailed=false;
+  resetPullPace();
   updateOfflineBanner(); // oculta el banner offline; el push que sigue baja el contador
   pullFromCloud().then(function(){ pushToCloud(); });
 });
@@ -563,6 +579,7 @@ function scheduleRetry(){
 function save(){
   _saveSeq++; _dirty=true;
   _pendingCount++;
+  resetPullPace();   // estas editando: el otro dispositivo puede estar haciendo lo mismo
   try{ localStorage.setItem('ft13_dirty','1'); localStorage.setItem('ft13_pending',_pendingCount); }catch(e){} // marca cambios sin pushear (sobrevive reload)
   updateOfflineBanner();
   saveLocal();
@@ -608,7 +625,7 @@ var _cloneTxs=(typeof structuredClone==='function')?structuredClone:function(a){
 // tambien sus API keys de este dispositivo (xkDel) y esas el undo no las devuelve.
 function undoLists(){ return perItemLists().filter(function(l){ return l.field!=='exchangeWallets'; }); }
 function _undoState(){ var o={}; undoLists().forEach(function(l){ o[l.field]=_cloneTxs(S[l.field]||[]); }); return o; }
-function snapshot(){ undoStack.push(_undoState()); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); }
+function snapshot(){ undoStack.push(_undoState()); if(undoStack.length>50) undoStack.shift(); redoStack=[]; updateUndoBtns(); persistUndo(); }
 // Marca con updatedAt fresco solo los items que el undo/redo realmente cambio, para que
 // ganen el merge last-writer-wins contra la nube (si no, la nube revierte el undo).
 function _bumpChangedUpdatedAt(prev,next,keyOf,now){
@@ -649,6 +666,7 @@ function undoKeepAdded(field,items){
   [undoStack,redoStack].forEach(function(st){
     st.forEach(function(e){ if(e[field]) e[field]=e[field].concat(_cloneTxs(items)); });
   });
+  persistUndo();   // el estado y el stack se movieron juntos: la firma guardada ya no sirve
 }
 function undoKeepNew(field,before,after,keyOf){
   if(!undoStack.length&&!redoStack.length) return;
@@ -657,8 +675,63 @@ function undoKeepNew(field,before,after,keyOf){
 }
 // afterPull re-renderiza la pagina activa: el undo ya no toca solo transacciones,
 // y el resto de las paginas se re-arma al entrar (showPage).
-function doUndo(){ if(!undoStack.length) return; var cur=_undoState(); _applyUndoState(undoStack.pop()); redoStack.push(cur); save(); afterPull(); updateUndoBtns(); }
-function doRedo(){ if(!redoStack.length) return; var cur=_undoState(); _applyUndoState(redoStack.pop()); undoStack.push(cur); save(); afterPull(); updateUndoBtns(); }
+function doUndo(){ if(!undoStack.length) return; var cur=_undoState(); _applyUndoState(undoStack.pop()); redoStack.push(cur); save(); afterPull(); updateUndoBtns(); persistUndo(); }
+function doRedo(){ if(!redoStack.length) return; var cur=_undoState(); _applyUndoState(redoStack.pop()); undoStack.push(cur); save(); afterPull(); updateUndoBtns(); persistUndo(); }
+
+// ── El deshacer sobrevive a un reload ───────────────────────────────────────
+// El stack vivia solo en memoria: borrabas algo, recargabas (o la PWA se moria en
+// segundo plano, que en movil pasa solo) y ya no habia vuelta atras.
+// En IndexedDB y no en localStorage: una entrada es una copia de TODAS las listas
+// — con 2.000 transacciones son ~850 KB, y localStorage se llena a los 5 MB (y ahi
+// se pierde algo de verdad: el estado). Por eso tambien se guarda UNA sola entrada:
+// deshacer lo ultimo tras recargar es el caso real; la historia larga sigue en
+// memoria mientras la pestana viva.
+// NUNCA va dentro de S: es historia de ESTE dispositivo y no tiene nada que hacer
+// viajando a la nube ni pisandole el estado a otro.
+var UNDO_DB='ft13u', UNDO_STORE='undo', UNDO_KEY='stack', UNDO_KEEP=1;
+function undoDb(){
+  return new Promise(function(res,rej){
+    try{
+      var r=indexedDB.open(UNDO_DB,1);
+      r.onupgradeneeded=function(){ r.result.createObjectStore(UNDO_STORE); };
+      r.onsuccess=function(){ res(r.result); };
+      r.onerror=function(){ rej(r.error); };
+    }catch(e){ rej(e); }
+  });
+}
+function undoDbOp(mode,fn){
+  return undoDb().then(function(db){
+    return new Promise(function(res,rej){
+      var tx=db.transaction(UNDO_STORE,mode), out=fn(tx.objectStore(UNDO_STORE));
+      tx.oncomplete=function(){ db.close(); res(out&&out.result); };
+      tx.onerror=function(){ db.close(); rej(tx.error); };
+      tx.onabort=function(){ db.close(); rej(tx.error); };
+    });
+  });
+}
+// La firma del estado al momento de guardar. Si al arrancar no coincide, entre
+// medio paso algo que esta historia no vio (un pull con la pestana cerrada, otro
+// dispositivo, una migracion) y aplicarla borraria ese cambio: se descarta.
+var _undoSaveT=null;
+function persistUndo(){
+  clearTimeout(_undoSaveT);
+  _undoSaveT=setTimeout(function(){
+    var payload=undoStack.length?{sig:stateSig(),stack:undoStack.slice(-UNDO_KEEP),ts:Date.now()}:null;
+    undoDbOp('readwrite',function(st){ return payload?st.put(payload,UNDO_KEY):st.delete(UNDO_KEY); }).catch(function(){});
+  },1200);   // despues de la mutacion y su save(): la firma tiene que ser la de DESPUES
+}
+function clearPersistedUndo(){
+  clearTimeout(_undoSaveT);
+  return undoDbOp('readwrite',function(st){ return st.delete(UNDO_KEY); }).catch(function(){});
+}
+function restoreUndo(){
+  return undoDbOp('readonly',function(st){ return st.get(UNDO_KEY); }).then(function(v){
+    if(!v||!v.stack||!v.stack.length) return;
+    if(v.sig!==stateSig()){ clearPersistedUndo(); return; }
+    undoStack=v.stack; redoStack=[];   // el redo no se guarda: rehacer tras recargar no es un caso real
+    updateUndoBtns();
+  }).catch(function(){});
+}
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 async function clearAllTx(){ if(!await appConfirm('Delete ALL transactions?','Can be undone with Undo.','Delete')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
@@ -1248,6 +1321,20 @@ window.retryReceipt=function(){ _uploadReceipt(); };
 // Ventana del aviso de duplicado. Tres dias: cubre "lo anote hoy y ya estaba" sin
 // convertir un gasto que de verdad se repite cada semana en una pregunta.
 var DUP_DAYS=3;
+// Anotar con fecha de un mes ANTERIOR que ya tiene su foto de patrimonio: el
+// Budget lo suma al mes de la fecha, pero el ingreso deducido no lo ve, porque los
+// periodos entre snapshots se arman por momento de REGISTRO, no por fecha. Las dos
+// reglas son correctas por separado (un snapshot refleja el patrimonio del
+// instante en que se tomo; un gasto anotado despues todavia no lo habia movido),
+// pero juntas dejan al mes cerrado mostrando menos ganancia de la real.
+// No se ofrece "recalcular el snapshot": con los periodos armados por registro, la
+// tx no entraria igual, asi que el boton no cambiaria ningun numero.
+// Devuelve el primer snapshot posterior a esa fecha, o null si no hay lio.
+function closedPeriodSnap(date){
+  if(!date||date.slice(0,7)>=localToday().slice(0,7)) return null;   // mes en curso: no hay mes cerrado
+  return (S.snapshots||[]).filter(function(s){ return s.date>=date; })
+    .sort(function(a,b){ return a.date.localeCompare(b.date); })[0]||null;
+}
 async function addTx(){
   var date=document.getElementById('tx-date').value;
   var desc=document.getElementById('tx-desc').value.trim();
@@ -1262,6 +1349,16 @@ async function addTx(){
   if(cur==='VES'){ if(!_vr){ txMsg('Exchange rate not available'); return; } amtVES=amt; amtUSD=vesToUsd(amt,_vr); }
   // Con reglas recurrentes anotando solas es facil cargar a mano algo que la app
   // ya cargo, y eso recien se ve cuadrando el mes. Pregunta, no bloquea.
+  var viejo=closedPeriodSnap(date);
+  if(viejo){
+    var esGasto=type==='Debit';
+    var okViejo=await appConfirm('This changes a closed month',
+      'Your net worth was already photographed on <b style="color:#fff">'+escHtml(fmtDate(viejo.date))+'</b>, after this date. '
+      +monthLabel(date.slice(0,7))+' will count the '+fmtUSD(amtUSD)+' in its budget, but the income derived for that period will not — '
+      +'so that month ends up showing '+fmtUSD(amtUSD)+' '+(esGasto?'less':'more')+' profit than it really had.',
+      'Add anyway');
+    if(!okViejo) return;
+  }
   var dup=dupTxCore(S.transactions,{desc:desc,amountUSD:amtUSD,date:date},DUP_DAYS);
   if(dup){
     var okDup=await appConfirm('Possible duplicate',
@@ -1931,9 +2028,18 @@ function renderTx(){
   if(!data.length){ _txData=null; wrap.innerHTML=emptyState('No transactions yet','Use the + button to add your first transaction'); return; }
   // Totales por dia sobre TODO el filtrado (no solo lo visible): el header de un dia
   // que cruza el limite de pagina muestra el total completo desde el principio.
+  // El total del dia es GASTO, y gasto es lo mismo que cuenta el presupuesto.
+  // Antes sumaba todo debito de SUMMARY_CATS, o sea tambien Investments (plata que
+  // pasa a otro activo tuyo) y Savings (que ni siquiera sale del patrimonio): el
+  // dia que movias $500 a una inversion, el encabezado decia "-$500 gastado" y el
+  // Budget del mismo dia no lo veia. La linea de abajo es otra cosa a proposito:
+  // resume LO FILTRADO, asi que ahi si suman todos los debitos (filtrar
+  // Investments y leer "total 0" no responderia nada).
   var dayTotals={}, totalDebits=0;
   data.forEach(function(t){
-    if(t.type==='Debit'&&inSummary(t)){ totalDebits+=t.amountUSD; dayTotals[t.date]=(dayTotals[t.date]||0)+t.amountUSD; }
+    if(t.type!=='Debit'||!inSummary(t)) return;
+    totalDebits+=t.amountUSD;
+    if(EXPENSE_CATS_DASH.indexOf(t.category)>=0) dayTotals[t.date]=(dayTotals[t.date]||0)+t.amountUSD;
   });
   _txData=data; _txDayTotals=dayTotals;
   // Only build DOM for the first _txLimit rows; the rest auto-load on scroll (keeps innerHTML small).
@@ -2489,6 +2595,9 @@ function getActiveAlerts(){
       // "sin saldo fresco" cubre los dos casos con la verdad: el que no respondio
       // (sumo 0) y el que respondio hace nueve horas (sumo un numero viejo).
       action:'Placeholder '+fmtUSD(s.total)+' — verify the real amount in History'
+        // La foto se toma esa noche, no al terminar el dia: lo que anotes despues
+        // pertenece a ese mes pero ya no esta en el total.
+        +' · taken that evening, so anything logged later that night is not in it'
         +(caidos?' · no fresh balance from '+caidos+' when it was taken':'')
         +(atras?' · '+atras+' older one'+(atras===1?'':'s')+' still to verify':'')
         +' · tap to dismiss',
@@ -3101,12 +3210,26 @@ function staleExchangeWarning(list){
   return '<span style="display:block;margin-top:9px;line-height:1.5;color:#EF9F27">'+partes.join(' ')
     +' Refresh it in Wallets first, or this number is frozen wrong.</span>';
 }
+// El ingreso deducido se suma ENTERO al mes de la fecha del snapshot, aunque el
+// periodo venga de otro mes: tomar uno el 5 de octubre le acredita a octubre lo
+// que se genero casi todo en septiembre. Cambiar la atribucion romperia el motor
+// (el periodo es lo unico que la app puede medir), asi que al menos se dice antes
+// de guardar, que es cuando todavia se puede elegir la fecha del corte.
+function periodMonthWarning(){
+  var prev=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); }).pop();
+  if(!prev) return '';
+  var mesPrev=prev.date.slice(0,7), mesHoy=localToday().slice(0,7);
+  if(mesPrev===mesHoy) return '';
+  return '<span style="display:block;margin-top:9px;line-height:1.5">This period runs from <b style="color:#fff">'
+    +escHtml(fmtDate(prev.date))+'</b>, so part of what it earned belongs to '+monthLabel(mesPrev)
+    +'. All of it is credited to '+monthLabel(mesHoy)+', the month of this snapshot.</span>';
+}
 async function recordSnapshot(){
   var auto=getTotalBalance();
   var hasPrev=S.snapshots&&S.snapshots.length>0;
   var res=await appPrompt(
     'Record portfolio snapshot',
-    'Auto-sum from wallets: <b style="color:#fff">'+fmtUSD(auto)+'</b>'+staleExchangeWarning(staleExchanges()),
+    'Auto-sum from wallets: <b style="color:#fff">'+fmtUSD(auto)+'</b>'+staleExchangeWarning(staleExchanges())+periodMonthWarning(),
     auto.toFixed(2),
     // Ya no crea ninguna transaccion: decide si se le atribuye income al periodo
     // (se guarda en el snapshot como derivedIncome/netProfit).
@@ -4376,12 +4499,14 @@ function importJSON(file){
 
 async function clearAll(){
   if(!await appConfirm('Delete ALL data?','Transactions, wallets, holdings and settings on this device. This cannot be undone.','Delete')) return;
-  _slDisabled=true; flushSaveLocal(); localStorage.removeItem('ft13'); location.reload();
+  _slDisabled=true; flushSaveLocal(); localStorage.removeItem('ft13');
+  clearPersistedUndo().then(function(){ location.reload(); },function(){ location.reload(); });
 }
 // El Sign out vivia como confirm() nativo en el onclick del boton; aca usa el
 // mismo modal que el resto de la app.
 async function signOut(){
   if(!await appConfirm('Sign out?','Your data stays synced in the cloud and comes back when you sign in again.','Sign out')) return;
+  await clearPersistedUndo();   // la historia es de esta cuenta, no de la que entre despues
   logout();
 }
 window.signOut=signOut;
@@ -4972,6 +5097,7 @@ async function bootAfterAuth(firstLogin){
   // row de tu usuario). El merge del servidor evita cualquier clobber.
   if(firstLogin){ _dirty=true; pushToCloud(); }
   runMigrations();
+  restoreUndo();   // despues del pull y de las migraciones: la firma se compara contra el estado final
   try{ maybeShowMonthClose(); }catch(e){ console.error('month close:',e); }
   // Marca observable de "el arranque post-pull ya corrio". El e2e esperaba a que
   // subiera pullCount, pero ese contador lo incrementa el SERVIDOR al responder el
@@ -5009,14 +5135,15 @@ async function bootAfterAuth(firstLogin){
     setInterval(function(){ if(!document.hidden) fetchUsdtRate(); }, 5*60*1000);
     setInterval(function(){ autoFetchExchangeWallets(); }, BINANCE_AUTO_MS);
     setInterval(function(){ fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }, COINPRICE_AUTO_MS);
-    // Keep an open, focused tab fresh without a reload: poll the cloud every 25s
-    // (autoPull no-ops when hidden, offline, or holding unsynced local edits).
-    _pullTimer=setInterval(autoPull, 25000);
+    // Keep an open, focused tab fresh without a reload (autoPull no-ops when
+    // hidden, offline, or holding unsynced local edits). El ritmo ya no es fijo:
+    // ver schedulePull.
+    schedulePull();
     // Pull immediately whenever the tab regains focus or visibility, y corre las
     // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
-    window.addEventListener('focus', function(){ fetchUsdtRate(); autoPull().then(applyRecurring); });
+    window.addEventListener('focus', function(){ resetPullPace(); fetchUsdtRate(); autoPull().then(applyRecurring); });
     document.addEventListener('visibilitychange', function(){
-      if(!document.hidden){ fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
+      if(!document.hidden){ resetPullPace(); fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
     });
   }
 }

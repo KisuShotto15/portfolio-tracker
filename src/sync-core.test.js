@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, seedLastRun, STUCK_PUSH_MS } from './sync-core.js';
+import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, tombKills, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, txCreatedAt, backfillTxCreatedAt, mergeSnapArrays, pruneRevokedSnapTombs, backfillSnapUpdatedAt, snapKey, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, itemId, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, seedLastRun, nextPullDelayCore, PULL_BASE_MS, PULL_MAX_MS, STUCK_PUSH_MS } from './sync-core.js';
 
 const TS = ['transactionsUpdatedAt','snapshotsUpdatedAt','presetsUpdatedAt','recurringUpdatedAt'];
 
@@ -206,6 +206,38 @@ describe('tombstones revocables (regresion: undo de un borrado)', () => {
     expect(tombId({ id: 5, ts: 1 })).toBe(5);
     expect(tombKills(5, { updatedAt: 9e15 })).toBe(true);
     expect(tombKills({ id: 5, ts: 10 }, { updatedAt: 20 })).toBe(false);
+  });
+});
+
+describe('nextPullDelayCore (ritmo del pull automatico)', () => {
+  it('arranca en el intervalo corto mientras pasan cosas', () => {
+    expect(nextPullDelayCore(0)).toBe(PULL_BASE_MS);
+  });
+
+  it('duplica por cada vuelta en la que la nube no trajo nada', () => {
+    expect(nextPullDelayCore(1)).toBe(PULL_BASE_MS * 2);
+    expect(nextPullDelayCore(3)).toBe(PULL_BASE_MS * 8);
+  });
+
+  // Sin techo, 2^n se va a horas (y a dias) en unas pocas vueltas: la pestana
+  // abierta dejaria de enterarse de lo que anota el otro dispositivo.
+  it('no pasa del techo por muchas vueltas que lleve', () => {
+    expect(nextPullDelayCore(20)).toBe(PULL_MAX_MS);
+    expect(nextPullDelayCore(999)).toBe(PULL_MAX_MS);
+  });
+
+  it('un contador invalido no rompe el ritmo', () => {
+    expect(nextPullDelayCore(-5)).toBe(PULL_BASE_MS);
+    expect(nextPullDelayCore(undefined)).toBe(PULL_BASE_MS);
+  });
+
+  // Una hora de pestana abierta sin novedades: 25s fijos son 144 invocaciones,
+  // el ritmo adaptativo llega al techo y se queda en ~15.
+  it('baja de 144 a ~15 invocaciones en una hora quieta', () => {
+    let t = 0, n = 0, quiet = 0;
+    while (t < 3600000) { t += nextPullDelayCore(quiet++); n++; }
+    expect(n).toBeLessThan(20);
+    expect(3600000 / PULL_BASE_MS).toBeGreaterThan(140);
   });
 });
 

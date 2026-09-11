@@ -2383,6 +2383,101 @@ const prov43 = (cloudDoc.manualWallets || []).filter((w) => w.id === 43002)[0] |
 check('el override congelado se rebasa aunque el esquema ya este al dia', prov43.balanceOverride === null, JSON.stringify(prov43));
 check('y el balance queda en la base equivalente', prov43.balance === 500, JSON.stringify(prov43));
 
+// ── escenario 44: lo que quedaba abierto del informe ───────────────────────
+// F22 el total del dia contaba Investments y Savings · F10 aviso al anotar en un
+// mes ya cerrado · F13 a que mes va el ingreso del periodo · F14 la foto es de
+// esa noche · F24 el pull sigue vivo con ritmo adaptativo · F30 deshacer tras recargar.
+console.log('E2E los que quedaban — dia, mes cerrado, periodo, ritmo y deshacer');
+cloudDoc = {};
+const ts44 = Date.now() - 20000;
+const hoy44 = dU(0), ayer44 = dU(1);
+// Un mes cerrado de verdad: el snapshot del ultimo dia del mes pasado.
+const mesPasado44 = (function () { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 0); })();
+const iso44 = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const finMesPasado44 = iso44(mesPasado44);
+const dentroMesPasado44 = iso44(new Date(mesPasado44.getFullYear(), mesPasado44.getMonth(), Math.max(1, mesPasado44.getDate() - 3)));
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    deletedTxIds: [], deletedSnapDates: [], deletedWalletIds: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+    manualWallets: [ { id: 44001, name: 'Zinli', trackerOnly: true, balance: 0, updatedAt: ${ts44} } ],
+    transactions: [
+      { id: ${ts44 + 1}, createdAt: ${ts44 + 1}, seq: 0, date: '${ayer44}', desc: 'E2E mercado', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 40, originalCurrency: 'USD', imported: false, updatedAt: ${ts44 + 1} },
+      { id: ${ts44 + 2}, createdAt: ${ts44 + 2}, seq: 1, date: '${ayer44}', desc: 'E2E a bybit', wallet: 'Zinli', type: 'Debit', category: 'Investments', amountUSD: 500, originalCurrency: 'USD', imported: false, updatedAt: ${ts44 + 2} },
+      { id: ${ts44 + 3}, createdAt: ${ts44 + 3}, seq: 2, date: '${ayer44}', desc: 'E2E al ahorro', wallet: 'Zinli', type: 'Debit', category: 'Savings', amountUSD: 300, originalCurrency: 'USD', imported: false, updatedAt: ${ts44 + 3} } ],
+    snapshots: [ { id: 44010, date: '${finMesPasado44}', total: 5000, auto: true, updatedAt: ${ts44} } ],
+    budgetTotal: 900, budgetTotalByMonth: {}, schemaVersion: 5,
+    manualWalletsUpdatedAt: ${ts44}, snapshotsUpdatedAt: ${ts44}, transactionsUpdatedAt: ${ts44} })))`);
+  return (await ev("(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return (S.transactions||[]).length===3&&(S.snapshots||[]).length===1;})()")) === true;
+}, 8000, 400, 'sembrar el estado del escenario 44').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+
+// F22 · el encabezado del dia suma gasto, no traspasos
+await ev("showPage('transactions',null);renderTx()"); await sleep(500);
+// El encabezado del dia de ayer dice "Yesterday" (fmtDateHdr), no la fecha.
+const sep44 = await ev("(function(){var r=[...document.querySelectorAll('.date-sep')].filter(function(e){return e.textContent.indexOf('Yesterday')>=0;})[0];return r?r.textContent:'sin fila';})()");
+check('el total del dia cuenta solo el gasto real', /40\.00/.test(sep44) && !/840|540|340/.test(sep44), sep44);
+
+// F10 · anotar con fecha de un mes ya cerrado avisa antes
+await ev("openTxForm()"); await sleep(350);
+await ev(`document.getElementById('tx-date').value='${dentroMesPasado44}';
+  document.getElementById('tx-desc').value='E2E gasto atrasado';
+  document.getElementById('tx-amount').value='80';
+  document.getElementById('tx-wallet').value='Zinli';
+  document.getElementById('tx-type').value='Debit';
+  document.getElementById('tx-cat').value='Groceries';
+  addTxOrUpdate()`);
+await waitFor(async () => (await modalTitle()) === 'This changes a closed month', 3000, 80, 'el aviso de mes cerrado');
+const cuerpo44 = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('.modal-info').textContent:'';})()");
+check('el aviso nombra la foto que ya se tomo', cuerpo44.indexOf(fmtDateE2E(finMesPasado44)) >= 0, cuerpo44);
+check('y explica que ese mes va a mostrar menos ganancia', /less profit/.test(cuerpo44) && /\$80\.00/.test(cuerpo44), cuerpo44);
+await cancelModal(); await sleep(300);
+check('cancelar no anota nada', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 3);
+// Con fecha de HOY no molesta: el mes en curso no esta cerrado.
+await ev(`document.getElementById('tx-date').value='${hoy44}';addTxOrUpdate()`); await sleep(600);
+check('con fecha de hoy no pregunta nada', (await ev("document.querySelectorAll('.app-modal-overlay').length")) === 0);
+check('y la transaccion entra', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 4);
+await ev("closeTxForm()"); await sleep(300);
+
+// F13 · el dialogo del snapshot dice a que mes se le acredita el ingreso
+await ev("recordSnapshot()"); await sleep(500);
+const cuerpoSnap44 = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m.length?m[m.length-1].querySelector('.modal-info').textContent:'';})()");
+check('el dialogo dice desde cuando corre el periodo', cuerpoSnap44.indexOf(fmtDateE2E(finMesPasado44)) >= 0, cuerpoSnap44);
+check('y a que mes se le acredita todo el ingreso', /All of it is credited to/.test(cuerpoSnap44), cuerpoSnap44);
+await cancelModal(); await sleep(300);
+
+// F14 · la alerta del cierre automatico admite que la foto es de esa noche
+await ev("showPage('summary',null);renderSummary()"); await sleep(500);
+const al44 = await ev("[...document.querySelectorAll('.alert-item')].map(function(e){return e.textContent;}).filter(function(t){return t.indexOf('Month-close snapshot')>=0;}).join(' ~ ')");
+check('la alerta dice que lo de esa noche no entro', /taken that evening/.test(al44), al44);
+
+// F30 · deshacer sobrevive a un reload
+await ev("showPage('transactions',null)"); await sleep(300);
+const nAntes44 = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length");
+await ev(`deleteTx(${ts44 + 1})`);
+await waitFor(async () => (await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');if(!m.length)return 0;m[m.length-1].querySelector('#_amo').click();return 1;})()")) === 1, 3000, 80, 'el confirm de borrar la tx');
+await sleep(2200);   // persistUndo escribe 1,2 s despues de la mutacion
+check('la tx se borro', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === nAntes44 - 1);
+await boot();
+await sleep(400);
+check('tras recargar, el boton Deshacer sigue disponible',
+  (await ev("(function(){var b=document.getElementById('btn-undo');return !!b&&!b.disabled;})()")) === true);
+await ev('doUndo()'); await sleep(600);
+check('y deshacer devuelve la transaccion borrada',
+  (await ev(`(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.id===${ts44 + 1};})`)) === true,
+  await ev("JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).map(function(t){return t.desc;}))"));
+
+// F24 · el pull periodico sigue trayendo lo del otro dispositivo (ritmo adaptativo)
+const idOtro44 = Date.now();
+cloudDoc = Object.assign({}, cloudDoc, {
+  transactions: (cloudDoc.transactions || []).concat([{ id: idOtro44, createdAt: idOtro44, seq: 99, date: hoy44, desc: 'E2E del otro dispositivo', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 12, originalCurrency: 'USD', imported: false, updatedAt: Date.now() }]),
+  transactionsUpdatedAt: Date.now(),
+});
+const llego44 = await waitFor(
+  async () => (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.desc==='E2E del otro dispositivo';})")) === true,
+  40000, 1000, 'el pull automatico trae la tx del otro dispositivo',
+).catch(() => false);
+check('el pull automatico sigue corriendo sin tocar nada', llego44 === true);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
