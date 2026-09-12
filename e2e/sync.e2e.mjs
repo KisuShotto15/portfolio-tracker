@@ -2593,6 +2593,20 @@ await ev("showPage('budget',null);renderBudget()"); await sleep(700);
 const gasto46 = await ev("(function(){var e=document.querySelector('.bdg-hero-sub');return e?e.textContent.replace(/\\s+/g,' '):'';})()");
 check('el presupuesto cuenta las dos (250 gastados)', /250/.test(gasto46), gasto46);
 
+// El import de CSV se fue: era el unico camino por el que nacia una fila
+// importada, y esa importacion ya ocurrio una sola vez.
+await ev("showPage('settings',null)"); await sleep(400);
+check('el boton de importar CSV ya no esta',
+  (await ev("[].filter.call(document.querySelectorAll('button'),function(b){return /Import CSV/i.test(b.textContent);}).length")) === 0);
+check('pero el de exportar sigue',
+  (await ev("[].filter.call(document.querySelectorAll('button'),function(b){return /Export CSV/i.test(b.textContent);}).length")) === 1);
+check('la pagina de importar no existe', (await ev("!!document.getElementById('page-import')")) === false);
+// Un marcador viejo a #import no puede dejar la app en una pagina en blanco.
+await ev("showPage('import',null)"); await sleep(400);
+check('un enlace viejo a #import cae en Summary',
+  (await ev("(document.querySelector('.page.active')||{}).id")) === 'page-summary',
+  await ev("(document.querySelector('.page.active')||{}).id"));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

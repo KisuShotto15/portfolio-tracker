@@ -1183,11 +1183,6 @@ input::placeholder{color:var(--txt3)}
 }
 .fab-add:hover{transform:scale(1.06)}
 
-.dzone{
-  border:1.5px dashed var(--line);border-radius:var(--radius);padding:3rem 1rem;text-align:center;
-  color:var(--txt3);cursor:pointer;transition:border-color .15s,color .15s;
-}
-.dzone:hover{border-color:color-mix(in srgb,var(--accent) 50%,transparent);color:var(--txt2)}
 
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:70}
 .modal-box,.modal{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:27px 30px;width:min(525px,92vw)}

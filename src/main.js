@@ -1,6 +1,6 @@
 import './style.css';
 import { nextStamp, maxObservedStamp, localFieldWins, vesToUsd, mergeTxArrays, mergeTombstones, pruneRevokedTombstones, tombId, dueMonths, backfillRecurringTxWallets, renameWalletRefsCore, seedLastRun, txCreatedAt, backfillTxCreatedAt, snapKey, itemId, mergeByKey, pruneRevokedByKey, backfillUpdatedAt, dedupeByNaturalKey, walletNameKey, onchainAddrKey, restoreTombstonesCore, autoPullAllowedCore, nextPullDelayCore, STUCK_PUSH_MS } from './sync-core.js';
-import { localToday, monthKey, prevMonth, parseAmt, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
+import { localToday, monthKey, prevMonth, fmtUSD, escHtml, monthName, monthLabel, fmtDate, fmtDateWd } from './format.js';
 import { initTools, renderToolToggles, renderToolGears, calcProfit, calcSpread, calcBCVEmily } from './tools.js';
 import { monthCatTotalsCore, catNetSpendCore, monthIncomeCore, snapDerivedIncomeCore, isExtFlow, investmentFlowCore, periodNetSpendCore, periodLoggedIncomeCore, holdingsTotalUsdCore, catBudgetPctCore, budgetTotalForCore, trackerTxBalancesCore, debtSplitCore, uncategorizedCore, lastWalletCore, dupTxCore,
   rolloverCarryCore, catLimitWithCarryCore, catPaceAlertCore, dashMonthsCore, rollOnCore, migrateRolloverCore, histAllocPctCore,
@@ -1942,7 +1942,7 @@ window.editManualWalletBal=editManualWalletBal;
 function emptyState(title, sub){
   return '<div class="es"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:.25;margin-bottom:.75rem"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg><div class="es-title">'+title+'</div><div class="es-sub">'+sub+'</div></div>';
 }
-// localToday / parseAmt / fmtUSD / escHtml viven en ./format.js (puros).
+// localToday / fmtUSD / escHtml viven en ./format.js (puros).
 // Pill hue mirrors the category icon background (CAT_META[cat].bg) so both stay consistent.
 function tagCat(cat){ var m={Income:'tG',Home:'tB',Groceries:'tG',Transport:'tB',Health:'tP',Business:'tT',Discretionary:'tP','Eating Out':'tA',Support:'tR',Investments:'tA',Savings:'tB',
   Services:'tP','Help others':'tA',Emergency:'tR',Other:'tX'}; return m[cat]||'tX'; }
@@ -4492,61 +4492,12 @@ function populateWalletSelects(){
   });
 }
 
-function parseDate(raw){ if(!raw) return null; var s=raw.trim(); var d=new Date(s); if(!isNaN(d.getTime())) return d.toISOString().slice(0,10); var m=s.match(/(\w+)\s+(\d+),?\s+(\d{4})/); if(m){ d=new Date(m[1]+' '+m[2]+' '+m[3]); if(!isNaN(d.getTime())) return d.toISOString().slice(0,10); } return null; }
-function normCat(raw){ var c=(raw||'').toLowerCase();
-  if(c==='income') return 'Income'; if(c==='home') return 'Home'; if(c==='groceries') return 'Groceries';
-  if(c==='transport') return 'Transport'; if(c==='health') return 'Health'; if(c==='business') return 'Business';
-  if(c==='discretionary') return 'Discretionary'; if(c==='support'||c.indexOf('help')>=0) return 'Support';
-  if(c==='investments') return 'Investments'; if(c==='savings'||c.indexOf('emergency')>=0) return 'Savings';
-  // legacy mappings for old imports
-  if(c.indexOf('services')>=0) return 'Services'; if(c.indexOf('other')>=0) return 'Other';
-  return raw||''; }
-
-function loadPapa(){
-  if(window.Papa) return Promise.resolve();
-  if(window._papaPromise) return window._papaPromise;
-  window._papaPromise=new Promise(function(resolve,reject){
-    var s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js';
-    s.onload=resolve; s.onerror=reject;
-    document.head.appendChild(s);
-  });
-  return window._papaPromise;
-}
-function handleCSV(file){
-  if(!file) return;
-  var result=document.getElementById('import-result');
-  if(result) result.innerHTML='<div class="empty"><span class="spin"></span>Loading…</div>';
-  loadPapa().then(function(){ _parseCSV(file); }).catch(function(){ if(result) result.innerHTML='<div class="empty" style="color:#E24B4A">Failed to load CSV parser</div>'; });
-}
-function _parseCSV(file){
-  Papa.parse(file,{header:true,skipEmptyLines:true,dynamicTyping:false,complete:function(res){
-    var rows=res.data; var result=document.getElementById('import-result');
-    if(!rows.length){ result.innerHTML='<div class="empty">Empty CSV</div>'; return; }
-    snapshot(); var added=0,skipped=0; var keys={};
-    S.transactions.forEach(function(t){ keys[t.date+'|'+t.desc+'|'+t.amountUSD]=1; });
-    rows.forEach(function(r){
-      var date=parseDate(r['Date']||r['date']||'');
-      var desc=(r['Description']||r['description']||'').trim();
-      var wallet=(r['Wallet']||r['wallet']||'Binance').trim();
-      var rawType=(r['Transaction']||r['transaction']||r['Type']||r['type']||'Debit').trim();
-      var type=rawType==='Exchange'?'Debit':rawType;
-      var cat=normCat((r['Category']||r['category']||'').trim());
-      var amt=parseAmt(r['Amount']||r['amount']||r['USD']||r['usd']||'0');
-      var isNotImported=String(r['Tracker']||r['tracker']||'')==='1';
-      if(!date||!desc||!amt) return;
-      var k=date+'|'+desc+'|'+amt; if(keys[k]){ skipped++; return; } keys[k]=1;
-      var _imp=Date.now()+Math.random();
-      S.transactions.push({id:_imp,createdAt:_imp,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amt,amountVES:null,originalCurrency:'USD',rateUsed:null,imported:!isNotImported,updatedAt:stamp()});
-      added++;
-    });
-    if(added>0) S.transactionsUpdatedAt=stamp();
-    save();
-    result.innerHTML='<div style="background:var(--color-background-secondary);border-radius:7px;padding:1rem;margin-top:1rem;font-size:13px"><div style="color:#5DCAA5;margin-bottom:5px">Imported: '+added+'</div><div style="color:var(--color-text-secondary)">Skipped duplicates: '+skipped+'</div><button class="btn btnp btns" style="margin-top:9px" onclick="showPage(\'transactions\',null)">View transactions</button></div>';
-    renderSummary();
-  }});
-}
-
+// El import de CSV se fue: existia para traer el historial del sistema viejo, esa
+// importacion ya ocurrio (una vez, el 2026-03-30) y no va a repetirse. Con el se
+// fueron parseDate/normCat y la carga de PapaParse desde CDN, que no usaba nadie
+// mas. El EXPORT se queda: sacar tus datos siempre tiene que ser posible.
+// Efecto de fondo: `imported:true` era algo que solo podia nacer aca, asi que
+// ninguna fila nueva puede volver a contar como gasto sin mover un saldo (F21).
 function exportCSV(){
   if(!S.transactions.length){ jsonStatus('No transactions to export.','#E24B4A'); return; }
   var csv='Date,Description,Wallet,Transaction,Category,USD,VES Original,Tracker\n'+S.transactions.map(function(t){ return t.date+',"'+t.desc+'",'+(t.wallet||'')+','+t.type+','+t.category+','+t.amountUSD+','+(t.amountVES||'')+','+(t.imported?'0':'1'); }).join('\n');
@@ -4642,7 +4593,7 @@ function runLaunchAction(){
   try{ openTxForm(); }catch(e){}
 }
 function showPage(id,btn,arg){
-  var pages=['summary','transactions','budget','wallets','holdings','tools','settings','import','history'];
+  var pages=['summary','transactions','budget','wallets','holdings','tools','settings','history'];
   if(pages.indexOf(id)<0) id='summary';
   // History no vive en el bottom-nav (se entra desde un boton de Summary), asi
   // que a diferencia de un tab normal necesitamos recordar de donde se vino.
@@ -5078,7 +5029,6 @@ window.forcePush = forcePush;
 window.exportAllJSON = exportAllJSON;
 window.importJSON = importJSON;
 window.clearAll = clearAll;
-window.handleCSV = handleCSV;
 window.save = save;
 
 

@@ -452,7 +452,6 @@
       <h3>Data</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
         <button class="btn btns" onclick="exportCSV()">Export CSV</button>
-        <button class="btn btns btnp" onclick="showPage('import',null)">Import CSV</button>
         <button class="btn btns" onclick="exportAllJSON()">Export JSON backup</button>
         <button class="btn btns btnp" onclick="document.getElementById('json-inp').click()">Restore JSON backup</button>
         <input type="file" id="json-inp" accept=".json" style="display:none" onchange="importJSON(this.files[0])"/>
@@ -470,19 +469,6 @@
     </div>
     </div>
     </div>
-  </div>
-
-  <div id="page-import" class="page">
-    <div class="fc">
-      <h3>Import CSV</h3>
-      <p class="hint">Columns: Date, Description, Wallet, Transaction, Category, Amount, Tracker</p>
-      <p class="hint">Duplicates (same date + description + amount) are skipped automatically.</p>
-    </div>
-    <div class="dzone" onclick="document.getElementById('csv-inp').click()">
-      Click or drag your CSV here
-      <input type="file" id="csv-inp" accept=".csv" style="display:none" onchange="handleCSV(this.files[0])"/>
-    </div>
-    <div id="import-result"></div>
   </div>
 
 </main>
