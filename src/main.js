@@ -735,6 +735,13 @@ function restoreUndo(){
 function updateUndoBtns(){ var u=document.getElementById('btn-undo'),r=document.getElementById('btn-redo'); if(u) u.disabled=!undoStack.length; if(r) r.disabled=!redoStack.length; }
 async function clearAllTx(){ if(!await appConfirm('Delete ALL transactions?','Can be undone with Undo.','Delete')) return; snapshot(); if(!S.deletedTxIds) S.deletedTxIds=[]; var _dt=stamp(); S.transactions.forEach(function(t){ S.deletedTxIds.push({id:t.id,ts:_dt}); }); S.transactions=[]; S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary(); }
 
+// `imported` = fila que vino del CSV del sistema viejo (2024-05 a 2026-03, tres
+// cuartas partes del historial). NO mueve el saldo de ningun tracker a proposito:
+// el balance base de la wallet ya la tiene adentro, asi que sumarla otra vez
+// contaria dos veces dos anios de gastos. Si cuenta como gasto del mes de su
+// fecha, que es lo que hace que el historial del Budget exista. La fila lo dice
+// con el badge "history" (ver txRowHtml): la cuenta esta bien, lo que faltaba era
+// que se notara.
 function isTracker(name,tx){ if(!name) return false; if(tx&&tx.imported) return false; var w=S.manualWallets.find(function(x){ return x.name===name; }); return w?w.trackerOnly===true:false; }
 function inSummary(t){ return SUMMARY_CATS.indexOf(t.category)>=0; }
 
@@ -2036,7 +2043,13 @@ function txRowHtml(t){
   var rateTip=t.rateUsed?('Rate '+(t.rateSrc==='p2p'?'USDT P2P':t.rateSrc==='bcv'?'BCV':'')+' '+t.rateUsed):'';
   var orig=t.originalCurrency==='VES'&&t.amountVES?'<span title="'+rateTip+'">Bs '+t.amountVES.toLocaleString('es-VE')+'</span>':'';
   var isTrk=isTracker(t.wallet,t);
-  var trk=isTrk?'<span class="badge-t">tracker</span>':'';
+  // Una tx importada cuenta como gasto del mes pero NO mueve ningun saldo, y eso
+  // hasta ahora no se veia en ningun lado: dos filas de Binance, una de 2025 y
+  // otra de hoy, se leian igual. No es un error de cuentas — el saldo con el que
+  // arranco la wallet ya tiene ese gasto adentro, sumarlo otra vez lo contaria
+  // doble — pero mirando la fila no habia forma de saberlo.
+  var trk=isTrk?'<span class="badge-t">tracker</span>'
+    :(t.imported?'<span class="badge-h" title="Imported history: it counts as spending for its month, but the wallet balance already included it, so it moves no balance">history</span>':'');
   var wTag=t.wallet==='Binance'?'tBinance':'tX';
   var txType=isTrk?'tx-tracker':(t.type==='Debit'?'tx-debit':'tx-credit');
   var sub=escHtml(t.wallet||'')+(t.category?' · '+escHtml(t.category):'');

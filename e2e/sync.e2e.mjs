@@ -2551,6 +2551,48 @@ await sleep(800);
 check('una firma vencida se vuelve a pedir sola',
   (await ev("(function(){var i=document.querySelector('img[data-rp=\"receipts/u1/priv.jpg\"]');return i?(i.getAttribute('src')||''):'';})()")).indexOf('data:image/gif') === 0);
 
+// ── escenario 46: la historia importada se ve como tal (F21) ───────────────
+// Una tx importada cuenta como gasto del mes pero no mueve ningun saldo — correcto
+// (el balance base de la wallet ya la tiene adentro), pero no se veia en la fila:
+// dos lineas de la misma wallet, una de historia y otra de hoy, se leian igual.
+console.log('E2E historia importada — cuenta como gasto, no mueve saldo, y se nota');
+cloudDoc = {};
+const ts46 = Date.now() - 40000;
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    deletedTxIds: [], deletedSnapDates: [], snapshots: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+    manualWallets: [ { id: 46001, name: 'Binance', trackerOnly: true, balance: 1000, updatedAt: ${ts46} } ],
+    transactions: [
+      { id: ${ts46 + 1}, createdAt: ${ts46 + 1}, seq: 0, date: '${dU(0)}', desc: 'E2E historia vieja', wallet: 'Binance', type: 'Debit', category: 'Groceries', amountUSD: 200, originalCurrency: 'USD', imported: true, updatedAt: ${ts46 + 1} },
+      { id: ${ts46 + 2}, createdAt: ${ts46 + 2}, seq: 1, date: '${dU(0)}', desc: 'E2E gasto de hoy', wallet: 'Binance', type: 'Debit', category: 'Groceries', amountUSD: 50, originalCurrency: 'USD', imported: false, updatedAt: ${ts46 + 2} } ],
+    budgetTotal: 900, manualWalletsUpdatedAt: ${ts46}, transactionsUpdatedAt: ${ts46} })))`);
+  return (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 2;
+}, 8000, 400, 'sembrar el estado del escenario 46').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+await ev("showPage('transactions',null);renderTx()"); await sleep(600);
+
+const filas46 = JSON.parse(await ev(`(function(){var o={};
+  [].forEach.call(document.querySelectorAll('.tx-row'),function(r){
+    var d=r.querySelector('.td-desc-txt'); if(!d) return;
+    o[d.textContent]=(r.querySelector('.badge-h')?'history':'')+(r.querySelector('.badge-t')?'tracker':'');
+  });
+  return JSON.stringify(o);})()`));
+check('la fila importada se marca como historia', filas46['E2E historia vieja'] === 'history', JSON.stringify(filas46));
+check('y la de hoy sigue marcada como tracker', filas46['E2E gasto de hoy'] === 'tracker', JSON.stringify(filas46));
+// El aviso explica POR QUE no mueve el saldo, que es la parte que no se deducia.
+const tip46 = await ev("(function(){var b=document.querySelector('.badge-h');return b?(b.getAttribute('title')||''):'';})()");
+check('el aviso dice que el saldo ya la incluia', /balance already included it/.test(tip46), tip46);
+
+// Y la cuenta sigue como estaba: la importada NO baja el saldo del tracker...
+await ev("showPage('wallets',null);renderWallets()"); await sleep(600);
+const bal46 = await ev(`(function(){var r=[].filter.call(document.querySelectorAll('.wm-row'),function(e){var n=e.querySelector('.wm-name');return n&&n.textContent.trim()==='Binance';})[0];
+  return r?r.textContent.replace(/\s+/g,' '):'sin fila';})()`);
+check('el saldo del tracker solo baja por la tx de hoy', /950/.test(bal46), bal46);
+// ...pero las DOS cuentan como gasto del mes.
+await ev("showPage('budget',null);renderBudget()"); await sleep(700);
+const gasto46 = await ev("(function(){var e=document.querySelector('.bdg-hero-sub');return e?e.textContent.replace(/\\s+/g,' '):'';})()");
+check('el presupuesto cuenta las dos (250 gastados)', /250/.test(gasto46), gasto46);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

@@ -449,6 +449,10 @@ input,select,textarea,button{font-family:inherit}
 .tag.tT{color:#8fdede;background:rgba(13,148,136,.26)}
 .tag.tX{color:var(--txt2);background:rgba(255,255,255,.06)}
 .badge-t{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:2.5px 7.5px;margin-left:6px}
+/* Historia importada: mismo lugar y forma que el badge de tracker (ocupan la
+   misma ranura y nunca aparecen juntos), pero apagado — es una etiqueta que
+   explica, no un estado activo. */
+.badge-h{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);background:rgba(255,255,255,.05);border-radius:5px;padding:2.5px 7.5px;margin-left:6px;cursor:help}
 
 /* ───────────────── Wallets 2-column layout ───────────────── */
 .wgrid{display:block!important}
@@ -1396,7 +1400,7 @@ input::placeholder{color:var(--txt3)}
   .wv-row.wv-exp .acts{opacity:1;pointer-events:auto}
   .wico{width:22px;height:22px;border-radius:6px}
   .wico svg{width:10px;height:10px}
-  .badge-t{font-size:10px;padding:1.5px 5px;margin-left:3px}
+  .badge-t,.badge-h{font-size:10px;padding:1.5px 5px;margin-left:3px}
   /* Listas largas fuera de tx: no pintar filas fuera del viewport */
   .wm-row,.snap-row{content-visibility:auto;contain-intrinsic-size:auto 64px}
   .wv-row{content-visibility:auto;contain-intrinsic-size:auto 120px}
