@@ -1241,8 +1241,46 @@ function autofillFromNote(){
 }
 function updateVesPreview(){ var a=evalMath(document.getElementById('tx-amount').value)||0; var vr=vesTxRate(); document.getElementById('usd-preview').textContent=(vr&&a>0)?(a/vr).toFixed(2):'-'; }
 
-var pendingReceiptUrl = null;
+var pendingReceiptUrl = null;   // legacy: recibo viejo, URL publica directa
+var pendingReceiptPath = null;  // recibo nuevo: pathname privado, se firma para verlo
 var receiptUploading = false;
+// Los recibos nuevos son blobs PRIVADOS: no tienen URL que se pueda poner en un
+// <img> y guardar. Se piden firmadas al servidor, que valida el JWT y que el
+// pathname sea tuyo, y duran una hora. Se piden de a tandas porque la lista de
+// transacciones puede mostrar decenas de miniaturas a la vez.
+var _rcpUrls={}, _rcpExp=0, _rcpInFlight=null;
+function rcpCached(path){ return (_rcpExp>Date.now()&&_rcpUrls[path])||null; }
+async function rcpResolve(paths){
+  var faltan=paths.filter(function(p){ return p&&!rcpCached(p); });
+  if(!faltan.length) return _rcpUrls;
+  if(_rcpInFlight) { try{ await _rcpInFlight; }catch(e){} faltan=paths.filter(function(p){ return p&&!rcpCached(p); }); if(!faltan.length) return _rcpUrls; }
+  _rcpInFlight=(async function(){
+    var r=await fetch(BLOB_PROXY+'?paths='+encodeURIComponent(faltan.slice(0,80).join(',')),{headers:exchangeProxyHeaders()});
+    if(!r.ok) throw new Error('sign failed');
+    var j=await r.json();
+    if(_rcpExp&&_rcpExp<=Date.now()) _rcpUrls={};   // la tanda anterior ya vencio
+    Object.keys(j.urls||{}).forEach(function(k){ _rcpUrls[k]=j.urls[k]; });
+    _rcpExp=j.exp||0;
+  })();
+  try{ await _rcpInFlight; }finally{ _rcpInFlight=null; }
+  return _rcpUrls;
+}
+// Las miniaturas se pintan sin src (data-rp) y se rellenan despues del render:
+// firmar es una llamada a la red y renderTx es sincrono.
+async function fillReceiptThumbs(){
+  var els=[].slice.call(document.querySelectorAll('img[data-rp]:not([src])'));
+  if(!els.length) return;
+  var paths=els.map(function(e){ return e.getAttribute('data-rp'); });
+  try{ await rcpResolve(paths); }catch(e){ return; }
+  els.forEach(function(e){ var u=rcpCached(e.getAttribute('data-rp')); if(u) e.src=u; });
+}
+// Una firma vencida da 403 y la miniatura queda rota. Se limpia la cache y se
+// pide de nuevo, una sola vez por imagen.
+window.rcpRetry=function(img){
+  var p=img.getAttribute('data-rp'); if(!p||img.dataset.rpRetried) return;
+  img.dataset.rpRetried='1'; delete _rcpUrls[p]; img.removeAttribute('src');
+  fillReceiptThumbs();
+};
 function toggleReceiptMenu(e){
   if(e) e.stopPropagation();
   var m=document.getElementById('receipt-menu'); if(!m) return;
@@ -1262,12 +1300,21 @@ function pickReceipt(id){
 function renderReceiptPreview(){
   var prev=document.getElementById('tx-receipt-preview');
   var img=document.getElementById('tx-receipt-img');
-  if(pendingReceiptUrl){ img.src=pendingReceiptUrl; prev.style.display='flex'; }
-  else{ img.src=''; prev.style.display='none'; }
+  if(pendingReceiptPath){
+    prev.style.display='flex';
+    var u=rcpCached(pendingReceiptPath);
+    if(u) img.src=u;
+    else{ img.removeAttribute('src'); rcpResolve([pendingReceiptPath]).then(function(){ var v=rcpCached(pendingReceiptPath); if(v&&pendingReceiptPath) img.src=v; }).catch(function(){}); }
+  }
+  else if(pendingReceiptUrl){ img.src=pendingReceiptUrl; prev.style.display='flex'; }
+  else{ img.removeAttribute('src'); prev.style.display='none'; }
 }
 var _receiptFile=null;
 function removeReceipt(){
-  pendingReceiptUrl=null; _receiptFile=null;
+  // La imagen ya subida no se borra aca: el barrido diario (api/backup.js) se
+  // lleva la que quede sin transaccion que la referencie. Borrarla en el acto
+  // dejaria sin foto al undo de un borrado.
+  pendingReceiptUrl=null; pendingReceiptPath=null; _receiptFile=null;
   document.getElementById('tx-receipt').value='';
   document.getElementById('tx-receipt-status').textContent='';
   renderReceiptPreview();
@@ -1307,7 +1354,8 @@ async function _uploadReceipt(){
     var r=await fetch(BLOB_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({filename:'receipt.jpg',dataB64:dataB64,contentType:'image/jpeg'})});
     if(!r.ok) throw new Error('upload failed');
     var j=await r.json();
-    pendingReceiptUrl=j.url;
+    pendingReceiptPath=j.pathname||null;
+    pendingReceiptUrl=j.url||null;   // el server ya no devuelve url; queda por si un deploy viejo responde
     if(status) status.textContent='';
     renderReceiptPreview();
   }catch(e){
@@ -1317,6 +1365,51 @@ async function _uploadReceipt(){
   }
 }
 window.retryReceipt=function(){ _uploadReceipt(); };
+
+// ── Recibos viejos: de blob publico a blob privado ─────────────────────────
+// Los que ya estaban subidos siguen siendo publicos y permanentes: cambiar el
+// endpoint no los arregla, hay que volver a subirlos. Se hace desde el cliente y
+// no desde el cron para que el cambio viaje por el mismo camino que cualquier
+// edicion (save + push + merge), en vez de que un proceso del servidor escriba en
+// el doc del usuario.
+// De a poco a proposito: son decenas de imagenes y esto puede correr con datos
+// moviles. Cinco por arranque las pasa todas en unos dias de uso normal, y como
+// la lista se calcula de los datos (receiptUrl sin receiptPath), reanuda sola.
+// El blob publico que queda atras lo borra el barrido diario cuando nadie lo
+// referencia (api/backup.js), no esta migracion: si el push todavia no salio, el
+// otro dispositivo necesita poder verlo.
+var RCP_MIGRATE_PER_BOOT=5;
+function blobToB64(b){
+  return new Promise(function(res,rej){
+    var fr=new FileReader();
+    fr.onload=function(){ res(String(fr.result).split(',')[1]); };
+    fr.onerror=rej;
+    fr.readAsDataURL(b);
+  });
+}
+async function migrateLegacyReceipts(){
+  if(!navigator.onLine||!sbGet('sb_at')) return;
+  var pend=(S.transactions||[]).filter(function(t){ return t&&t.receiptUrl&&!t.receiptPath; }).slice(0,RCP_MIGRATE_PER_BOOT);
+  if(!pend.length) return;
+  var movidas=0;
+  for(var i=0;i<pend.length;i++){
+    try{
+      var vieja=pend[i];
+      var r=await fetch(vieja.receiptUrl); if(!r.ok) continue;
+      var b=await r.blob(); if(!b.size||b.size>4000000) continue;
+      var tipo=/^image\/(jpeg|png|webp)$/.test(b.type)?b.type:'image/jpeg';
+      var up=await fetch(BLOB_PROXY,{method:'POST',headers:exchangeProxyHeaders(),
+        body:JSON.stringify({filename:'receipt.jpg',dataB64:await blobToB64(b),contentType:tipo})});
+      if(!up.ok) continue;
+      var j=await up.json(); if(!j.pathname) continue;
+      // re-fetch: un sync durante los awaits pudo reemplazar el array entero
+      var cur=(S.transactions||[]).find(function(x){ return x.id===vieja.id; });
+      if(!cur||cur.receiptPath) continue;
+      cur.receiptPath=j.pathname; delete cur.receiptUrl; cur.updatedAt=stamp(); movidas++;
+    }catch(e){ /* queda para el proximo arranque */ }
+  }
+  if(movidas){ S.transactionsUpdatedAt=stamp(); save(); renderTx(); }
+}
 
 // Ventana del aviso de duplicado. Tres dias: cubre "lo anote hoy y ya estaba" sin
 // convertir un gasto que de verdad se repite cada semana en una pregunta.
@@ -1369,7 +1462,7 @@ async function addTx(){
   }
   snapshot();
   var _now=Date.now(), _ut=stamp();
-  S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,updatedAt:_ut});
+  S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,receiptPath:pendingReceiptPath,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   save(); renderTx(); renderSummary();
@@ -1423,7 +1516,7 @@ function editTx(id){
   document.getElementById('tx-cat').value=t.category; updateCatHint();
   document.getElementById('tx-cur').value=t.originalCurrency||'USD';
   document.getElementById('tx-amount').value=t.originalCurrency==='VES'&&t.amountVES?t.amountVES:t.amountUSD;
-  pendingReceiptUrl=t.receiptUrl||null; renderReceiptPreview();
+  pendingReceiptUrl=t.receiptUrl||null; pendingReceiptPath=t.receiptPath||null; renderReceiptPreview();
   toggleVesHint();
   var btn=document.querySelector('.btn-add');
   btn.textContent='Confirm';
@@ -1724,7 +1817,7 @@ function updateTx(){
   }
   snapshot();
   var _now=stamp();
-  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.rateSrc=cur==='VES'?(typeof rateSrc!=='undefined'?rateSrc:null):null; t.receiptUrl=pendingReceiptUrl; t.updatedAt=_now; }
+  if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.rateSrc=cur==='VES'?(typeof rateSrc!=='undefined'?rateSrc:null):null; t.receiptUrl=pendingReceiptUrl; t.receiptPath=pendingReceiptPath; t.updatedAt=_now; }
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   cancelEditTx(); save(); renderTx(); renderSummary();
@@ -1930,6 +2023,15 @@ function txSepHtml(date){
   var dayTotal=(_txDayTotals&&_txDayTotals[date])||0;
   return '<tr class="date-sep"><td colspan="7"><div class="dsep-inner"><span class="dsep-lbl">'+fmtDateHdr(date)+'</span>'+(dayTotal>0?'<span class="dsep-sep">·</span><span class="dsep-total">-'+fmtUSD(dayTotal)+'</span>':'')+'</div></td></tr>';
 }
+// Miniatura del recibo. El nuevo (privado) sale sin src y lo rellena
+// fillReceiptThumbs con una URL firmada; el viejo (publico) sigue apuntando a su
+// URL directa hasta que la migracion lo vuelva a subir.
+function receiptThumbHtml(t){
+  var comun=' class="tx-receipt-thumb" width="28" height="28" loading="lazy" decoding="async" title="Receipt" onclick="event.stopPropagation();if(this.src)openReceipt(this.src)"';
+  if(t.receiptPath) return '<img'+comun+' data-rp="'+escHtml(t.receiptPath)+'" onerror="rcpRetry(this)">';
+  if(t.receiptUrl) return '<img'+comun+' src="'+escHtml(t.receiptUrl)+'">';
+  return '';
+}
 function txRowHtml(t){
   var rateTip=t.rateUsed?('Rate '+(t.rateSrc==='p2p'?'USDT P2P':t.rateSrc==='bcv'?'BCV':'')+' '+t.rateUsed):'';
   var orig=t.originalCurrency==='VES'&&t.amountVES?'<span title="'+rateTip+'">Bs '+t.amountVES.toLocaleString('es-VE')+'</span>':'';
@@ -1953,7 +2055,7 @@ function txRowHtml(t){
     +  '<span class="td-amt-val" style="color:'+mCol+'">'+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD)+'</span>'
     +  origM
     +'</td>'
-    +'<td class="td-act">'+(t.receiptUrl?'<img class="tx-receipt-thumb" src="'+escHtml(t.receiptUrl)+'" width="28" height="28" loading="lazy" decoding="async" title="Receipt" onclick="event.stopPropagation();openReceipt(this.src)">':'')+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
+    +'<td class="td-act">'+receiptThumbHtml(t)+'<button class="btn-edit-tx" title="Edit" onclick="event.stopPropagation();editTx('+t.id+')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg></button><button class="btn-edit-tx btn-del-tx" title="Delete" onclick="event.stopPropagation();deleteTx('+t.id+')"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg></button></td>'
   +'</tr>';
 }
 // prevDate: fecha de la ultima fila ya en el DOM — evita duplicar el separador cuando un dia cruza el limite de pagina
@@ -1997,6 +2099,7 @@ function loadMoreTx(){
   }
   _txRenderSig=txRSig(_txFilterSig);
   watchTxMore();
+  fillReceiptThumbs();   // idem para las filas que acaba de sumar el scroll
 }
 window.loadMoreTx=loadMoreTx;
 var _txRenderSig='';
@@ -2054,6 +2157,7 @@ function renderTx(){
     +'<table class="tx-table"><thead><tr><th></th><th>Note</th><th>Wallet</th><th>Category</th><th>Original</th><th>USDT</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
     +(moreBtn?'<div id="tx-more" style="text-align:center;margin-top:18px">'+moreBtn+'</div>':'');
   watchTxMore();
+  fillReceiptThumbs();   // las miniaturas privadas necesitan su URL firmada
 }
 
 function getMonths(){ var seen={}; S.transactions.forEach(function(t){ seen[t.date.slice(0,7)]=1; }); var u=Object.keys(seen).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
@@ -5098,6 +5202,7 @@ async function bootAfterAuth(firstLogin){
   if(firstLogin){ _dirty=true; pushToCloud(); }
   runMigrations();
   restoreUndo();   // despues del pull y de las migraciones: la firma se compara contra el estado final
+  migrateLegacyReceipts();   // en segundo plano: de a cinco recibos publicos por arranque
   try{ maybeShowMonthClose(); }catch(e){ console.error('month close:',e); }
   // Marca observable de "el arranque post-pull ya corrio". El e2e esperaba a que
   // subiera pullCount, pero ese contador lo incrementa el SERVIDOR al responder el

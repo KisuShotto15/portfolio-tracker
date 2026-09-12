@@ -9,9 +9,10 @@ export async function verifySupabaseUser(req) {
   return await r.json();
 }
 
-// Headers CORS comunes a los endpoints que solo aceptan POST + OPTIONS.
-export function cors(res) {
+// Headers CORS comunes. Por defecto POST + OPTIONS, que es lo que usan casi
+// todos; blob-upload ademas firma lecturas por GET.
+export function cors(res, methods) {
   res.setHeader('Access-Control-Allow-Origin', 'https://portfolio.kisushotto.com');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', methods || 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }

@@ -95,7 +95,13 @@ No hay linter configurado. Despues de cualquier cambio en `src/` o `api/`, corre
 
 **Auth (src/auth.js).** Supabase GoTrue (email/password, OTP y passkeys/WebAuthn). `sbRefresh()` es tri-state (`true`/`false`/`'net'`) para distinguir "el usuario debe volver a loguearse" (credencial invalida) de "fallo de red" — un `'net'` nunca debe forzar logout.
 
-**api/ (Vercel serverless functions, una por archivo).** `sync.js` es la unica con merge complejo. `backup.js`/`restore.js` hacen snapshot/restore completo de `S` protegido con comparacion timing-safe. `blob-upload.js` sube adjuntos con whitelist de mime types. `balance.js` es el proxy UNICO de saldos (`?ex=binance|bybit|okx|ankr`): esas APIs no mandan CORS abierto, asi que el navegador no las puede pedir directo. Eran cuatro archivos casi identicos = cuatro functions. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
+**api/ (Vercel serverless functions, una por archivo).** `sync.js` es la unica con merge complejo. `backup.js`/`restore.js` hacen snapshot/restore completo de `S` protegido con comparacion timing-safe. `blob-upload.js` es el endpoint de recibos: sube con whitelist de mime types a un blob
+**privado** bajo `receipts/<userId>/` (POST) y emite URLs firmadas de 1 hora para leerlos
+(GET `?paths=`), comprobando por prefijo que el pathname sea del que pide. Los recibos
+viejos son publicos: el cliente los vuelve a subir de a 5 por arranque
+(`migrateLegacyReceipts`) y el cron diario de `backup.js` barre los blobs que ya no
+referencia ningun doc (30 dias de gracia, para que el undo pueda devolver una tx con su
+foto y para un dispositivo que estuvo sin conexion). `balance.js` es el proxy UNICO de saldos (`?ex=binance|bybit|okx|ankr`): esas APIs no mandan CORS abierto, asi que el navegador no las puede pedir directo. Eran cuatro archivos casi identicos = cuatro functions. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
 
 **Region de las functions.** `vercel.json` fija `regions` en **`gru1` (Sao Paulo)**. Dos reglas
 que no se pueden romper: **(1) NUNCA una region de Estados Unidos** (`iad1`, `sfo1`, `cle1`,

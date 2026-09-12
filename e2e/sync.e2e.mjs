@@ -47,6 +47,11 @@ function isPortFree(port) {
 }
 
 let cloudDoc = {};          // "fila" del usuario en el backend simulado
+// Recibos: el endpoint sube (devuelve pathname) y firma lecturas (devuelve una
+// URL por pathname). Aca la "URL firmada" es un data: URL, asi la <img> del test
+// carga de verdad sin depender de la red.
+const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+let blobUploads = 0, signedPaths = [];
 let pullCount = 0;          // se incrementa en cada GET /api/sync respondido: marca que bootAfterAuth hizo su pull
 let failGet = false;        // simula un arranque sin poder leer la nube (el push sale igual)
 let failPost = false;       // simula un dispositivo que no logra SUBIR (el pull sigue bien)
@@ -135,6 +140,18 @@ ws.onmessage = async (e) => {
       }
       else if (failPost) await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 503, responseHeaders: hdr, body: b64(JSON.stringify({ error: 'Sync write failed, retry' })) });
       else { cloudDoc = mergeDocs(cloudDoc, JSON.parse(req.postData || '{}')); await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ data: cloudDoc })) }); }
+    } else if (req.url.includes('/api/blob-upload')) {
+      if (req.method === 'OPTIONS') await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 204, responseHeaders: hdr, body: '' });
+      else if (req.method === 'GET') {
+        const pedidos = decodeURIComponent((req.url.split('paths=')[1] || '')).split(',').filter(Boolean);
+        pedidos.forEach((p) => signedPaths.push(p));
+        const urls = {};
+        pedidos.forEach((p) => { urls[p] = PIXEL; });
+        await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ urls, exp: Date.now() + 3600000 })) });
+      } else {
+        blobUploads++;
+        await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ pathname: 'receipts/u1/e2e-' + blobUploads + '.jpg' })) });
+      }
     } else if (req.url.includes('/auth/v1/')) {
       await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ access_token: 'fake', refresh_token: 'fake', user: { email: 'e2e@test' } })) });
     } else await send('Fetch.continueRequest', { requestId: rid });
@@ -142,7 +159,7 @@ ws.onmessage = async (e) => {
 };
 await new Promise((r) => (ws.onopen = r));
 await send('Page.enable');
-await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*supabase.co/auth/*' }] });
+await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*/api/blob-upload*' }, { urlPattern: '*supabase.co/auth/*' }] });
 
 const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value;
 // Condicion real de "la app ya arranco": bootAfterAuth llego al final (marca
@@ -2477,6 +2494,62 @@ const llego44 = await waitFor(
   40000, 1000, 'el pull automatico trae la tx del otro dispositivo',
 ).catch(() => false);
 check('el pull automatico sigue corriendo sin tocar nada', llego44 === true);
+
+// ── escenario 45: los recibos dejan de ser publicos (F16) ──────────────────
+// Un recibo se subia a un blob PUBLICO: URL permanente, sin sesion, que ademas
+// viaja en el doc que se sincroniza. Ahora el blob es privado y la miniatura se
+// pinta con una URL firmada que el servidor emite tras comprobar que es tuya.
+console.log('E2E recibos — privados, firmados, y los viejos se migran');
+cloudDoc = {};
+const ts45 = Date.now() - 30000;
+// El recibo "viejo" apunta a un archivo que el preview sirve de verdad: la
+// migracion tiene que poder descargarlo para volver a subirlo.
+const urlVieja45 = URL_BASE + 'icon-192.png';   // URL_BASE ya termina en /
+signedPaths = []; blobUploads = 0;
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    deletedTxIds: [], deletedSnapDates: [], snapshots: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [],
+    manualWallets: [ { id: 45001, name: 'Zinli', trackerOnly: true, balance: 0, updatedAt: ${ts45} } ],
+    transactions: [
+      { id: ${ts45 + 1}, createdAt: ${ts45 + 1}, seq: 0, date: '${dU(0)}', desc: 'E2E con recibo privado', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 10, originalCurrency: 'USD', imported: false, receiptPath: 'receipts/u1/priv.jpg', updatedAt: ${ts45 + 1} },
+      { id: ${ts45 + 2}, createdAt: ${ts45 + 2}, seq: 1, date: '${dU(0)}', desc: 'E2E con recibo viejo', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 20, originalCurrency: 'USD', imported: false, receiptUrl: '${urlVieja45}', updatedAt: ${ts45 + 2} } ],
+    manualWalletsUpdatedAt: ${ts45}, transactionsUpdatedAt: ${ts45} })))`);
+  return (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 2;
+}, 8000, 400, 'sembrar el estado del escenario 45').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+await ev("showPage('transactions',null);renderTx()"); await sleep(900);
+
+// La miniatura privada se pinta con la URL firmada, no con un enlace guardado.
+// Por pathname y no "la primera miniatura": la migracion corre en paralelo y
+// puede haber convertido ya la otra fila.
+const thumbs45 = JSON.parse(await ev(`(function(){var o={};
+  [].forEach.call(document.querySelectorAll('img[data-rp]'),function(i){ o[i.getAttribute('data-rp')]=i.getAttribute('src')||''; });
+  return JSON.stringify(o);})()`));
+check('el recibo privado se pinta con una URL firmada',
+  (thumbs45['receipts/u1/priv.jpg'] || '').indexOf('data:image/gif') === 0, JSON.stringify(thumbs45).slice(0, 250));
+check('y la fila no guarda ningun enlace permanente',
+  'receipts/u1/priv.jpg' in thumbs45, JSON.stringify(thumbs45).slice(0, 250));
+check('la app pidio la firma de ese pathname', signedPaths.indexOf('receipts/u1/priv.jpg') >= 0, JSON.stringify(signedPaths));
+
+// La migracion corre sola en el arranque: baja el recibo viejo, lo vuelve a subir
+// privado y le saca la URL publica a la transaccion.
+const migrado45 = await waitFor(
+  async () => (await ev(`(function(){var t=(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).filter(function(x){return x.id===${ts45 + 2};})[0]||{};
+    return !!t.receiptPath && !t.receiptUrl;})()`)) === true,
+  15000, 500, 'la migracion del recibo viejo',
+).catch(() => false);
+check('el recibo viejo se vuelve a subir privado', migrado45 === true,
+  await ev(`JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).filter(function(x){return x.id===${ts45 + 2};})[0]||{})`));
+check('y sube exactamente una imagen', blobUploads === 1, String(blobUploads));
+// Lo que importa del arreglo: la URL publica ya no esta en el doc que viaja.
+const doc45 = await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[])");
+check('la URL publica desaparece del documento', doc45.indexOf('icon-192.png') < 0, doc45.slice(0, 300));
+
+// Una firma vencida deja la miniatura rota: el onerror la vuelve a pedir.
+await ev("(function(){var i=document.querySelector('img[data-rp=\"receipts/u1/priv.jpg\"]'); if(i){ i.removeAttribute('src'); rcpRetry(i); }})()");
+await sleep(800);
+check('una firma vencida se vuelve a pedir sola',
+  (await ev("(function(){var i=document.querySelector('img[data-rp=\"receipts/u1/priv.jpg\"]');return i?(i.getAttribute('src')||''):'';})()")).indexOf('data:image/gif') === 0);
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
