@@ -2607,6 +2607,84 @@ check('un enlace viejo a #import cae en Summary',
   (await ev("(document.querySelector('.page.active')||{}).id")) === 'page-summary',
   await ev("(document.querySelector('.page.active')||{}).id"));
 
+// ── escenario 47: el aviso de ritmo deja de ser ruido fijo ─────────────────
+// Saltaba el dia 8 con UNA sola compra en la categoria, repetia lo mismo todos los
+// dias y no habia forma de callarlo.
+//
+// El escenario solo aplica entre el 12 y el 21: antes del 12 el aviso no existe por
+// diseno, y pasado el 21 ya casi no hay forma de "ir camino a pasarte" sin haberte
+// pasado — proyectar sobre los pocos dias que quedan exige un gasto que ya supera
+// el limite, y ahi el aviso se calla a proposito.
+console.log('E2E ritmo por categoria — filtros y descarte');
+cloudDoc = {};
+const hoy47 = new Date(), dia47 = hoy47.getDate();
+const dim47 = new Date(hoy47.getFullYear(), hoy47.getMonth() + 1, 0).getDate();
+const mes47 = dU(0).slice(0, 7);
+const ts47 = Date.now() - 50000;
+// El limite se calcula del dia para que las tres etapas caigan siempre del lado
+// correcto: la proyeccion se pasa, pero lo gastado todavia no.
+const lim47 = Math.max(160, Math.ceil(122 * (dim47 / dia47) / 1.3));
+const alertasRitmo = () => ev("[].filter.call(document.querySelectorAll('.alert-item'),function(e){return /At this pace/.test(e.textContent);}).map(function(e){return e.textContent;}).join(' ~ ')");
+// Suma una tx a lo que ya hay (no reemplaza la lista: lo que ya viajo a la nube
+// vuelve en el merge por item, y reemplazar daba totales que no eran los del test).
+const sumar47 = (n, monto) => `(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');
+  if((S.transactions||[]).some(function(t){return t.id===${ts47} + ${n};})) return 1;
+  S.transactions=(S.transactions||[]).concat([{id:${ts47} + ${n},createdAt:${ts47} + ${n},seq:${n},date:'${dU(0)}',desc:'E2E mercado ${n}',wallet:'Zinli',type:'Debit',category:'Groceries',amountUSD:${monto},originalCurrency:'USD',imported:false,updatedAt:${ts47} + ${n}}]);
+  S.transactionsUpdatedAt=${ts47} + ${n};
+  localStorage.setItem('ft13',JSON.stringify(S));
+  return (JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.id===${ts47} + ${n};})?1:0;})()`;
+
+if (dia47 >= 12 && dia47 <= 21) {
+  // Punto de partida: una sola compra de 120, que proyecta muy por encima del limite.
+  await waitFor(async () => {
+    await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+      deletedTxIds: [], deletedSnapDates: [], snapshots: [], recurring: [], recurringLog: [], manualHoldings: [], onchainWallets: [], exchangeWallets: [], paceSnooze: {},
+      manualWallets: [ { id: 47001, name: 'Zinli', trackerOnly: true, balance: 0, updatedAt: ${ts47} } ],
+      transactions: [ { id: ${ts47 + 1}, createdAt: ${ts47 + 1}, seq: 1, date: '${dU(0)}', desc: 'E2E mercado 1', wallet: 'Zinli', type: 'Debit', category: 'Groceries', amountUSD: 120, originalCurrency: 'USD', imported: false, updatedAt: ${ts47 + 1} } ],
+      budgetTotal: 1000, budgetTotalByMonth: {}, categoryBudgetAmtsByMonth: { '${mes47}': { Groceries: ${lim47} } },
+      budgetTotalUpdatedAt: ${ts47}, categoryBudgetAmtsByMonthUpdatedAt: ${ts47},
+      manualWalletsUpdatedAt: ${ts47}, transactionsUpdatedAt: ${ts47} })))`);
+    return (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 1;
+  }, 8000, 400, 'sembrar el estado del escenario 47').catch((e) => console.warn(`  ! ${e.message}`));
+  await boot();
+  await ev("showPage('summary',null);renderSummary()"); await sleep(600);
+  check('una sola compra no dispara el aviso de ritmo', (await alertasRitmo()) === '', await alertasRitmo());
+
+  // Dos compras mas (de $1): la misma plata, pero ahora hay un ritmo.
+  await waitFor(async () => (await ev(sumar47(2, 1))) === 1, 8000, 400, 'segunda compra').catch((e) => console.warn(`  ! ${e.message}`));
+  await waitFor(async () => (await ev(sumar47(3, 1))) === 1, 8000, 400, 'tercera compra').catch((e) => console.warn(`  ! ${e.message}`));
+  await boot();
+  await ev("showPage('summary',null);renderSummary()"); await sleep(600);
+  const a47 = await alertasRitmo();
+  check('con tres movimientos si avisa', /Groceries/.test(a47), a47);
+  check('y ofrece descartarlo', /tap to dismiss/.test(a47), a47);
+
+  // Descartar: se calla, y sigue callado al volver a pintar.
+  await ev("[].filter.call(document.querySelectorAll('.alert-item'),function(e){return /At this pace/.test(e.textContent);})[0].click()");
+  await sleep(500);
+  check('al descartarlo desaparece', (await alertasRitmo()) === '', await alertasRitmo());
+  const snz47 = JSON.parse(await ev("JSON.stringify(JSON.parse(localStorage.getItem('ft13')||'{}').paceSnooze||{})"));
+  check('el silencio guarda la proyeccion, no un si/no', typeof snz47[mes47 + '|Groceries'] === 'number', JSON.stringify(snz47));
+  await ev("renderSummary()"); await sleep(400);
+  check('y sigue callado al re-pintar', (await alertasRitmo()) === '', await alertasRitmo());
+
+  // El silencio viaja en el doc: tras recargar sigue descartado.
+  await boot();
+  await ev("showPage('summary',null);renderSummary()"); await sleep(600);
+  check('el descarte sobrevive a recargar', (await alertasRitmo()) === '', await alertasRitmo());
+
+  // Pero si la cosa empeora un escalon, vuelve.
+  await waitFor(async () => (await ev(sumar47(9, 30))) === 1, 8000, 400, 'el gasto que empeora la proyeccion').catch((e) => console.warn(`  ! ${e.message}`));
+  await boot();
+  await ev("showPage('summary',null);renderSummary()"); await sleep(600);
+  check('vuelve si la proyeccion empeora un escalon', /Groceries/.test(await alertasRitmo()), await alertasRitmo());
+} else {
+  console.log(`  · hoy es dia ${dia47}: fuera de la ventana 12-21 en la que este aviso puede existir`);
+}
+
+// Lo demas (gasto fijo que no se extrapola, filtro por promedio historico) se
+// prueba en los unitarios de catPaceAlertCore, que no dependen del calendario.
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

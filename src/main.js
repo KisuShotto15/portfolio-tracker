@@ -118,6 +118,10 @@ var S = {
   categoryBudgetPctsByMonth:{}, categoryBudgetPctsByMonthUpdatedAt:null,
   rateUpdatedAt:null, rateEur:null, rateEurUpdatedAt:null,
   presets:[], presetsUpdatedAt:null, // legacy (plantillas eliminadas; docs viejos lo traen)
+  // Avisos de ritmo descartados: {'2026-09|Groceries': proyeccion al descartarlo}.
+  // Guarda el NUMERO, no un booleano: asi el aviso vuelve solo si la proyeccion
+  // empeora un escalon (ver PACE_SNOOZE_STEP), en vez de callarse para siempre.
+  paceSnooze:{}, paceSnoozeUpdatedAt:null,
   notePins:[], notePinsUpdatedAt:null, // notas fijadas con estrella: siempre primero en sugerencias
   // BDV Limits salio de produccion (la tool ya no existe). El campo se queda:
   // la data sigue en la nube y el LWW generico la sincroniza sin tocarla.
@@ -2614,15 +2618,24 @@ function getActiveAlerts(){
 
   // 2. Ritmo por categoria: al ritmo de lo que va del mes, termina pasandose. Va
   // antes de que se pase — despues el aviso no sirve, la card ya lo dice en rojo.
+  // Los filtros (dia, movimientos, historial, silencio) viven en catPaceAlertCore.
   var _dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  var _stats=paceStatsForMonth(curMonth), _avg3=histAvgFor(curMonth), _snz=S.paceSnooze||{};
   BUDGET_CATS.forEach(function(cat){
     var lim=catLimitWithCarryCore(catBaseLimit(cat,curMonth),catCarry(cat,curMonth),rollOn(cat,curMonth));
-    var pace=catPaceAlertCore(catNetSpend(curMonth,[cat]),lim,now.getDate(),_dim);
+    var st=_stats[cat]||{fixed:0,count:0};
+    var pace=catPaceAlertCore({spent:catNetSpend(curMonth,[cat]),fixed:st.fixed,limit:lim,
+      dayOfMonth:now.getDate(),daysInMonth:_dim,txCount:st.count,avg3:_avg3[cat]||0,
+      snoozedAt:_snz[curMonth+'|'+cat]||0});
     if(!pace) return;
     alerts.push({
       sev:pace.sev,
       msg:'At this pace '+cat+' ends at '+fmtUSD(pace.projected)+' of '+fmtUSD(lim),
-      action:'You would go over by '+fmtUSD(pace.over)+' · '+(_dim-now.getDate())+' days left'
+      action:'You would go over by '+fmtUSD(pace.over)+' · '+(_dim-now.getDate())+' days left · tap to dismiss',
+      // Comillas simples: el atributo va dentro de onclick="..." y JSON.stringify
+      // lo cerraba de golpe. Las categorias salen de BUDGET_CATS (lista fija, sin
+      // comillas ni apostrofes), asi que no hay nada que escapar.
+      onClick:"dismissPaceAlert('"+cat+"',"+pace.projected+")"
     });
   });
 
@@ -2866,6 +2879,32 @@ function applyRecurring(){
     save(); renderTx(); renderSummary(); renderAlerts(); renderWallets();
   }
 }
+// Gasto fijo (el que generaron las reglas recurrentes) y cuantos movimientos hubo,
+// por categoria, en un mes. Una sola pasada: el aviso de ritmo lo necesita para
+// las ocho categorias y corre en cada render de alertas.
+function paceStatsForMonth(month){
+  var out={};
+  (S.transactions||[]).forEach(function(t){
+    if(!t||!t.category||String(t.date).slice(0,7)!==month) return;
+    var e=out[t.category]||(out[t.category]={fixed:0,count:0});
+    e.count++;
+    if(t.recurringId!=null&&t.type==='Debit') e.fixed+=t.amountUSD||0;
+  });
+  return out;
+}
+// Promedio de los 3 meses previos por categoria. Es el mismo que usa el Budget
+// para estrenar un mes (_budHistAvg); se envuelve para no depender del orden en
+// que estan declaradas las funciones.
+function histAvgFor(month){ try{ return _budHistAvg(month)||{}; }catch(e){ return {}; } }
+// Descartar un aviso de ritmo: se guarda la proyeccion de ESE momento, y el aviso
+// vuelve solo si empeora un escalon. Se podan los meses viejos en el mismo gesto.
+window.dismissPaceAlert=function(cat,proj){
+  var m=monthKey(new Date()), next={};
+  Object.keys(S.paceSnooze||{}).forEach(function(k){ if(k.indexOf(m+'|')===0) next[k]=S.paceSnooze[k]; });
+  next[m+'|'+cat]=proj;
+  S.paceSnooze=next; S.paceSnoozeUpdatedAt=stamp();
+  save(); renderAlerts(); renderSummary();
+};
 window.dismissRecurringAlert=function(id){
   var e=(S.recurringLog||[]).find(function(x){ return x.id===id; });
   if(!e||e.seen) return;

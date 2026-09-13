@@ -351,7 +351,10 @@ describe('rollover de categoria', () => {
 });
 
 describe('ritmo por categoria', () => {
-  // $30 en 10 dias de un mes de 30 -> termina en $90
+  // Caso base: 30 en 12 dias de 30, limite 75, cinco movimientos, sin historial.
+  const base = { spent: 30, limit: 75, dayOfMonth: 12, daysInMonth: 30, txCount: 5 };
+  const con = (o) => catPaceAlertCore(Object.assign({}, base, o));
+
   it('proyecta al ritmo de lo que va del mes', () => {
     expect(catPaceCore(30, 75, 10, 30)).toEqual({ projected: 90, over: 15 });
   });
@@ -365,31 +368,76 @@ describe('ritmo por categoria', () => {
   });
 
   it('avisa antes de pasarte, no despues', () => {
-    var a = catPaceAlertCore(30, 75, 10, 30);
+    // 36 en 12 dias de 30 -> proyecta 90 sobre un limite de 75
+    var a = con({ spent: 36 });
     expect(a.projected).toBe(90);
+    expect(a.over).toBe(15);
     expect(a.sev).toBe('warn');
   });
 
   it('no avisa si ya te pasaste: el aviso llega tarde', () => {
-    expect(catPaceAlertCore(80, 75, 10, 30)).toBeNull();
-  });
-
-  it('no avisa en los primeros dias: un gasto suelto no es un ritmo', () => {
-    expect(catPaceAlertCore(20, 75, 3, 30)).toBeNull();
-  });
-
-  it('no avisa por un exceso de redondeo', () => {
-    // 25.5 en 10 de 30 -> 76.5, apenas 2% sobre 75
-    expect(catPaceAlertCore(25.5, 75, 10, 30)).toBeNull();
+    expect(con({ spent: 80 })).toBeNull();
   });
 
   it('marca critico cuando el ritmo se dispara', () => {
-    // 40 en 10 de 30 -> 120, 60% sobre 75
-    expect(catPaceAlertCore(40, 75, 10, 30).sev).toBe('crit');
+    // 40 en 12 de 30 -> 100, 33% sobre 75
+    expect(con({ spent: 40 }).sev).toBe('crit');
   });
 
   it('sin gasto no hay ritmo que proyectar', () => {
-    expect(catPaceAlertCore(0, 75, 15, 30)).toBeNull();
+    expect(con({ spent: 0 })).toBeNull();
+  });
+
+  it('no avisa por un exceso de redondeo', () => {
+    // 31 en 12 de 30 -> 77.5, apenas 3% sobre 75
+    expect(con({ spent: 31 })).toBeNull();
+  });
+
+  // ── Los cuatro filtros nuevos ──────────────────────────────────────────────
+  // El aviso saltaba el dia 8; doce dias es el punto donde el ritmo ya significa algo.
+  it('no avisa en los primeros dias del mes', () => {
+    expect(con({ spent: 36, dayOfMonth: 11 })).toBeNull();
+    expect(con({ spent: 36, dayOfMonth: 12 })).not.toBeNull();
+  });
+
+  // El caso que molestaba: una sola compra grande y la app proyectaba el mes entero.
+  it('no avisa con uno o dos movimientos en la categoria', () => {
+    expect(con({ spent: 36, txCount: 1 })).toBeNull();
+    expect(con({ spent: 36, txCount: 2 })).toBeNull();
+    expect(con({ spent: 36, txCount: 3 })).not.toBeNull();
+  });
+
+  // Si siempre gastas eso y nunca te pasas, el aviso no informa nada.
+  it('se calla si la proyeccion es tu gasto de siempre', () => {
+    expect(con({ spent: 36, avg3: 95 })).toBeNull();      // proyecta 90, por debajo de tu promedio
+    expect(con({ spent: 36, avg3: 50 })).not.toBeNull();  // 90 esta muy por encima: eso si es nuevo
+  });
+
+  it('sin historial el filtro del promedio no bloquea nada', () => {
+    expect(con({ spent: 36, avg3: 0 }).projected).toBe(90);
+  });
+
+  // Descartar no es "para siempre": vuelve si la cosa empeora un escalon.
+  it('descartado se queda callado en el mismo nivel', () => {
+    expect(con({ spent: 36, snoozedAt: 90 })).toBeNull();
+    expect(con({ spent: 36, snoozedAt: 100 })).toBeNull();
+  });
+
+  it('pero vuelve si la proyeccion sube un escalon', () => {
+    // descartado en 90; ahora proyecta 105 (+16%)
+    expect(con({ spent: 42, snoozedAt: 90 }).projected).toBe(105);
+  });
+
+  // Lo que ya es fijo (una regla recurrente) no se multiplica por los dias que faltan.
+  it('el gasto fijo cuenta como gastado pero no se extrapola', () => {
+    // 36 gastados de los cuales 30 son una regla: solo se proyectan los 6 sueltos
+    var a = con({ spent: 36, fixed: 30 });
+    expect(a).toBeNull();                      // 30 + 6/12*30 = 45, muy por debajo de 75
+    expect(con({ spent: 36, fixed: 0 }).projected).toBe(90);
+  });
+
+  it('un fijo mayor que lo gastado no rompe la cuenta', () => {
+    expect(con({ spent: 36, fixed: 999 })).toBeNull();
   });
 });
 

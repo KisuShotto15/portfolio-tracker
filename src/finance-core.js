@@ -323,17 +323,51 @@ export function catPaceCore(spent, limit, dayOfMonth, daysInMonth) {
   return { projected: projected, over: parseFloat((projected - limit).toFixed(2)) };
 }
 
-// Vale la pena avisar? Solo si el aviso todavia sirve para algo: la categoria aun
-// NO se paso (si ya se paso, la card lo grita y el aviso llega tarde), el mes lleva
-// dias suficientes como para que el ritmo no sea ruido, y la proyeccion supera el
-// limite por un margen que no sea redondeo.
-export function catPaceAlertCore(spent, limit, dayOfMonth, daysInMonth) {
-  var p = catPaceCore(spent, limit, dayOfMonth, daysInMonth);
-  if (!p) return null;
-  if (dayOfMonth < 8) return null;
+// Umbrales del aviso de ritmo. Juntos y con nombre porque son la definicion de
+// "vale la pena avisar", y se ajustaron todos a la vez: el aviso saltaba el dia 8
+// con una sola compra en la categoria, repetia lo mismo todos los dias, y no se
+// podia callar. Cuatro filtros y un silencio.
+export var PACE_MIN_DAY = 12;        // antes 8: doce dias ya son un ritmo, tres no
+export var PACE_MIN_TXS = 3;         // con una compra la proyeccion lineal no dice nada
+export var PACE_MARGIN = 1.05;       // exceso proyectado que no sea redondeo
+export var PACE_CRIT = 1.30;
+export var PACE_HIST = 1.05;         // ...y por encima de tu propio promedio de 3 meses
+export var PACE_SNOOZE_STEP = 1.15;  // descartado: vuelve solo si empeora un escalon
+
+// Vale la pena avisar? Solo si el aviso todavia sirve para algo:
+//   - la categoria aun NO se paso (si ya se paso, la card lo grita en rojo y el
+//     aviso llega tarde),
+//   - el mes lleva dias y la categoria movimientos suficientes como para que el
+//     ritmo signifique algo,
+//   - la proyeccion supera el limite por un margen que no sea redondeo,
+//   - y ademas supera lo que sueles gastar ahi: si todos los meses gastas esto y
+//     nunca te pasas, el aviso es ruido, no informacion,
+//   - y no lo descartaste ya en un nivel igual o peor.
+// La proyeccion no extrapola el gasto FIJO (lo que generan las reglas
+// recurrentes): eso ya esta decidido y no se repite todos los dias. Solo se
+// multiplica por los dias que faltan el gasto suelto. Lo que una regla todavia
+// no genero este mes tampoco se suma: la proyeccion se queda corta antes que de
+// mas, que es el lado por el que conviene equivocarse en un aviso.
+// o = {spent, fixed, limit, dayOfMonth, daysInMonth, txCount, avg3, snoozedAt}
+export function catPaceAlertCore(o) {
+  o = o || {};
+  var spent = o.spent || 0, limit = o.limit || 0;
+  var dom = o.dayOfMonth || 0, dim = o.daysInMonth || 0;
+  if (!(limit > 0) || !(dom > 0) || !(dim > 0)) return null;
+  if (dom < PACE_MIN_DAY) return null;
+  if ((o.txCount || 0) < PACE_MIN_TXS) return null;
   if (!(spent > 0) || spent >= limit) return null;
-  if (p.projected <= limit * 1.05) return null;
-  return { projected: p.projected, over: p.over, sev: p.projected > limit * 1.3 ? 'crit' : 'warn' };
+  var fijo = Math.max(0, Math.min(o.fixed || 0, spent));
+  var suelto = spent - fijo;
+  var projected = parseFloat((fijo + suelto / dom * dim).toFixed(2));
+  if (projected <= limit * PACE_MARGIN) return null;
+  if ((o.avg3 || 0) > 0 && projected <= o.avg3 * PACE_HIST) return null;
+  if ((o.snoozedAt || 0) > 0 && projected <= o.snoozedAt * PACE_SNOOZE_STEP) return null;
+  return {
+    projected: projected,
+    over: parseFloat((projected - limit).toFixed(2)),
+    sev: projected > limit * PACE_CRIT ? 'crit' : 'warn',
+  };
 }
 
 // Meses que ofrece el selector del Dashboard. NO alcanza con los meses que tienen
