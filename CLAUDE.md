@@ -101,7 +101,12 @@ No hay linter configurado. Despues de cualquier cambio en `src/` o `api/`, corre
 viejos son publicos: el cliente los vuelve a subir de a 5 por arranque
 (`migrateLegacyReceipts`) y el cron diario de `backup.js` barre los blobs que ya no
 referencia ningun doc (30 dias de gracia, para que el undo pueda devolver una tx con su
-foto y para un dispositivo que estuvo sin conexion). `balance.js` es el proxy UNICO de saldos (`?ex=binance|bybit|okx|ankr`): esas APIs no mandan CORS abierto, asi que el navegador no las puede pedir directo. Eran cuatro archivos casi identicos = cuatro functions. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
+foto y para un dispositivo que estuvo sin conexion). `receipt.js` lee una foto de recibo (o la captura de un pago movil) y devuelve monto,
+moneda, fecha y comercio para que el formulario arranque lleno; la foto no se guarda ahi
+(la que se guarda es la de `blob-upload.js`). Es la UNICA parte de la app que manda una
+imagen tuya a un tercero (la API de Anthropic), y es opcional: sin `ANTHROPIC_API_KEY`
+responde 503 y el cliente ni menciona la lectura. El cliente solo completa campos VACIOS
+— lo que ya escribiste nunca se pisa. `balance.js` es el proxy UNICO de saldos (`?ex=binance|bybit|okx|ankr`): esas APIs no mandan CORS abierto, asi que el navegador no las puede pedir directo. Eran cuatro archivos casi identicos = cuatro functions. `api/_lib/web.js` comparte `verifySupabaseUser()`/`cors()` entre los endpoints que lo necesitan.
 
 **Region de las functions.** `vercel.json` fija `regions` en **`gru1` (Sao Paulo)**. Dos reglas
 que no se pueden romper: **(1) NUNCA una region de Estados Unidos** (`iad1`, `sfo1`, `cle1`,
@@ -112,7 +117,8 @@ El plan Hobby permite UNA sola region.
 
 **Deploy.** Vercel cuenta CADA archivo de `api/` como una serverless function y el plan Hobby
 permite **12 por deployment** — pasarse rompe el build entero, no solo el archivo de mas. Por eso
-`.vercelignore` saca los `api/**/*.test.js` (son tests, no endpoints). Hoy quedan **7 functions**
-reales (eran 10: los cuatro `*-balance.js` se fusionaron en `balance.js?ex=`), asi que hay margen
-para cinco mas antes de tener que fusionar otra cosa o subir de plan. Vercel (`vercel.json`: build command, cron
+`.vercelignore` saca los `api/**/*.test.js` (son tests, no endpoints). Hoy quedan **8 functions**
+reales (eran 10: los cuatro `*-balance.js` se fusionaron en `balance.js?ex=`, y despues se
+sumo `receipt.js`), asi que hay margen para cuatro mas antes de tener que fusionar otra cosa
+o subir de plan. Vercel (`vercel.json`: build command, cron
 diario a `/api/backup`, headers de cache para `sw.js`/`manifest.json`/iconos) detras de Cloudflare en `portfolio.kisushotto.com`. `index.html` redirige a `kisushotto.com` si el hostname no coincide (protege contra acceso por el dominio `.vercel.app` crudo).

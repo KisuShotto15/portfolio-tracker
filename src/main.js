@@ -27,6 +27,7 @@ var SYNC_PROXY    = location.hostname.endsWith('.vercel.app')
 var BYBIT_PROXY   = BAL_PROXY+'bybit';
 var OKX_PROXY     = BAL_PROXY+'okx';
 var BLOB_PROXY    = 'https://portfolio-tracker-psi-hazel.vercel.app/api/blob-upload';
+var RECEIPT_READ  = 'https://portfolio-tracker-psi-hazel.vercel.app/api/receipt';
 var PRICE_PROXY   = 'https://portfolio-tracker-psi-hazel.vercel.app/api/prices';
 // Tasa USDT/VES del monitor P2P (mediana top-20 merchants BDV, lo fetchea 24/7).
 var USDT_RATE_URL = 'https://kisushotto-site.vercel.app/api/usdt-ves';
@@ -1352,7 +1353,57 @@ async function onReceiptPick(input){
   var file=input.files&&input.files[0]; if(!file) return;
   _receiptFile=file;
   await _uploadReceipt();
+  readReceipt();   // en paralelo al guardado: llenar el formulario es lo urgente
 }
+// ── Leer el recibo y llenar el formulario ──────────────────────────────────
+// La foto ya esta comprimida por compressImage (misma que se sube). Solo se
+// completan campos VACIOS: lo que ya escribiste manda siempre, y todo queda
+// editable. Si la lectura falla, no pasa nada — se escribe a mano como siempre.
+var _readingReceipt=false;
+function rcpStatus(html){ var st=document.getElementById('tx-receipt-status'); if(st) st.innerHTML=html; }
+async function readReceipt(){
+  var file=_receiptFile; if(!file||_readingReceipt) return;
+  _readingReceipt=true;
+  rcpStatus('<span class="spin"></span> Reading receipt…');
+  try{
+    var dataUrl=await compressImage(file);
+    var r=await fetch(RECEIPT_READ,{method:'POST',headers:exchangeProxyHeaders(),
+      body:JSON.stringify({dataB64:dataUrl.split(',')[1],contentType:'image/jpeg'})});
+    if(r.status===503){ rcpStatus(''); return; }   // no configurado: ni se menciona
+    if(!r.ok) throw new Error('read failed');
+    var x=await r.json();
+    if(!x||!x.found){ rcpStatus('<span style="color:var(--txt3)">Could not read this one — type it in</span>'); return; }
+    rcpStatus(fillFromReceipt(x));
+  }catch(e){
+    rcpStatus('<span style="color:var(--txt3)">Could not read this one — type it in</span>');
+  }finally{ _readingReceipt=false; }
+}
+// Devuelve el texto de lo que completo, para que se vea que fue la foto y no vos.
+function fillFromReceipt(x){
+  var puesto=[];
+  var amt=document.getElementById('tx-amount'), desc=document.getElementById('tx-desc'), cur=document.getElementById('tx-cur'), fecha=document.getElementById('tx-date');
+  // La moneda va antes que el monto: el monto en Bs se guarda como Bs y la app lo
+  // convierte con su tasa (lo mismo que si lo escribieras).
+  if(x.currency&&cur&&!amt.value.trim()){ cur.value=x.currency; toggleVesHint(); }
+  if(x.amount>0&&amt&&!amt.value.trim()){
+    amt.value=String(x.amount); updateVesPreview();
+    puesto.push((cur&&cur.value==='VES'?'Bs ':'$')+x.amount);
+  }
+  if(x.merchant&&desc&&!desc.value.trim()){
+    desc.value=x.merchant;
+    autofillFromNote();   // con la nota puesta, categoria y wallet salen de tu historial
+    puesto.push(x.merchant);
+  }
+  // La fecha arranca en hoy: solo se pisa si el recibo es de otro dia y no la tocaste.
+  if(x.date&&fecha&&fecha.value===localToday()&&x.date!==localToday()){
+    fecha.value=x.date; if(typeof updateDateDisplay==='function') updateDateDisplay();
+    puesto.push(fmtDate(x.date));
+  }
+  return puesto.length
+    ? '<span style="color:#9B70F0">✦ from the photo:</span> '+escHtml(puesto.join(' · '))
+    : '<span style="color:var(--txt3)">Read it, but the form was already filled</span>';
+}
+window.readReceipt=readReceipt;
 // Retains the picked file so a failed upload can be retried instead of lost.
 async function _uploadReceipt(){
   var file=_receiptFile; if(!file) return;

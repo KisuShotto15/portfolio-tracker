@@ -52,6 +52,9 @@ let cloudDoc = {};          // "fila" del usuario en el backend simulado
 // carga de verdad sin depender de la red.
 const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 let blobUploads = 0, signedPaths = [];
+// Lectura del recibo: el test decide que "ve" la foto (o que el endpoint no esta
+// configurado, que es el caso 503).
+let receiptRead = null, receiptCalls = 0;
 let pullCount = 0;          // se incrementa en cada GET /api/sync respondido: marca que bootAfterAuth hizo su pull
 let failGet = false;        // simula un arranque sin poder leer la nube (el push sale igual)
 let failPost = false;       // simula un dispositivo que no logra SUBIR (el pull sigue bien)
@@ -152,6 +155,13 @@ ws.onmessage = async (e) => {
         blobUploads++;
         await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ pathname: 'receipts/u1/e2e-' + blobUploads + '.jpg' })) });
       }
+    } else if (req.url.includes('/api/receipt')) {
+      if (req.method === 'OPTIONS') await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 204, responseHeaders: hdr, body: '' });
+      else {
+        receiptCalls++;
+        if (receiptRead === null) await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 503, responseHeaders: hdr, body: b64(JSON.stringify({ error: 'not configured' })) });
+        else await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify(receiptRead)) });
+      }
     } else if (req.url.includes('/auth/v1/')) {
       await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ access_token: 'fake', refresh_token: 'fake', user: { email: 'e2e@test' } })) });
     } else await send('Fetch.continueRequest', { requestId: rid });
@@ -159,7 +169,7 @@ ws.onmessage = async (e) => {
 };
 await new Promise((r) => (ws.onopen = r));
 await send('Page.enable');
-await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*/api/blob-upload*' }, { urlPattern: '*supabase.co/auth/*' }] });
+await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*/api/blob-upload*' }, { urlPattern: '*/api/receipt*' }, { urlPattern: '*supabase.co/auth/*' }] });
 
 const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value;
 // Condicion real de "la app ya arranco": bootAfterAuth llego al final (marca
@@ -2684,6 +2694,87 @@ if (dia47 >= 12 && dia47 <= 21) {
 
 // Lo demas (gasto fijo que no se extrapola, filtro por promedio historico) se
 // prueba en los unitarios de catPaceAlertCore, que no dependen del calendario.
+
+// ── escenario 48: la foto llena el formulario ──────────────────────────────
+// Sacar la foto es el gesto que ya hacias; lo nuevo es que de ahi salgan el monto,
+// la fecha y el comercio. Lo que importa: NUNCA pisa lo que ya escribiste.
+console.log('E2E leer el recibo — llena lo vacio y nada mas');
+cloudDoc = {}; receiptCalls = 0;
+const ayer48 = dU(1);
+await waitFor(async () => {
+  await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+    deletedTxIds: [], transactions: [], recurring: [], recurringLog: [], snapshots: [],
+    manualWallets: [ { id: 48001, name: 'Zinli', trackerOnly: true, balance: 0, updatedAt: ${Date.now()} } ],
+    manualWalletsUpdatedAt: ${Date.now()}, transactionsUpdatedAt: ${Date.now()} })))`);
+  return (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 0;
+}, 8000, 400, 'sembrar el estado del escenario 48').catch((e) => console.warn(`  ! ${e.message}`));
+await boot();
+
+// Simula elegir una foto: un PNG de 1x1 metido en el <input type=file>.
+const sacarFoto48 = `(function(){
+  fetch('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+    .then(function(r){ return r.blob(); })
+    .then(function(b){
+      var f=new File([b],'recibo.png',{type:'image/png'});
+      var dt=new DataTransfer(); dt.items.add(f);
+      var inp=document.getElementById('tx-receipt'); inp.files=dt.files;
+      onReceiptPick(inp);
+    });
+  return 1;})()`;
+const campos48 = () => ev("JSON.stringify({amt:document.getElementById('tx-amount').value,desc:document.getElementById('tx-desc').value,fecha:document.getElementById('tx-date').value,cur:document.getElementById('tx-cur').value,st:(document.getElementById('tx-receipt-status')||{}).textContent||''})");
+
+receiptRead = { found: true, amount: 23.75, currency: 'USD', date: ayer48, merchant: 'Farmatodo' };
+await ev("showPage('transactions',null);openTxForm()"); await sleep(500);
+await ev(sacarFoto48);
+await waitFor(async () => /Farmatodo/.test(await campos48()), 12000, 400, 'que la foto llene el formulario').catch(() => false);
+const f48 = JSON.parse(await campos48());
+check('el monto sale de la foto', f48.amt === '23.75', JSON.stringify(f48));
+check('la nota tambien', f48.desc === 'Farmatodo', JSON.stringify(f48));
+check('y la fecha del recibo, no la de hoy', f48.fecha === ayer48, JSON.stringify(f48));
+check('el aviso dice que lo puso la foto', /from the photo/.test(f48.st), f48.st);
+
+// Lo que ya escribiste manda: se completa solo lo vacio.
+await ev("closeTxForm()"); await sleep(350);
+await ev("openTxForm()"); await sleep(400);
+await ev("document.getElementById('tx-amount').value='99.99';document.getElementById('tx-desc').value='Lo escribi yo'");
+receiptRead = { found: true, amount: 23.75, currency: 'USD', date: ayer48, merchant: 'Farmatodo' };
+await ev(sacarFoto48);
+await sleep(3000);
+const g48 = JSON.parse(await campos48());
+check('no pisa el monto que escribiste', g48.amt === '99.99', JSON.stringify(g48));
+check('ni la nota', g48.desc === 'Lo escribi yo', JSON.stringify(g48));
+
+// Un recibo en bolivares deja el formulario en VES: la app convierte como siempre.
+await ev("closeTxForm()"); await sleep(350);
+await ev("openTxForm()"); await sleep(400);
+receiptRead = { found: true, amount: 1234.5, currency: 'VES', date: '', merchant: 'Panaderia' };
+await ev(sacarFoto48);
+await waitFor(async () => /Panaderia/.test(await campos48()), 12000, 400, 'el recibo en bolivares').catch(() => false);
+const v48 = JSON.parse(await campos48());
+check('un recibo en Bs deja la moneda en VES', v48.cur === 'VES', JSON.stringify(v48));
+check('con el monto en Bs, sin convertir a mano', v48.amt === '1234.5', JSON.stringify(v48));
+
+// Una foto que no es un recibo no llena nada y lo dice.
+await ev("closeTxForm()"); await sleep(350);
+await ev("openTxForm()"); await sleep(400);
+receiptRead = { found: false, amount: 0, currency: '', date: '', merchant: '' };
+await ev(sacarFoto48);
+await waitFor(async () => /Could not read/.test(await campos48()), 12000, 400, 'el aviso de no legible').catch(() => false);
+const n48 = JSON.parse(await campos48());
+check('lo que no es un recibo no llena nada', n48.amt === '' && n48.desc === '', JSON.stringify(n48));
+check('y lo dice sin drama', /Could not read/.test(n48.st), n48.st);
+
+// Sin clave configurada (503) la lectura ni se menciona: el formulario es el de siempre.
+await ev("closeTxForm()"); await sleep(350);
+await ev("openTxForm()"); await sleep(400);
+receiptRead = null;
+const llamadas48 = receiptCalls;
+await ev(sacarFoto48);
+await sleep(3000);
+const s48 = JSON.parse(await campos48());
+check('sin configurar, el endpoint igual se consulta una vez', receiptCalls === llamadas48 + 1, String(receiptCalls));
+check('pero no aparece ningun aviso', s48.st === '', s48.st);
+await ev("closeTxForm()"); await sleep(300);
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
