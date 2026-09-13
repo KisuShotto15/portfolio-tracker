@@ -89,6 +89,18 @@ describe('api/receipt — la llamada', function () {
     expect(res.body.amount).toBe(12.5);
   });
 
+  // Haiku 4.5 NO acepta output_config.effort: mandarlo devuelve error, y eso solo
+  // se ve contra la API de verdad. El test lo fija desde aca.
+  it('usa Haiku y no le manda parametros que Haiku rechaza', async function () {
+    createMock.mockReturnValue(toolRes({ found: true, amount: 1, currency: 'USD', date: '', merchant: 'x' }));
+    var res = mkRes();
+    await handler(mkReq(foto), res);
+    var args = createMock.mock.calls[0][0];
+    expect(args.model).toBe('claude-haiku-4-5');
+    expect(args.output_config).toBeUndefined();
+    expect(args.thinking).toBeUndefined();
+  });
+
   it('si el modelo no llama la herramienta, no se inventa nada', async function () {
     createMock.mockResolvedValue({ content: [{ type: 'text', text: 'no se ve nada' }] });
     var res = mkRes();

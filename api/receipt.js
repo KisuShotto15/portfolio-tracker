@@ -90,11 +90,15 @@ export default async function handler(req, res) {
   try {
     const client = new Anthropic();
     const r = await client.messages.create({
-      model: 'claude-opus-5',
+      // Haiku: leer un total de una imagen es una tarea de extraccion, no de
+      // razonamiento, y el costo por foto baja de ~$0.01 a ~$0.002.
+      // OJO si algun dia vuelve a Opus: alla hay que agregar
+      // `output_config: { effort: 'low' }` (pensar de menos), pero ese mismo
+      // parametro en Haiku 4.5 devuelve ERROR — no es opcional, rompe la llamada.
+      // Por eso no es una variable de entorno: el modelo y sus parametros van
+      // juntos. Hay un test que fija que no se mande effort.
+      model: 'claude-haiku-4-5',
       max_tokens: 2000,
-      // Leer un numero de una imagen no necesita pensar mucho, y esto se espera
-      // con el formulario abierto: el esfuerzo bajo es latencia y costo.
-      output_config: { effort: 'low' },
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL.name },
       messages: [{
