@@ -1268,7 +1268,7 @@ async function rcpResolve(paths){
   if(_rcpInFlight) { try{ await _rcpInFlight; }catch(e){} faltan=paths.filter(function(p){ return p&&!rcpCached(p); }); if(!faltan.length) return _rcpUrls; }
   _rcpInFlight=(async function(){
     var r=await fetch(BLOB_PROXY+'?paths='+encodeURIComponent(faltan.slice(0,80).join(',')),{headers:exchangeProxyHeaders()});
-    if(!r.ok) throw new Error('sign failed');
+    if(!r.ok) throw new Error(await srvError(r));
     var j=await r.json();
     if(_rcpExp&&_rcpExp<=Date.now()) _rcpUrls={};   // la tanda anterior ya vencio
     Object.keys(j.urls||{}).forEach(function(k){ _rcpUrls[k]=j.urls[k]; });
@@ -1316,7 +1316,18 @@ function renderReceiptPreview(){
     prev.style.display='flex';
     var u=rcpCached(pendingReceiptPath);
     if(u) img.src=u;
-    else{ img.removeAttribute('src'); rcpResolve([pendingReceiptPath]).then(function(){ var v=rcpCached(pendingReceiptPath); if(v&&pendingReceiptPath) img.src=v; }).catch(function(){}); }
+    else{
+      img.removeAttribute('src');
+      rcpResolve([pendingReceiptPath]).then(function(){
+        var v=rcpCached(pendingReceiptPath);
+        if(v&&pendingReceiptPath) img.src=v;
+      }).catch(function(e){
+        // La foto SI se guardo — lo que fallo es la firma para mostrarla. Decirlo
+        // con esas palabras: un cuadro vacio se lee como "no se subio nada".
+        var st=document.getElementById('tx-receipt-status');
+        if(st&&!st.textContent.trim()) st.innerHTML='<span style="color:#EF9F27">Saved, but the preview could not load:</span> '+escHtml(String(e&&e.message||e).slice(0,160));
+      });
+    }
   }
   else if(pendingReceiptUrl){ img.src=pendingReceiptUrl; prev.style.display='flex'; }
   else{ img.removeAttribute('src'); prev.style.display='none'; }
@@ -1352,8 +1363,11 @@ function compressImage(file){
 async function onReceiptPick(input){
   var file=input.files&&input.files[0]; if(!file) return;
   _receiptFile=file;
-  await _uploadReceipt();
-  readReceipt();   // en paralelo al guardado: llenar el formulario es lo urgente
+  // Si la subida fallo, la lectura NO corre: su primera linea es "Reading
+  // receipt…", que pisaba el motivo del fallo, y el 503 de "no configurado" lo
+  // dejaba en blanco. El resultado era una subida rota que no decia nada.
+  if(!(await _uploadReceipt())) return;
+  readReceipt();
 }
 // ── Leer el recibo y llenar el formulario ──────────────────────────────────
 // La foto ya esta comprimida por compressImage (misma que se sube). Solo se
@@ -1404,9 +1418,16 @@ function fillFromReceipt(x){
     : '<span style="color:var(--txt3)">Read it, but the form was already filled</span>';
 }
 window.readReceipt=readReceipt;
+// El cuerpo de un error de nuestros endpoints trae {error:'...'}. Sin esto el
+// cliente tiraba el motivo y mostraba un generico.
+async function srvError(r){
+  var txt='HTTP '+r.status;
+  try{ var j=await r.json(); if(j&&j.error) txt=j.error; }catch(e){}
+  return txt;
+}
 // Retains the picked file so a failed upload can be retried instead of lost.
 async function _uploadReceipt(){
-  var file=_receiptFile; if(!file) return;
+  var file=_receiptFile; if(!file) return false;
   var status=document.getElementById('tx-receipt-status');
   if(status) status.innerHTML='<span class="spin"></span> Uploading…';
   receiptUploading=true;
@@ -1414,14 +1435,20 @@ async function _uploadReceipt(){
     var dataUrl=await compressImage(file);
     var dataB64=dataUrl.split(',')[1];
     var r=await fetch(BLOB_PROXY,{method:'POST',headers:exchangeProxyHeaders(),body:JSON.stringify({filename:'receipt.jpg',dataB64:dataB64,contentType:'image/jpeg'})});
-    if(!r.ok) throw new Error('upload failed');
+    if(!r.ok) throw new Error(await srvError(r));
     var j=await r.json();
     pendingReceiptPath=j.pathname||null;
     pendingReceiptUrl=j.url||null;   // el server ya no devuelve url; queda por si un deploy viejo responde
     if(status) status.textContent='';
     renderReceiptPreview();
+    return true;
   }catch(e){
-    if(status) status.innerHTML='<span style="color:#E24B4A">Upload failed.</span> <button type="button" class="btn btns" onclick="retryReceipt()">Retry</button>';
+    // El motivo, no solo "fallo": la mitad de las causas posibles (plan sin blobs
+    // privados, token vencido, runtime viejo) se distinguen por el mensaje del
+    // servidor, y sin el no hay forma de saber cual es sin entrar a Vercel.
+    if(status) status.innerHTML='<span style="color:#E24B4A">Upload failed:</span> '+escHtml(String(e&&e.message||e).slice(0,160))
+      +' <button type="button" class="btn btns" onclick="retryReceipt()">Retry</button>';
+    return false;
   }finally{
     receiptUploading=false;
   }

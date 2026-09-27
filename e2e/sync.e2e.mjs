@@ -52,6 +52,8 @@ let cloudDoc = {};          // "fila" del usuario en el backend simulado
 // carga de verdad sin depender de la red.
 const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 let blobUploads = 0, signedPaths = [];
+// Para probar que el motivo del fallo llega a la pantalla: null = todo bien.
+let blobFail = null, signFail = null;
 // Lectura del recibo: el test decide que "ve" la foto (o que el endpoint no esta
 // configurado, que es el caso 503).
 let receiptRead = null, receiptCalls = 0;
@@ -146,11 +148,14 @@ ws.onmessage = async (e) => {
     } else if (req.url.includes('/api/blob-upload')) {
       if (req.method === 'OPTIONS') await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 204, responseHeaders: hdr, body: '' });
       else if (req.method === 'GET') {
+        if (signFail) { await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 500, responseHeaders: hdr, body: b64(JSON.stringify({ error: signFail })) }); return; }
         const pedidos = decodeURIComponent((req.url.split('paths=')[1] || '')).split(',').filter(Boolean);
         pedidos.forEach((p) => signedPaths.push(p));
         const urls = {};
         pedidos.forEach((p) => { urls[p] = PIXEL; });
         await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ urls, exp: Date.now() + 3600000 })) });
+      } else if (blobFail) {
+        await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 500, responseHeaders: hdr, body: b64(JSON.stringify({ error: blobFail })) });
       } else {
         blobUploads++;
         await send('Fetch.fulfillRequest', { requestId: rid, responseCode: 200, responseHeaders: hdr, body: b64(JSON.stringify({ pathname: 'receipts/u1/e2e-' + blobUploads + '.jpg' })) });
@@ -2774,6 +2779,32 @@ await sleep(3000);
 const s48 = JSON.parse(await campos48());
 check('sin configurar, el endpoint igual se consulta una vez', receiptCalls === llamadas48 + 1, String(receiptCalls));
 check('pero no aparece ningun aviso', s48.st === '', s48.st);
+await ev("closeTxForm()"); await sleep(300);
+
+// Cuando la subida falla, el motivo del servidor tiene que llegar a la pantalla:
+// "Upload failed" a secas no distingue un plan sin blobs privados de un token
+// vencido, y sin eso no hay forma de diagnosticar sin entrar a Vercel.
+receiptRead = null;
+blobFail = 'Upload failed: private access is not enabled for this store';
+await ev("openTxForm()"); await sleep(400);
+await ev(sacarFoto48);
+await waitFor(async () => /private access/.test(await campos48()), 12000, 400, 'el motivo del fallo de subida').catch(() => false);
+const e48 = JSON.parse(await campos48());
+check('un fallo de subida dice el motivo', /private access is not enabled/.test(e48.st), e48.st);
+check('y ofrece reintentar', (await ev("document.querySelectorAll('#tx-receipt-status button').length")) === 1);
+blobFail = null;
+
+// Y el otro lado: la foto SI se guardo, lo que fallo es la firma para mostrarla.
+// Un cuadro vacio se lee como "no se subio nada", que es justo la confusion.
+await ev("closeTxForm()"); await sleep(350);
+await ev("openTxForm()"); await sleep(400);
+signFail = 'Sign failed: signed tokens not available';
+await ev(sacarFoto48);
+await waitFor(async () => /Saved, but/.test(await campos48()), 12000, 400, 'el aviso de firma fallida').catch(() => false);
+const s48b = JSON.parse(await campos48());
+check('si falla la firma, dice que la foto SI se guardo', /Saved, but the preview could not load/.test(s48b.st), s48b.st);
+check('con el motivo del servidor', /signed tokens not available/.test(s48b.st), s48b.st);
+signFail = null;
 await ev("closeTxForm()"); await sleep(300);
 
 ws.close();
