@@ -1536,7 +1536,7 @@ async function addTx(){
     var esGasto=type==='Debit';
     var okViejo=await appConfirm('This changes a closed month',
       'Your net worth was already photographed on <b style="color:#fff">'+escHtml(fmtDate(viejo.date))+'</b>, after this date. '
-      +monthLabel(date.slice(0,7))+' will count the '+fmtUSD(amtUSD)+' in its budget, but the unlogged amount of that period will not adjust — '
+      +monthLabel(date.slice(0,7))+' will count the '+fmtUSD(amtUSD)+' in its budget, but the amount deduced for that period will not adjust — '
       +'so that month ends up showing '+fmtUSD(amtUSD)+' '+(esGasto?'less':'more')+' profit than it really had.',
       'Add anyway');
     if(!okViejo) return;
@@ -2388,7 +2388,7 @@ function renderKPIStrip(month){
   var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'-')+fmtUSD(Math.abs(cur.monthlyReturn)):'—';
   var retSub=cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%'
     :cur.monthlyReturn!==null?'no income logged':'no activity in '+month;
-  if(Math.abs(cur.unlogged)>=0.5) retSub+=' · '+(cur.unlogged>0?'+':'-')+fmtUSD(Math.abs(cur.unlogged))+' unlogged';
+  if(Math.abs(cur.unlogged)>=0.5) retSub+=' · '+(cur.unlogged>0?'+':'-')+fmtUSD(Math.abs(cur.unlogged))+' deduced';
   // Liquid: en vivo, no por mes. No lleva delta porque los snapshots solo guardan
   // el total (no el reparto liquido/por cobrar), asi que no hay mes anterior contra
   // que compararlo sin inventarlo.
@@ -2619,7 +2619,7 @@ window.showMonthClose=function(month){
   var totDiff=parseFloat((d.totLim-d.totSpent).toFixed(2));
   var ahorro=parseFloat((d.income-d.totSpent).toFixed(2));
   var tasa=d.income>0?Math.round(ahorro/d.income*100):null;
-  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' logged · '+sgn(d.rec.derived)+' unlogged':'';
+  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' logged · '+sgn(d.rec.derived)+' deduced':'';
   // Conciliacion: por que el patrimonio se movio lo que se movio. Sin esto el
   // resumen mostraba ingresos y gastos que no cierran contra la variacion real.
   var recLine=function(l,v,c){ return '<div class="mc-rec-row"><span>'+l+'</span><span class="mc-num"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
@@ -2627,10 +2627,10 @@ window.showMonthClose=function(month){
   if(d.rec){
     recHtml='<div class="mc-rec"><div class="mc-rec-h">How net worth moved</div>'
       +recLine('Income · logged',sgn(d.rec.logged),'#4ED9A4')
-      +(Math.abs(d.rec.derived)>=0.5?recLine('Unlogged · trading or not logged',sgn(d.rec.derived),d.rec.derived>=0?'#4ED9A4':'#E24B4A'):'')
+      +(Math.abs(d.rec.derived)>=0.5?recLine('Income · deduced from the snapshot',sgn(d.rec.derived),d.rec.derived>=0?'#4ED9A4':'#E24B4A'):'')
       +recLine('Spending',sgn(-d.rec.spend),'#E24B4A')
       +(d.rec.ext!==0?recLine('External flows · Transfer / Investments',sgn(-d.rec.ext),d.rec.ext>0?'#E24B4A':'#4ED9A4'):'')
-      // Solo queda residuo si algun snapshot se guardo sin "Count unlogged": esa
+      // Solo queda residuo si algun snapshot se guardo sin "Count gains and losses": esa
       // plata movio el patrimonio pero a proposito no entra en Net Profit.
       +(Math.abs(d.rec.resid)>=0.5?recLine('Not counted in Net Profit',sgn(d.rec.resid),'var(--txt3)'):'')
       +'<div class="mc-rec-row mc-rec-tot"><span>Net worth change</span><span class="mc-num" style="color:'+(d.nwDelta>=0?'#4ED9A4':'#E24B4A')+'">'+sgn(d.nwDelta)+'</span></div>'
@@ -3480,7 +3480,7 @@ async function recordSnapshot(){
     auto.toFixed(2),
     // Ya no crea ninguna transaccion: decide si se le atribuye income al periodo
     // (se guarda en el snapshot como derivedIncome/netProfit).
-    hasPrev?{checkboxLabel:'Count unlogged gains and losses for this period',checkboxChecked:true}:null
+    hasPrev?{checkboxLabel:'Count this period\'s gains and losses (deduced from the balance change)',checkboxChecked:true}:null
   );
   if(res===null) return;
   var val=parseFloat(res.value);
@@ -3598,7 +3598,7 @@ async function deleteSnapshot(id){
   var aviso='Can be undone with Undo.';
   // Solo se avisa cuando de verdad va a cambiar un numero que el usuario mira.
   if(sig&&typeof sig.derivedIncome==='number')
-    aviso+='<span style="display:block;margin-top:9px;line-height:1.5">The unlogged amount for <b style="color:#fff">'+escHtml(sig.date)+'</b> is recalculated over the longer period that this leaves behind.</span>';
+    aviso+='<span style="display:block;margin-top:9px;line-height:1.5">The income deduced for <b style="color:#fff">'+escHtml(sig.date)+'</b> is recalculated over the longer period that this leaves behind.</span>';
   var ok=await appConfirm('Delete snapshot?',aviso,'Delete');
   if(!ok) return;
   var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; /* re-fetch: un sync durante el await pudo reemplazar el array */

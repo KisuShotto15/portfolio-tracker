@@ -1938,7 +1938,7 @@ check('y la perdida queda: -950, no 0', sh33 && sh33.derivedIncome === -950, JSO
 await ev("showPage('dashboard',null)"); await sleep(500);
 const np33 = await ev("(function(){var c=[...document.querySelectorAll('.kpi-card')].find(function(x){return x.querySelector('.kpi-lbl').textContent==='Net Profit';});return c?c.textContent:null;})()");
 check('Net Profit sale negativo', np33 !== null && /Net Profit-\$/.test(np33), String(np33));
-check('y muestra la linea unlogged', np33 !== null && /-\$950\.00 unlogged/.test(np33), String(np33));
+check('y muestra la linea deduced', np33 !== null && /-\$950\.00 deduced/.test(np33), String(np33));
 
 // Budget incluye lo no registrado en Income, como antes, ahora con signo.
 await ev("showPage('budget',null)"); await sleep(400);
@@ -2004,7 +2004,7 @@ check('antes de borrar, el del medio deriva 500', (await der34(sB34)) === 500, S
 await ev(`deleteSnapshot(${id34(sB34)})`);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar snapshot');
 const aviso34 = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m[m.length-1].querySelector('.modal-info').textContent;})()");
-check('el confirm avisa que se recalcula el siguiente', /unlogged amount for/.test(aviso34) && aviso34.indexOf(sC34) >= 0, aviso34);
+check('el confirm avisa que se recalcula el siguiente', /income deduced for/.test(aviso34) && aviso34.indexOf(sC34) >= 0, aviso34);
 await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
 await sleep(500);
 
