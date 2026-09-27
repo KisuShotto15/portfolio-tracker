@@ -1205,8 +1205,8 @@ function catHintFor(cat){
   if(!cat) return '';
   if(cat==='Income') return '<b>Income</b> · new money coming in. The only one that adds to the month income.';
   if(EXPENSE_CATS_DASH.indexOf(cat)>=0) return '<b>Expense</b> · lowers your net worth and counts toward this month budget.';
-  if(NEUTRAL_CATS.indexOf(cat)>=0) return '<b>Neutral</b> · touches neither budget nor P&L. Money moving between accounts the app already sees.';
-  if(isExtFlow(cat)) return '<b>External flow</b> · not spending, and netted out of P&L. Money leaving or entering what is tracked.';
+  if(NEUTRAL_CATS.indexOf(cat)>=0) return '<b>Neutral</b> · touches neither budget nor Net Profit. Money moving between accounts the app already sees.';
+  if(isExtFlow(cat)) return '<b>External flow</b> · not spending, and netted out of Net Profit. Money leaving or entering what is tracked.';
   return '';
 }
 function updateCatHint(){
@@ -1536,7 +1536,7 @@ async function addTx(){
     var esGasto=type==='Debit';
     var okViejo=await appConfirm('This changes a closed month',
       'Your net worth was already photographed on <b style="color:#fff">'+escHtml(fmtDate(viejo.date))+'</b>, after this date. '
-      +monthLabel(date.slice(0,7))+' will count the '+fmtUSD(amtUSD)+' in its budget, but the income derived for that period will not — '
+      +monthLabel(date.slice(0,7))+' will count the '+fmtUSD(amtUSD)+' in its budget, but the unlogged amount of that period will not adjust — '
       +'so that month ends up showing '+fmtUSD(amtUSD)+' '+(esGasto?'less':'more')+' profit than it really had.',
       'Add anyway');
     if(!okViejo) return;
@@ -2295,7 +2295,9 @@ function getAvgMonthlyContribution(){
   var now=new Date(); var months=[];
   for(var i=1;i<=3;i++){ months.push(monthKey(new Date(now.getFullYear(),now.getMonth()-i,1))); }
   var nets=months.map(function(m){ return monthIncome(m)-catNetSpend(m, EXPENSE_CATS_DASH); });
-  var nz=nets.filter(function(v){ return v>0; });
+  // Un mes con perdida cuenta: ignorarlo inflaba el promedio. Solo se saltan los
+  // meses sin ningun movimiento.
+  var nz=nets.filter(function(v){ return v!==0; });
   return nz.length>0?nz.reduce(function(s,v){ return s+v; },0)/nz.length:0;
 }
 
@@ -2334,11 +2336,12 @@ function getMonthlyKPIs(month){
   // asi que rara vez coincidia con el Income/Spent que Budget mostraba para "ese
   // mismo mes". Con esto los dos numeros son literalmente el mismo calculo.
   var income=monthIncome(month);
-  var monthlyReturn=(income>0||expenses>0)?parseFloat((income-expenses).toFixed(2)):null;
+  var unlogged=snapDerivedIncomeCore(S.snapshots, month);
+  var monthlyReturn=(income!==0||expenses>0)?parseFloat((income-expenses).toFixed(2)):null;
   var monthlyReturnPct=income>0?(monthlyReturn/income)*100:null;
   // Goal Progress
   var goalPct=(S.dashGoal>0&&netWorth!==null)?Math.min(100,(netWorth/S.dashGoal)*100):null;
-  return {netWorth:netWorth,netWorthDate:netWorthDate,expenses:expenses,income:income,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,goalPct:goalPct};
+  return {netWorth:netWorth,netWorthDate:netWorthDate,expenses:expenses,income:income,unlogged:unlogged,monthlyReturn:monthlyReturn,monthlyReturnPct:monthlyReturnPct,goalPct:goalPct};
 }
 
 function fmtDelta(cur,prev,opts){
@@ -2382,9 +2385,10 @@ function renderKPIStrip(month){
     return '<div class="kpi-card"><div class="kpi-lbl">'+label+'</div><div class="kpi-val" style="color:'+color+'">'+val+'</div><div class="kpi-sub">'+sub+(delta?' '+delta:'')+'</div></div>';
   }
   var retColor=cur.monthlyReturn===null?'#888':cur.monthlyReturn>0?'#1D9E75':'#E24B4A';
-  var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'')+fmtUSD(cur.monthlyReturn):'—';
+  var retVal=cur.monthlyReturn!==null?(cur.monthlyReturn>=0?'+':'-')+fmtUSD(Math.abs(cur.monthlyReturn)):'—';
   var retSub=cur.monthlyReturnPct!==null?(cur.monthlyReturnPct>=0?'+':'')+cur.monthlyReturnPct.toFixed(2)+'%'
     :cur.monthlyReturn!==null?'no income logged':'no activity in '+month;
+  if(Math.abs(cur.unlogged)>=0.5) retSub+=' · '+(cur.unlogged>0?'+':'-')+fmtUSD(Math.abs(cur.unlogged))+' unlogged';
   // Liquid: en vivo, no por mes. No lleva delta porque los snapshots solo guardan
   // el total (no el reparto liquido/por cobrar), asi que no hay mes anterior contra
   // que compararlo sin inventarlo.
@@ -2568,8 +2572,13 @@ function monthCloseData(month){
     var pSpend=periodNetSpend(sPrev,sNow);
     var ext=parseFloat((f.invOut-f.invIn).toFixed(2));
     var r2=function(n){ return parseFloat(n.toFixed(2)); };
+    // Net Profit sale del mes calendario y esta conciliacion de snapshot a
+    // snapshot: solo coinciden si los dos snapshots caen el ultimo dia de su mes
+    // (el automatico lo hace). Si no, lo que paso despues cae en el mes siguiente.
+    var finDe=function(m){ var p=m.split('-'); return m+'-'+String(new Date(+p[0],+p[1],0).getDate()).padStart(2,'0'); };
+    var offEnd=[sPrev,sNow].filter(function(s){ return s.date!==finDe(s.date.slice(0,7)); })[0]||null;
     rec={logged:r2(logged),derived:r2(derived),spend:r2(pSpend),ext:ext,
-      resid:r2(nwDelta-(logged+derived-pSpend-ext))};
+      resid:r2(nwDelta-(logged+derived-pSpend-ext)),offEnd:offEnd?offEnd.date:null};
   }
   var big=null;
   S.transactions.forEach(function(t){
@@ -2610,18 +2619,22 @@ window.showMonthClose=function(month){
   var totDiff=parseFloat((d.totLim-d.totSpent).toFixed(2));
   var ahorro=parseFloat((d.income-d.totSpent).toFixed(2));
   var tasa=d.income>0?Math.round(ahorro/d.income*100):null;
-  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' logged · '+fmtShortUSD(d.rec.derived)+' derived':'';
+  var incSub=d.rec?fmtShortUSD(d.rec.logged)+' logged · '+sgn(d.rec.derived)+' unlogged':'';
   // Conciliacion: por que el patrimonio se movio lo que se movio. Sin esto el
   // resumen mostraba ingresos y gastos que no cierran contra la variacion real.
   var recLine=function(l,v,c){ return '<div class="mc-rec-row"><span>'+l+'</span><span class="mc-num"'+(c?' style="color:'+c+'"':'')+'>'+v+'</span></div>'; };
   var recHtml='';
   if(d.rec){
     recHtml='<div class="mc-rec"><div class="mc-rec-h">How net worth moved</div>'
-      +recLine('Income',sgn(d.rec.logged+d.rec.derived),'#4ED9A4')
+      +recLine('Income · logged',sgn(d.rec.logged),'#4ED9A4')
+      +(Math.abs(d.rec.derived)>=0.5?recLine('Unlogged · trading or not logged',sgn(d.rec.derived),d.rec.derived>=0?'#4ED9A4':'#E24B4A'):'')
       +recLine('Spending',sgn(-d.rec.spend),'#E24B4A')
       +(d.rec.ext!==0?recLine('External flows · Transfer / Investments',sgn(-d.rec.ext),d.rec.ext>0?'#E24B4A':'#4ED9A4'):'')
-      +(Math.abs(d.rec.resid)>=0.5?recLine('Unexplained · market or something unlogged',sgn(d.rec.resid),'var(--txt3)'):'')
+      // Solo queda residuo si algun snapshot se guardo sin "Count unlogged": esa
+      // plata movio el patrimonio pero a proposito no entra en Net Profit.
+      +(Math.abs(d.rec.resid)>=0.5?recLine('Not counted in Net Profit',sgn(d.rec.resid),'var(--txt3)'):'')
       +'<div class="mc-rec-row mc-rec-tot"><span>Net worth change</span><span class="mc-num" style="color:'+(d.nwDelta>=0?'#4ED9A4':'#E24B4A')+'">'+sgn(d.nwDelta)+'</span></div>'
+      +(d.rec.offEnd?'<div class="mc-rec-row" style="color:var(--txt3);font-size:13px;line-height:1.5"><span>Snapshot from '+escHtml(fmtDate(d.rec.offEnd))+' is not on the last day of the month, so Net Profit and this change can differ by what happened after it.</span></div>':'')
       +'</div>';
   }
   var ov=document.createElement('div');
@@ -3467,7 +3480,7 @@ async function recordSnapshot(){
     auto.toFixed(2),
     // Ya no crea ninguna transaccion: decide si se le atribuye income al periodo
     // (se guarda en el snapshot como derivedIncome/netProfit).
-    hasPrev?{checkboxLabel:'Count income for this period',checkboxChecked:true}:null
+    hasPrev?{checkboxLabel:'Count unlogged gains and losses for this period',checkboxChecked:true}:null
   );
   if(res===null) return;
   var val=parseFloat(res.value);
@@ -3522,17 +3535,13 @@ async function recordSnapshot(){
 //   income derivado = Δ + gastos - income ya registrado
 // Es lo que alimenta monthIncome() → grafico mensual, Budget y KPI Net Profit.
 //
-// Piso 0, aca adentro y no en cada caller: un mes de puro gasto deriva exactamente
-// 0 (Δ=-gasto → income=0); que de NEGATIVO significa que el patrimonio cayo mas de
-// lo que anotaste — plata que se fue sin registrar, o un total mal estimado. Eso no
-// es "income negativo" (no significa nada: el Budget mostraba un Income en rojo y
-// el Net Profit y el Health Score heredaban el disparate); es un faltante, y el
-// cierre de mes ya lo muestra en su linea "Unexplained". El piso vivia solo en el
-// snapshot automatico: el manual y el recalculo al editar lo dejaban pasar.
+// Con signo: es la linea "Unlogged" (trading o algo sin anotar). Antes tenia piso
+// 0, y una perdida real (una venta mala en Binance) desaparecia: las ganancias
+// subian el Net Profit y las perdidas no lo bajaban.
 function derivedIncomeFor(prevSnap,snap){
   var f=investmentFlow(prevSnap,snap);
   var profit=Math.round(((snap.total-prevSnap.total)+f.invOut-f.invIn)*100)/100;
-  return Math.max(0,Math.round((profit+periodNetSpend(prevSnap,snap)-periodLoggedIncome(prevSnap,snap))*100)/100);
+  return Math.round((profit+periodNetSpend(prevSnap,snap)-periodLoggedIncome(prevSnap,snap))*100)/100;
 }
 
 // Snapshot de cierre de mes: el ULTIMO DIA del mes, de noche. Corre en el boot,
@@ -3560,7 +3569,6 @@ function autoMonthSnapshot(hour,minHour,todayISO){
   var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   var prev=sorted[sorted.length-1];
   // Sin snapshot previo no hay periodo: este es la linea base y no deriva income.
-  // (El piso 0 esta dentro de derivedIncomeFor: vale para los tres caminos.)
   if(prev) snap.derivedIncome=derivedIncomeFor(prev,snap);
   snap.updatedAt=S.snapshotsUpdatedAt=stamp();
   S.snapshots.push(snap);
@@ -3590,7 +3598,7 @@ async function deleteSnapshot(id){
   var aviso='Can be undone with Undo.';
   // Solo se avisa cuando de verdad va a cambiar un numero que el usuario mira.
   if(sig&&typeof sig.derivedIncome==='number')
-    aviso+='<span style="display:block;margin-top:9px;line-height:1.5">The income derived for <b style="color:#fff">'+escHtml(sig.date)+'</b> is recalculated over the longer period that this leaves behind.</span>';
+    aviso+='<span style="display:block;margin-top:9px;line-height:1.5">The unlogged amount for <b style="color:#fff">'+escHtml(sig.date)+'</b> is recalculated over the longer period that this leaves behind.</span>';
   var ok=await appConfirm('Delete snapshot?',aviso,'Delete');
   if(!ok) return;
   var snap=S.snapshots.find(function(s){ return s.id===id; }); if(!snap) return; /* re-fetch: un sync durante el await pudo reemplazar el array */
@@ -3941,7 +3949,7 @@ function renderBudget(){
         +'<span class="bdg-total-edit" style="display:none">$<input type="text" inputmode="decimal" id="bud-total" value="'+budTotal+'" onkeydown="if(event.key===\'Enter\')saveBudget()" onblur="saveBudget()"></span>'
         +'</span><span class="bdg-pct">'+pct+'%</span></div>'
       +'<div class="bdg-stats">'
-        +bstat('Income',fmtUSD(income),'#5DCAA5')
+        +bstat('Income',(income<0?'-':'')+fmtUSD(Math.abs(income)),income<0?'#E24B4A':'#5DCAA5')
         +bstat('Spent',fmtUSD(spent),'')
         +bstat('Savings rate',savRate+'%','#9B70F0')
         +(projTotal!=null?bstat('Proyeccion',fmtUSD(projTotal),projTotal>budTotal?'#E24B4A':'#4ED9A4'):'')
@@ -4829,8 +4837,8 @@ function renderHistory(view){
   html+='<div class="snap-row snap-head-row">'
     +'<div class="snap-col-date">Date</div>'
     +'<div class="snap-col-nw">Net Worth</div>'
-    +'<div class="snap-col-pnl">P&L</div>'
-    +'<div class="snap-col-pct">P&L %</div>'
+    +'<div class="snap-col-pnl">Net change</div>'
+    +'<div class="snap-col-pct">Change %</div>'
     +'<div class="snap-col-cum">Cumulative</div>'
     +'<div class="snap-col-acts"></div>'
   +'</div>';
@@ -5200,6 +5208,14 @@ var MIGRATIONS=[
     var next=migrateRolloverCore(S.rolloverCats,BUDGET_CATS,monthKey(new Date()));
     if(next===S.rolloverCats) return;
     S.rolloverCats=next; S.rolloverCatsUpdatedAt=stamp();
+  }},
+  { v:6, fn:function(){ // Unlogged con signo: las perdidas que el piso guardo como 0
+    var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    sorted.forEach(function(s,i){
+      if(i===0||s.derivedIncome!==0) return;
+      var v=derivedIncomeFor(sorted[i-1],s);
+      if(v<0){ s.derivedIncome=v; touchItem('snapshots',s); }
+    });
   }},
 ];
 // Por numero de version, no por posicion en el array: MIGRATIONS[2] se rompia

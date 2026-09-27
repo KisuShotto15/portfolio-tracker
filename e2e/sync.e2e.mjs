@@ -760,7 +760,10 @@ check('compara contra el mes anterior', /vs /.test(mcTxt), mcTxt.slice(0, 300));
 check('concilia la variacion del patrimonio', /How net worth moved/.test(mcTxt), mcTxt.slice(0, 200));
 check('muestra los flujos externos aparte', /External flows/.test(mcTxt) && /-\$200/.test(mcTxt), mcTxt);
 check('la variacion cuadra: +\$110', /\+\$110/.test(mcTxt), mcTxt);
-check('sin residuo no hay linea de "sin explicar"', !/Unexplained/.test(mcTxt), mcTxt);
+check('sin residuo no hay linea de "no contado"', !/Not counted/.test(mcTxt) && !/Unexplained/.test(mcTxt), mcTxt);
+// Los snapshots son del 28: Net Profit (mes calendario) y esta variacion no
+// tienen por que coincidir, y el cierre lo dice.
+check('avisa que el snapshot no es de fin de mes', /not on the last day of the month/.test(mcTxt), mcTxt);
 // Ahorro = 500 - 190 = 310, 62% de los ingresos
 check('muestra el ahorro del mes', /\+\$310/.test(mcTxt) && /62% of income/.test(mcTxt), mcTxt.slice(0, 400));
 
@@ -811,7 +814,7 @@ await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');
   localStorage.setItem('ft13',JSON.stringify(d));})()`);
 await boot();
 const mcTxt2 = await ev("(document.getElementById('month-close')||{}).textContent||''");
-check('aparece la linea de sin explicar', /Unexplained/.test(mcTxt2), mcTxt2.slice(0, 300));
+check('aparece la linea de no contado', /Not counted in Net Profit/.test(mcTxt2), mcTxt2.slice(0, 300));
 check('y dice cuanto falta: $80', /\+\$80/.test(mcTxt2), mcTxt2);
 
 // ── 13 · selector de mes del Dashboard ────────────────────────────────────
@@ -1904,12 +1907,11 @@ await waitFor(() => cloudDoc.hiddenTools && cloudDoc.hiddenTools.profit === true
 check('esconder una tool en el dispositivo si llega a la nube', cloudDoc.hiddenTools && cloudDoc.hiddenTools.profit === true, JSON.stringify(cloudDoc.hiddenTools));
 check('y el campo viaja con su marca de tiempo', (cloudDoc.hiddenToolsUpdatedAt || 0) > 0, String(cloudDoc.hiddenToolsUpdatedAt));
 
-// ── escenario 33: el income derivado nunca es negativo (F5) ────────────────
-// El piso de cero existia solo en el snapshot automatico de cierre de mes. Por el
-// camino manual y por el recalculo al editar, un patrimonio que cayo mas de lo
-// anotado daba un income NEGATIVO: el Budget mostraba Income en rojo y el Net
-// Profit y el Health Score heredaban el disparate.
-console.log('E2E income derivado — piso en cero en los tres caminos');
+// ── escenario 33: lo no registrado (Unlogged) lleva signo ──────────────────
+// Antes tenia piso 0: una perdida real (una venta mala en Binance) no bajaba el
+// Net Profit, mientras que una ganancia si lo subia. Ahora el patrimonio que cae
+// mas de lo anotado resta, por los tres caminos (manual, editar, automatico).
+console.log('E2E Unlogged — ganancias y perdidas no registradas');
 cloudDoc = {};
 const hoy33 = dU(0), viejo33 = dU(30), gasto33 = dU(20);
 const idViejo33 = Date.parse(viejo33 + 'T12:00:00'), idGasto33 = Date.parse(gasto33 + 'T12:00:00');
@@ -1922,7 +1924,7 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(l
 await boot();
 
 // Camino 1: snapshot manual con un total MUY por debajo del anterior.
-// Δ = 1000 - 2000 = -1000, mas 50 de gasto del periodo → -950 sin piso.
+// Δ = 1000 - 2000 = -1000, mas 50 de gasto del periodo → -950 no registrados.
 await ev('recordSnapshot()');
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de anotar snapshot');
 await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];b.querySelector('#_ami').value='1000';b.querySelector('#_amo').click();})()");
@@ -1930,29 +1932,53 @@ await sleep(500);
 const snapHoy33 = async () => JSON.parse(await ev(`(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).find(function(x){return x.date==='${hoy33}';});return JSON.stringify(s||null);})()`));
 let sh33 = await snapHoy33();
 check('el snapshot manual queda anotado', sh33 && sh33.total === 1000, JSON.stringify(sh33));
-check('y su income derivado es 0, no -950', sh33 && sh33.derivedIncome === 0, JSON.stringify(sh33));
+check('y la perdida queda: -950, no 0', sh33 && sh33.derivedIncome === -950, JSON.stringify(sh33));
 
-// Y eso es lo que ve el usuario: el Budget del mes no muestra un Income negativo.
+// El Net Profit la resta y dice cuanto es no registrado.
+await ev("showPage('dashboard',null)"); await sleep(500);
+const np33 = await ev("(function(){var c=[...document.querySelectorAll('.kpi-card')].find(function(x){return x.querySelector('.kpi-lbl').textContent==='Net Profit';});return c?c.textContent:null;})()");
+check('Net Profit sale negativo', np33 !== null && /Net Profit-\$/.test(np33), String(np33));
+check('y muestra la linea unlogged', np33 !== null && /-\$950\.00 unlogged/.test(np33), String(np33));
+
+// Budget incluye lo no registrado en Income, como antes, ahora con signo.
 await ev("showPage('budget',null)"); await sleep(400);
 const income33 = await ev("(function(){var e=[...document.querySelectorAll('.bdg-stat')].find(function(x){return x.querySelector('.bdg-stat-l').textContent==='Income';});return e?e.querySelector('.bdg-stat-v').textContent:null;})()");
-check('Budget no muestra un Income negativo', income33 !== null && income33.indexOf('-') < 0 && income33.indexOf('−') < 0, String(income33));
+check('Budget refleja la perdida en Income', income33 !== null && /-|−/.test(income33), String(income33));
 
-// Camino 2: editarlo a la baja recalcula, y tambien tiene piso.
-// Δ = 1500 - 2000 = -500, mas 50 → -450 sin piso.
+// Camino 2: editarlo a la baja recalcula con signo.
+// Δ = 1500 - 2000 = -500, mas 50 → -450.
 await ev(`editSnapshot(${sh33.id})`);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de editar snapshot (baja)');
 await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];var i=b.querySelector('input');i.value='1500';i.dispatchEvent(new Event('input',{bubbles:true}));b.querySelector('#_amo').click();})()");
 await sleep(500);
 sh33 = await snapHoy33();
-check('editarlo a la baja tampoco deja el income en negativo', sh33 && sh33.total === 1500 && sh33.derivedIncome === 0, JSON.stringify(sh33));
+check('editarlo a la baja recalcula la perdida (-450)', sh33 && sh33.total === 1500 && sh33.derivedIncome === -450, JSON.stringify(sh33));
 
-// Y el piso no aplasta lo que SI es income: Δ = 2600 - 2000 = 600, mas 50 → 650.
+// Y una ganancia sigue saliendo entera: Δ = 2600 - 2000 = 600, mas 50 → 650.
 await ev(`editSnapshot(${sh33.id})`);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el modal de editar snapshot (alza)');
 await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');var b=m[m.length-1];var i=b.querySelector('input');i.value='2600';i.dispatchEvent(new Event('input',{bubbles:true}));b.querySelector('#_amo').click();})()");
 await sleep(500);
 sh33 = await snapHoy33();
 check('un income real sigue saliendo entero (650)', sh33 && sh33.derivedIncome === 650, JSON.stringify(sh33));
+
+// Migracion v6: un snapshot viejo al que el piso le guardo 0 recupera su perdida.
+// Primero que aterrice el push de la edicion: trae el schemaVersion 99 de un
+// escenario anterior y el merge (max) taparia el 5 sembrado.
+await sleep(2500);
+cloudDoc = {};
+await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');
+  var s=d.snapshots.find(function(x){return x.date==='${hoy33}';});
+  s.total=1000; s.derivedIncome=0; s.updatedAt=Date.now();
+  d.schemaVersion=5; d.snapshotsUpdatedAt=Date.now();
+  localStorage.setItem('ft13',JSON.stringify(d));})()`);
+await boot();
+// El push del arranque sale antes de migrar y su respuesta llega despues: hay que
+// esperar al push que sale con la migracion hecha.
+await waitFor(async () => (await snapHoy33()).derivedIncome === -950, 8000, 200, 'la migracion v6 asentada').catch(() => {});
+sh33 = await snapHoy33();
+check('la migracion le devuelve la perdida al snapshot viejo (-950)', sh33 && sh33.derivedIncome === -950, JSON.stringify(sh33));
+check('y el doc queda en la version nueva', await ev("JSON.parse(localStorage.getItem('ft13')||'{}').schemaVersion===6"));
 
 // ── escenario 34: borrar un snapshot recalcula el income del siguiente (F6) ─
 // El recalculo existia y funcionaba, pero solo al EDITAR. Al borrar no se
@@ -1978,7 +2004,7 @@ check('antes de borrar, el del medio deriva 500', (await der34(sB34)) === 500, S
 await ev(`deleteSnapshot(${id34(sB34)})`);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay').length")) > 0, 3000, 60, 'el confirm de borrar snapshot');
 const aviso34 = await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');return m[m.length-1].querySelector('.modal-info').textContent;})()");
-check('el confirm avisa que se recalcula el siguiente', /income derived for/.test(aviso34) && aviso34.indexOf(sC34) >= 0, aviso34);
+check('el confirm avisa que se recalcula el siguiente', /unlogged amount for/.test(aviso34) && aviso34.indexOf(sC34) >= 0, aviso34);
 await ev("(function(){var m=document.querySelectorAll('.app-modal-overlay');m[m.length-1].querySelector('#_amo').click();})()");
 await sleep(500);
 
