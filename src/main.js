@@ -185,6 +185,22 @@ function ensureChart(){
   return _chartPromise;
 }
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
+// Transicion de los graficos al cambiar datos (update, no recreate).
+var CHART_ANIM={duration:450,easing:'easeOutQuart'};
+
+function reduceMotion(){ try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } }
+// Cierra un modal con su salida animada. Quien llama ya resolvio su promesa: solo
+// lo visual espera. Pierde la clase y los ids en el acto, para que un modal que se
+// abre enseguida no choque con los del que se esta yendo.
+function closeModal(ov){
+  if(!ov||ov._closing) return; ov._closing=true;
+  ov.removeAttribute('id');
+  ov.querySelectorAll('[id]').forEach(function(el){ el.removeAttribute('id'); });
+  ov.classList.remove('app-modal-overlay','open');
+  if(reduceMotion()||document.hidden){ ov.remove(); return; }
+  ov.classList.add('modal-out');
+  setTimeout(function(){ ov.remove(); },150);
+}
 var _healthSig=null, _healthMSig=null, _goalSig=null, _walletsSig=null, _kpiSig=null; // rendered-HTML signatures → skip re-render (avoids re-animating/flicker on tab return)
 var _txLimit=60, _txBase=60, _txFilterSig=''; // tx list pagination state
 var _txData=null, _txDayTotals=null; // cache del ultimo filtrado para append incremental
@@ -1554,6 +1570,7 @@ async function addTx(){
   S.transactions.push({id:_now,createdAt:_now,seq:S.transactions.length,date:date,desc:desc,wallet:wallet,type:type,category:cat,amountUSD:amtUSD,amountVES:amtVES,originalCurrency:cur,rateUsed:cur==='VES'?_vr:null,rateSrc:cur==='VES'?vesTxRateSrc():null,imported:false,receiptUrl:pendingReceiptUrl,receiptPath:pendingReceiptPath,updatedAt:_ut});
   S.transactionsUpdatedAt=_ut;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
+  _txFlashId=_now;
   save(); renderTx(); renderSummary();
   closeTxForm();
   showTxToast();
@@ -1589,7 +1606,12 @@ async function deleteTx(id){
   if(!S.deletedTxIds) S.deletedTxIds=[];
   S.deletedTxIds.push({id:id,ts:stamp()});
   S.transactions=S.transactions.filter(function(x){ return x.id!==id; }); // por id: un sync durante el await no invalida el filtro
-  S.transactionsUpdatedAt=stamp(); save(); renderTx(); renderSummary();
+  S.transactionsUpdatedAt=stamp(); save(); renderSummary();
+  // El estado ya cambio y se guardo; solo la lista espera a que la fila salga.
+  var fila=document.querySelector('#tx-wrap tr[data-id="'+id+'"]');
+  if(!fila||reduceMotion()||document.hidden){ renderTx(); return; }
+  fila.classList.add('tx-leaving');
+  setTimeout(renderTx,180);
 }
 
 var editingTxId = null;
@@ -1909,6 +1931,7 @@ function updateTx(){
   if(t){ t.date=date; t.desc=desc; t.wallet=wallet; t.type=type; t.category=cat; t.originalCurrency=cur; t.amountUSD=amtUSD; t.amountVES=amtVES; t.rateUsed=rateUsed; t.rateSrc=cur==='VES'?(typeof rateSrc!=='undefined'?rateSrc:null):null; t.receiptUrl=pendingReceiptUrl; t.receiptPath=pendingReceiptPath; t.updatedAt=_now; }
   S.transactionsUpdatedAt=_now;
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
+  if(t) _txFlashId=t.id;
   cancelEditTx(); save(); renderTx(); renderSummary();
 }
 // Borrar una wallet NO borra sus transacciones: quedan apuntando a un nombre que
@@ -2137,7 +2160,7 @@ function txRowHtml(t){
   var sub=escHtml(t.wallet||'')+(t.category?' · '+escHtml(t.category):'');
   var origM=orig?'<span class="td-orig-m">'+orig+'</span>':'';
   var mCol=isTrk?'var(--accent)':(t.type==='Credit'?'#5DCAA5':'var(--txt)');
-  return '<tr class="tx-row '+txType+'" onclick="selectTxRow(this)">'
+  return '<tr class="tx-row '+txType+'" data-id="'+t.id+'" onclick="selectTxRow(this)">'
     +'<td class="td-icon">'+txIcon(t)+'</td>'
     +'<td class="td-desc" title="'+escHtml(t.desc)+'">'
     +  '<span class="td-desc-txt">'+escHtml(t.desc)+'</span>'
@@ -2253,7 +2276,15 @@ function renderTx(){
     +(moreBtn?'<div id="tx-more" style="text-align:center;margin-top:18px">'+moreBtn+'</div>':'');
   watchTxMore();
   fillReceiptThumbs();   // las miniaturas privadas necesitan su URL firmada
+  if(_txFlashId!=null){
+    var nueva=wrap.querySelector('tr[data-id="'+_txFlashId+'"]');
+    if(nueva) nueva.classList.add('tx-flash');
+    _txFlashId=null;
+  }
 }
+// La tx recien agregada o editada: renderTx la ilumina una vez para que se vea
+// donde quedo en la lista.
+var _txFlashId=null;
 
 function getMonths(){ var seen={}; S.transactions.forEach(function(t){ seen[t.date.slice(0,7)]=1; }); var u=Object.keys(seen).sort().reverse(); if(!u.length) u.push(monthKey(new Date())); return u; }
 function dashMonths(){ return dashMonthsCore(getMonths(), S.snapshots, monthKey(new Date())); }
@@ -2404,7 +2435,40 @@ function renderKPIStrip(month){
     +kpi('Goal Progress',cur.goalPct!==null?cur.goalPct.toFixed(1)+'%':'—',S.dashGoal>0?'of '+fmtUSD(S.dashGoal):'set a goal below','#9B70F0',fmtDelta(cur.goalPct,prev.goalPct))
     +'</div>';
   // Solo tocar el DOM cuando cambio → la animacion de entrada no se repite en cada sync/tab return.
-  if(kHtml!==_kpiSig){ document.getElementById('kpi-strip').innerHTML=kHtml; _kpiSig=kHtml; }
+  if(kHtml!==_kpiSig){
+    var strip=document.getElementById('kpi-strip');
+    var antes={};
+    strip.querySelectorAll('.kpi-card').forEach(function(c){ antes[c.querySelector('.kpi-lbl').textContent]=c.querySelector('.kpi-val').textContent; });
+    strip.innerHTML=kHtml; _kpiSig=kHtml;
+    tweenKpis(strip,antes);
+  }
+}
+// Un KPI que cambio (sync, tx nueva) cuenta desde el valor viejo al nuevo en vez
+// de saltar. Solo si prefijo y sufijo coinciden: de "+$" a "-$" o desde "—" no
+// hay un numero intermedio que tenga sentido, y ahi cambia directo.
+var KPI_NUM=/^([^\d]*)([\d,]*\.?\d+)(.*)$/, _kpiTween=0;
+function tweenKpis(strip,antes){
+  if(reduceMotion()||document.hidden) return;
+  var run=++_kpiTween;
+  strip.querySelectorAll('.kpi-card').forEach(function(c){
+    var el=c.querySelector('.kpi-val'), fin=el.textContent;
+    var viejo=antes[c.querySelector('.kpi-lbl').textContent];
+    if(viejo==null||viejo===fin) return;
+    var a=KPI_NUM.exec(viejo), b=KPI_NUM.exec(fin);
+    if(!a||!b||a[1]!==b[1]||a[3]!==b[3]) return;
+    var from=parseFloat(a[2].replace(/,/g,'')), to=parseFloat(b[2].replace(/,/g,''));
+    var dec=(b[2].split('.')[1]||'').length, agrupa=/,/.test(a[2]+b[2]);
+    var fmt=function(n){ return b[1]+n.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec,useGrouping:agrupa})+b[3]; };
+    var t0=performance.now(), DUR=400;
+    (function paso(now){
+      if(run!==_kpiTween) return;
+      var p=Math.min(1,(now-t0)/DUR), e=1-Math.pow(1-p,3);
+      el.textContent=p<1?fmt(from+(to-from)*e):fin;
+      if(p<1) requestAnimationFrame(paso);
+    })(t0);
+    // Si el rAF se pausa (pestana oculta a mitad), el valor final igual queda.
+    setTimeout(function(){ if(run===_kpiTween) el.textContent=fin; },DUR+100);
+  });
 }
 
 // ── Health Score ───────────────────────────────────────────────────────────
@@ -2659,7 +2723,7 @@ window.showMonthClose=function(month){
     +'</div>';
   document.body.appendChild(ov);
   var close=function(){
-    ov.remove();
+    closeModal(ov);
     if(S.lastCloseSeen!==month){ S.lastCloseSeen=month; S.lastCloseSeenUpdatedAt=stamp(); save(); }
   };
   ov.querySelector('#_mcok').onclick=close;
@@ -3269,8 +3333,13 @@ function renderMonthlyChart(){
   if(sig===_mChartSig&&mChart) return;
   _mChartSig=sig;
   document.getElementById('mc-leg').innerHTML='<span style="display:flex;align-items:center;gap:14px"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#209473;display:inline-block"></span>Income</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#721414;display:inline-block"></span>Outflows</span></span>';
+  // Mismo canvas: las barras pasan del valor viejo al nuevo en vez de reaparecer.
+  if(mChart&&mChart.canvas===cv){
+    mChart.data.labels=labels; mChart.data.datasets[0].data=crD; mChart.data.datasets[1].data=cD;
+    mChart.update(); return;
+  }
   if(mChart){ mChart.destroy(); mChart=null; }
-  mChart=new Chart(document.getElementById('chart-monthly'),{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#209473',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#721414',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:15}}},y:{display:false}}}});
+  mChart=new Chart(cv,{type:'bar',data:{labels:labels,datasets:[{label:'Income',data:crD,backgroundColor:'#209473',borderRadius:3,maxBarThickness:18},{label:'Outflows',data:cD,backgroundColor:'#721414',borderRadius:3,maxBarThickness:18}]},options:{responsive:true,maintainAspectRatio:false,animation:CHART_ANIM,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{grid:{display:false},ticks:{color:'#555',autoSkip:false,font:{size:15}}},y:{display:false}}}});
 }
 
 var _cChartSig=null;
@@ -3296,8 +3365,12 @@ function renderCatChart(month){
   var sig=month+'|'+JSON.stringify(vals)+'|'+cats.join(',');
   if(sig===_cChartSig&&cChart&&cChart.canvas===cv) return;
   _cChartSig=sig;
+  if(cChart&&cChart.canvas===cv){
+    cChart.data.labels=cats; cChart.data.datasets[0].data=vals; cChart.data.datasets[0].backgroundColor=colors;
+    cChart.update(); return;
+  }
   if(cChart){ cChart.destroy(); cChart=null; }
-  cChart=new Chart(document.getElementById('chart-cat'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,spacing:2,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'72%'}});
+  cChart=new Chart(cv,{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,spacing:2,hoverOffset:3}]},options:{responsive:true,maintainAspectRatio:false,animation:CHART_ANIM,transitions:{active:{animation:{duration:0}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.label+': '+fmtUSD(ctx.raw); }}}},cutout:'72%'}});
 }
 
 // Linea "+ Holdings": apagada por defecto (estiraba la escala y aplastaba la
@@ -3348,12 +3421,20 @@ function renderEquityChart(){
     +'<span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#9B70F0;display:inline-block"></span>+ Holdings</span>'
     +'</div>'
     +'<div style="font-size:13px">'+latestSnap+'</div>';
-  if(eChart){ eChart.destroy(); eChart=null; }
   var _eqDs=[
     {label:'Tracked',data:vals,borderColor:'#4ED9A4',backgroundColor:function(ctx){var c=ctx.chart,a=c.chartArea;if(!a)return 'rgba(78,217,164,0.2)';var g=c.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(78,217,164,0.4)');g.addColorStop(1,'rgba(78,217,164,0)');return g;},borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHitRadius:20,pointBackgroundColor:'#4ED9A4',tension:0.3,fill:true}
   ];
   if(_eqShowHoldings) _eqDs.push({label:'+ Holdings',data:adjVals,borderColor:'#9B70F0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,pointHitRadius:15,pointBackgroundColor:'#9B70F0',tension:0.3,fill:false,borderDash:[5,4]});
-  eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:_eqDs},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false,min:_eqYMin}}}});}
+  // Mismas series en el mismo canvas: la curva se mueve hacia los datos nuevos.
+  // Prender o apagar +Holdings cambia la cantidad de series y se recrea.
+  if(eChart&&eChart.canvas===el&&eChart.data.datasets.length===_eqDs.length){
+    eChart.data.labels=labels;
+    _eqDs.forEach(function(d,i){ eChart.data.datasets[i].data=d.data; });
+    eChart.options.scales.y.min=_eqYMin;
+    eChart.update(); return;
+  }
+  if(eChart){ eChart.destroy(); eChart=null; }
+  eChart=new Chart(el,{type:'line',data:{labels:labels,datasets:_eqDs},options:{responsive:true,maintainAspectRatio:false,animation:CHART_ANIM,interaction:{mode:'index',intersect:false},transitions:{active:{animation:{duration:0}}},layout:{padding:0},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+': '+fmtUSD(ctx.raw); }}}},scales:{x:{display:false},y:{display:false,min:_eqYMin}}}});}
 
 // El patrimonio partido en tres: lo que puedes gastar HOY, lo que te deben y lo que
 // debes. Un wallet trackerOnly es una de tres cosas segun su campo debt: una cuenta
@@ -3406,7 +3487,7 @@ function appPrompt(title,infoHtml,defaultVal,opts){
     var inp=ov.querySelector('#_ami'); inp.focus(); inp.select();
     function done(v){
       var cb=ov.querySelector('#_amcb');
-      document.body.removeChild(ov);
+      closeModal(ov);
       resolve(v===null?null:{value:v,checked:cb?cb.checked:false});
     }
     ov.querySelector('#_amc').onclick=function(){done(null);};
@@ -3427,7 +3508,7 @@ function appConfirm(title,bodyHtml,okLabel){
       +'</div></div>';
     document.body.appendChild(ov);
     ov.querySelector('#_amo').focus();
-    function done(v){document.body.removeChild(ov);resolve(v);}
+    function done(v){closeModal(ov);resolve(v);}
     ov.querySelector('#_amc').onclick=function(){done(false);};
     ov.querySelector('#_amo').onclick=function(){done(true);};
     function onKey(e){
@@ -5300,6 +5381,10 @@ async function bootAfterAuth(firstLogin){
   restoreUndo();   // despues del pull y de las migraciones: la firma se compara contra el estado final
   migrateLegacyReceipts();   // en segundo plano: de a cinco recibos publicos por arranque
   try{ maybeShowMonthClose(); }catch(e){ console.error('month close:',e); }
+  // Chart.js en segundo plano: si arrancaste en otra tab, el Dashboard ya lo
+  // tiene cuando entras, en vez de mostrar el hueco del grafico vacio un instante.
+  var _preChart=function(){ ensureChart().catch(function(){}); };
+  if(typeof requestIdleCallback==='function') requestIdleCallback(_preChart,{timeout:3000}); else setTimeout(_preChart,1500);
   // Marca observable de "el arranque post-pull ya corrio". El e2e esperaba a que
   // subiera pullCount, pero ese contador lo incrementa el SERVIDOR al responder el
   // GET: entre eso y este punto todavia faltan las migraciones, el cierre de mes y

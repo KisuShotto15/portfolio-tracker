@@ -2833,6 +2833,70 @@ check('con el motivo del servidor', /signed tokens not available/.test(s48b.st),
 signFail = null;
 await ev("closeTxForm()"); await sleep(300);
 
+// ── escenario 49: fluidez — modales, graficos, KPIs y filas ────────────────
+console.log('E2E fluidez — transiciones');
+await sleep(2500);   // que aterrice el push pendiente antes de sembrar
+cloudDoc = {};
+const hoy49 = dU(0);
+await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
+  deletedTxIds: [], deletedSnapDates: [], recurring: [], recurringLog: [], manualWallets: [], exchangeWallets: [], onchainWallets: [], manualHoldings: [],
+  snapshots: [], transactions: [ { id: 4901, createdAt: 4901, seq: 0, date: '${hoy49}', desc: 'cafe49', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 10, originalCurrency: 'USD', imported: false, updatedAt: 4901 } ],
+  snapshotsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
+await boot();
+await ev("showPage('summary',null)");
+await waitFor(async () => await ev("!!(window.Chart&&Chart.getChart(document.getElementById('chart-monthly')))"), 8000, 150, 'el grafico mensual').catch(() => false);
+check('Chart.js queda cargado tras el arranque', await ev("!!window.Chart"));
+await sleep(700);
+const np49 = "(function(){var c=[...document.querySelectorAll('.kpi-card')].find(function(x){return x.querySelector('.kpi-lbl').textContent==='Net Profit';});return c?c.querySelector('.kpi-val').textContent:'';})()";
+const npAntes49 = await ev(np49);
+await ev("Chart.getChart(document.getElementById('chart-monthly')).__m49=1");
+
+// Un gasto de 500: el KPI cuenta hasta el valor nuevo y el grafico se actualiza
+// en el mismo objeto (no se destruye y se vuelve a crear).
+await ev(`document.getElementById('tx-date').value='${hoy49}';document.getElementById('tx-desc').value='heladera49';document.getElementById('tx-amount').value='500';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+await sleep(130);
+const npMedio49 = await ev(np49);
+await sleep(700);
+const npFin49 = await ev(np49);
+check('el Net Profit termina en el valor nuevo', npFin49 === '-$510.00', `${npAntes49} → ${npFin49}`);
+check('y pasa por valores intermedios', npAntes49 === '-$10.00' && npMedio49 !== npAntes49 && npMedio49 !== npFin49 && /^-\$\d/.test(npMedio49), `${npAntes49} → ${npMedio49} → ${npFin49}`);
+const ch49 = JSON.parse(await ev("(function(){var c=Chart.getChart(document.getElementById('chart-monthly'));return JSON.stringify({mismo:!!(c&&c.__m49),out:c?c.data.datasets[1].data:[]});})()"));
+check('el grafico se actualiza sin recrearse', ch49.mismo, JSON.stringify(ch49));
+check('y con el dato nuevo', ch49.out.indexOf(510) >= 0, JSON.stringify(ch49.out));
+
+// Modal: entra animado y, al cerrarlo, deja de ser "un modal abierto" en el acto.
+await ev("showPage('transactions',null)"); await sleep(400);
+await ev("deleteTx(4901)");
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de borrar');
+const an49 = await ev("getComputedStyle(document.querySelector('.app-modal-overlay.open')).animationName+'|'+getComputedStyle(document.querySelector('.app-modal-overlay.open .app-modal')).animationName");
+check('el modal entra animado', an49 === 'ovIn|modalIn', an49);
+await ev("document.querySelector('.app-modal-overlay.open #_amc').click()");
+const sal49 = JSON.parse(await ev("JSON.stringify({abiertos:document.querySelectorAll('.app-modal-overlay').length,saliendo:document.querySelectorAll('.modal-out').length,ids:document.querySelectorAll('#_amc').length})"));
+check('al cancelar deja de contar como modal en el acto', sal49.abiertos === 0 && sal49.ids === 0, JSON.stringify(sal49));
+check('pero sale animado', sal49.saliendo === 1, JSON.stringify(sal49));
+await sleep(300);
+check('y despues deja el DOM', (await ev("document.querySelectorAll('.modal-out').length")) === 0);
+check('cancelar no borro nada', await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.id===4901;})"));
+
+// Fila nueva: se ilumina una vez para que se vea donde quedo.
+await ev("openTxForm()"); await sleep(300);
+await ev(`document.getElementById('tx-date').value='${hoy49}';document.getElementById('tx-desc').value='pan49';document.getElementById('tx-amount').value='3';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+await sleep(150);
+const nueva49 = await ev("(function(){var t=(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).find(function(x){return x.desc==='pan49';});var r=t&&document.querySelector('#tx-wrap tr[data-id=\"'+t.id+'\"]');return r?r.className:'';})()");
+check('la fila nueva se ilumina', /tx-flash/.test(nueva49), nueva49);
+
+// Borrar: el estado cambia en el acto; la fila sale animada y despues se va.
+await sleep(400);
+await ev("deleteTx(4901)");
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de borrar (2)');
+await ev("document.querySelector('.app-modal-overlay.open #_amo').click()");
+await sleep(40);
+const bor49 = JSON.parse(await ev("JSON.stringify({clase:(document.querySelector('#tx-wrap tr[data-id=\"4901\"]')||{}).className||'',enEstado:(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.id===4901;})})"));
+check('al borrar, el estado ya no la tiene', !bor49.enEstado, JSON.stringify(bor49));
+check('y la fila sale animada', /tx-leaving/.test(bor49.clase), JSON.stringify(bor49));
+await sleep(400);
+check('despues la fila desaparece', !(await ev("!!document.querySelector('#tx-wrap tr[data-id=\"4901\"]')")));
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);
