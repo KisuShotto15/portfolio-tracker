@@ -1306,7 +1306,10 @@ input::placeholder{color:var(--txt3)}
   .date-sep td{display:block;padding:18px 0 6px;border:none;background:none}
   /* .3s con la curva de hoja de iOS: con .13s, perder dos frames al arrancar era
      perder media animacion y el panel se veia saltar */
-  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transition-duration:.3s;transition-timing-function:cubic-bezier(.32,.72,0,1)}
+  /* Sin sombra difuminada en movil: una sombra de 30px agranda la capa y es de lo
+     mas caro de dibujar para la GPU la primera vez que el panel entra en pantalla.
+     Sobre fondo oscuro el borde superior ya separa el panel. */
+  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transition-duration:.3s;transition-timing-function:cubic-bezier(.32,.72,0,1);box-shadow:none}
   /* Sin el lock de <html> durante el slide, que el dedo sobre el fondo no lo scrollee */
   .tx-overlay{touch-action:none}
   .tx-form-panel .field-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}

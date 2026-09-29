@@ -2904,22 +2904,59 @@ check('y la fila sale animada', /tx-leaving/.test(bor49.clase), JSON.stringify(b
 await sleep(400);
 check('despues la fila desaparece', !(await ev("!!document.querySelector('#tx-wrap tr[data-id=\"4901\"]')")));
 
-// Movil: el sheet de nueva tx no bloquea el scroll (re-maqueta toda la pagina)
-// en el mismo tap que arranca el slide, sino al terminar; y el slide dura lo
-// suficiente como para que perder un par de frames no lo haga saltar.
+// Movil: el sheet de nueva tx no toca el overflow de <html> (re-maquetaba la
+// pagina entera al abrir y al cerrar), y aun asi el fondo no scrollea detras.
+// Hace falta una lista mas larga que la pantalla para que eso signifique algo.
+await sleep(2500);
+cloudDoc = {};
+await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');var b=Date.now()-86400000;d.transactions=[];
+  for(var i=0;i<60;i++){ d.transactions.push({id:b+i,createdAt:b+i,seq:i,date:'${hoy49}',desc:'mov'+i,wallet:'',type:'Debit',category:'Groceries',amountUSD:1,originalCurrency:'USD',imported:false,updatedAt:b+i}); }
+  d.transactionsUpdatedAt=Date.now(); localStorage.setItem('ft13',JSON.stringify(d));})()`);
+await boot();
 await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 2, mobile: true });
-await sleep(400);
+await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+await ev("showPage('transactions',null)"); await sleep(600);
+await ev("window.scrollTo(0,300)"); await sleep(200);
+check('la lista es mas larga que la pantalla', await ev("document.documentElement.scrollHeight>innerHeight+400&&scrollY>=250"), String(await ev("document.documentElement.scrollHeight+'/'+scrollY")));
+// Control: el mismo arrastre, con el panel cerrado, SI mueve la pagina. Sin esto
+// los chequeos de "no se movio" pasarian aunque el gesto no hiciera nada.
+const drag49 = async (x, y, dy) => {
+  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 10; i++) await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + dy * i / 10 }] });
+  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+};
+// El arrastre deja inercia: medir recien cuando el scroll se queda quieto.
+const quieto49 = async () => { let a = -1, b = await ev("scrollY"); for (let i = 0; i < 40 && a !== b; i++) { await sleep(120); a = b; b = await ev("scrollY"); } return b; };
+const yc49 = await quieto49();
+await drag49(195, 400, -250);
+await quieto49();
+check('control: sin panel, el arrastre si scrollea', (await ev("scrollY")) > yc49 + 50, `${yc49} → ${await ev("scrollY")}`);
+await ev("window.scrollTo(0,300)"); await quieto49();
 await ev("openTxForm()");
-const sh49 = JSON.parse(await ev("JSON.stringify({lock:document.documentElement.classList.contains('sheet-open'),dur:getComputedStyle(document.getElementById('tx-form-panel')).transitionDuration})"));
-check('el scroll no se bloquea durante el slide', !sh49.lock, JSON.stringify(sh49));
+const sh49 = JSON.parse(await ev("JSON.stringify({lock:document.documentElement.classList.contains('sheet-open'),dur:getComputedStyle(document.getElementById('tx-form-panel')).transitionDuration,sombra:getComputedStyle(document.getElementById('tx-form-panel')).boxShadow})"));
+check('abrir no bloquea el scroll de la pagina', !sh49.lock, JSON.stringify(sh49));
 check('el slide en movil dura .3s', sh49.dur === '0.3s', JSON.stringify(sh49));
+check('sin sombra difuminada en movil', sh49.sombra === 'none', JSON.stringify(sh49));
 await sleep(450);
-check('y se bloquea al terminar', await ev("document.documentElement.classList.contains('sheet-open')"));
+check('tampoco al terminar', !(await ev("document.documentElement.classList.contains('sheet-open')")));
+const y49 = await quieto49();
+// Arrastrar sobre el fondo oscuro (arriba del panel) y sobre el panel mismo.
+await drag49(195, 50, -250);
+await quieto49();
+check('arrastrar sobre el fondo no mueve la pagina', (await ev("scrollY")) === y49, `${y49} → ${await ev("scrollY")}`);
+check('el punto de arrastre cae sobre el panel', await ev("!!(document.elementFromPoint(195,600)||{closest:function(){}}).closest('#tx-form-panel')"));
+await drag49(195, 600, -250);
+await quieto49();
+check('ni arrastrar sobre el panel', (await ev("scrollY")) === y49, `${y49} → ${await ev("scrollY")}`);
+await ev("closeTxForm()"); await sleep(400); await quieto49();
+check('cerrar deja la pagina donde estaba', (await ev("scrollY")) === y49, `${y49} → ${await ev("scrollY")}`);
+// Las sugerencias de notas se arman al usarlas, no al abrir.
+await ev("openTxForm()"); await sleep(400);
+await ev("toggleNoteSuggest({stopPropagation:function(){},preventDefault:function(){}})"); await sleep(200);
+check('las sugerencias de notas siguen apareciendo', /mov\d/.test(await ev("(document.getElementById('note-suggest-pop')||{}).textContent||''")), String(await ev("(document.getElementById('note-suggest-pop')||{}).textContent||''")).slice(0, 80));
+await ev("toggleNoteSuggest({stopPropagation:function(){},preventDefault:function(){}})");
 await ev("closeTxForm()"); await sleep(400);
-check('cerrar desbloquea el scroll', !(await ev("document.documentElement.classList.contains('sheet-open')")));
-// Abrir y cerrar rapido: el lock diferido no puede quedar puesto con el sheet cerrado.
-await ev("openTxForm()"); await sleep(60); await ev("closeTxForm()"); await sleep(450);
-check('abrir y cerrar rapido no deja el scroll bloqueado', !(await ev("document.documentElement.classList.contains('sheet-open')")));
+await send('Emulation.setTouchEmulationEnabled', { enabled: false });
 
 // Modal con campo (Balance in Bs, snapshot): arriba, no centrado, para que el
 // teclado no tape los botones.

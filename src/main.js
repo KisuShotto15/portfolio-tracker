@@ -1697,6 +1697,14 @@ function populateNoteSuggestions(){
   var pinsLow=pins.map(function(d){ return d.toLowerCase(); });
   _noteSuggestions=pins.concat(freqList.filter(function(d){ return pinsLow.indexOf(d.toLowerCase())<0; }));
 }
+// Se arma cuando se usa (tocar Note o escribir), no al abrir el form: recorrer el
+// historial en el tap de "+" era trabajo que competia con la animacion.
+var _noteSugSig=null;
+function noteSuggestions(){
+  var sig=S.transactions.length+'|'+S.transactionsUpdatedAt+'|'+(S.notePinsUpdatedAt||'');
+  if(sig!==_noteSugSig){ populateNoteSuggestions(); _noteSugSig=sig; }
+  return _noteSuggestions;
+}
 function _noteRow(d){
   var pinned=(S.notePins||[]).some(function(x){ return x.toLowerCase()===d.toLowerCase(); });
   return '<div class="note-sug-row'+(pinned?' pinned':'')+'">'
@@ -1772,7 +1780,7 @@ window.updateNoteSuggest=function(){
   if(!pop||!inp) return;
   var q=(inp.value||'').trim().toLowerCase();
   if(!q){ _setNotePop(false); return; }
-  var m=_noteSuggestions.filter(function(d){ var l=d.toLowerCase(); return l.indexOf(q)>=0&&l!==q; }).slice(0,8);
+  var m=noteSuggestions().filter(function(d){ var l=d.toLowerCase(); return l.indexOf(q)>=0&&l!==q; }).slice(0,8);
   if(!m.length){ _setNotePop(false); return; }
   _renderNoteSuggest(m);
 };
@@ -1780,7 +1788,7 @@ window.toggleNoteSuggest=function(e){
   e.stopPropagation(); e.preventDefault();
   var pop=document.getElementById('note-suggest-pop'); if(!pop) return;
   if(pop.classList.contains('open')){ _setNotePop(false); return; }
-  _renderNoteSuggest(_noteSuggestions.slice(0,12));
+  _renderNoteSuggest(noteSuggestions().slice(0,12));
 };
 window.pickNoteSuggest=function(d){
   var inp=document.getElementById('tx-desc'); if(inp){ inp.value=d; autofillFromNote(); }
@@ -1805,15 +1813,13 @@ function openTxForm(){
   // then start the slide on the same tick — no deferred frames, so no perceived open delay.
   void panel.offsetHeight;
   panel.classList.add('open'); ov.classList.add('open');
-  // Despues del slide, no durante: bloquear el scroll (overflow:hidden en <html>)
-  // re-maqueta la pagina entera, y recorrer el historial para las sugerencias es
-  // trabajo que nadie mira en ese instante. Hechos en el mismo tap que arranca la
-  // animacion, en movil se comian los primeros frames y el panel "saltaba".
-  setTimeout(function(){
-    if(!panel.classList.contains('open')) return;
-    _lockScroll(true);
-    populateNoteSuggestions();
-  },320);
+  // Bloquear el scroll (overflow:hidden en <html>) re-maqueta la pagina entera. En
+  // movil no hace falta: el fondo no scrollea (touch-action en el overlay, overscroll
+  // contenido en el panel) y ese re-maquetado costaba frames al abrir y al cerrar.
+  // En web si (la rueda del mouse), y despues del slide, no durante.
+  if(window.matchMedia('(min-width:721px)').matches){
+    setTimeout(function(){ if(panel.classList.contains('open')) _lockScroll(true); },320);
+  }
   // Web: enfoca la descripcion para escribir de una vez. En movil NO: abriria el
   // teclado y taparia el form apenas se abre.
   if(!editingTxId && window.matchMedia('(min-width:721px)').matches){
@@ -5187,6 +5193,30 @@ function attachSheetDrag(panel, closeFn){
   panel.addEventListener('touchcancel',end);
 }
 attachSheetDrag(document.getElementById('tx-form-panel'), function(){ closeTxForm(); });
+// El sheet de nueva tx ya no bloquea el scroll de <html> en movil (costaba un
+// re-maquetado de toda la pagina al abrir y al cerrar). overscroll-behavior solo
+// contiene a un panel que de verdad scrollea: si el form entra entero en pantalla,
+// arrastrar sobre el lo pasaba a la pagina de atras. Esto corta el gesto cuando ni
+// el panel ni algo scrolleable adentro (la lista de reglas) puede moverse hacia ahi.
+function _canScrollY(el,dy){
+  if(el.scrollHeight<=el.clientHeight+1) return false;
+  var oy=getComputedStyle(el).overflowY; if(oy!=='auto'&&oy!=='scroll') return false;
+  return dy>0?el.scrollTop>0:el.scrollTop+el.clientHeight<el.scrollHeight-1;
+}
+(function(panel){
+  if(!panel) return;
+  var lastY=0;
+  panel.addEventListener('touchstart',function(e){ lastY=e.touches[0].clientY; },{passive:true});
+  panel.addEventListener('touchmove',function(e){
+    var y=e.touches[0].clientY, dy=y-lastY; lastY=y;
+    if(!dy) return;
+    for(var el=e.target; el&&el.nodeType===1; el=el.parentElement){
+      if(_canScrollY(el,dy)) return;
+      if(el===panel) break;
+    }
+    if(e.cancelable) e.preventDefault();
+  },{passive:false});
+})(document.getElementById('tx-form-panel'));
 attachSheetDrag(document.getElementById('wv-form-panel'), function(){ closeWalletForm(); });
 attachSheetDrag(document.getElementById('xw-form-panel'), function(){ closeExchangeForm(); });
 // Keep the open bottom-sheet above the on-screen keyboard so the whole form stays scrollable
