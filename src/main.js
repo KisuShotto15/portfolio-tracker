@@ -193,6 +193,7 @@ function reduceMotion(){ try{ return window.matchMedia('(prefers-reduced-motion:
 // Vibracion corta al confirmar una accion. Android si; iPhone (Safari) no expone
 // la API y ahi simplemente no pasa nada.
 function haptic(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||10); }catch(e){} }
+var HAPTIC_ERR=[12,70,12];
 // Cierra un modal con su salida animada. Quien llama ya resolvio su promesa: solo
 // lo visual espera. Pierde la clase y los ids en el acto, para que un modal que se
 // abre enseguida no choque con los del que se esta yendo.
@@ -700,7 +701,7 @@ function undoKeepNew(field,before,after,keyOf){
 }
 // afterPull re-renderiza la pagina activa: el undo ya no toca solo transacciones,
 // y el resto de las paginas se re-arma al entrar (showPage).
-function doUndo(){ if(!undoStack.length) return; var cur=_undoState(); _applyUndoState(undoStack.pop()); redoStack.push(cur); save(); afterPull(); updateUndoBtns(); persistUndo(); }
+function doUndo(){ if(!undoStack.length) return; haptic(); var cur=_undoState(); _applyUndoState(undoStack.pop()); redoStack.push(cur); save(); afterPull(); updateUndoBtns(); persistUndo(); }
 function doRedo(){ if(!redoStack.length) return; var cur=_undoState(); _applyUndoState(redoStack.pop()); undoStack.push(cur); save(); afterPull(); updateUndoBtns(); persistUndo(); }
 
 // ── El deshacer sobrevive a un reload ───────────────────────────────────────
@@ -1690,7 +1691,11 @@ function updateDateDisplay(){
 // ── Bottom-sheet history coordination (back button closes the sheet) ──
 function _sheetPush(name){ window._activeSheet=name; try{ history.pushState({sheet:name},''); }catch(e){} }
 function _sheetPop(){ if(window._activeSheet){ window._activeSheet=null; if(history.state&&history.state.sheet){ try{ history.back(); }catch(e){} } } }
-function txMsg(text,ok){ var el=document.getElementById('tx-form-msg'); if(el){ el.textContent=text||''; el.style.color=ok?'#5DCAA5':'#E24B4A'; } }
+function txMsg(text,ok){
+  var el=document.getElementById('tx-form-msg'); if(el){ el.textContent=text||''; el.style.color=ok?'#5DCAA5':'#E24B4A'; }
+  // Rechazo: doble toque, distinto del de exito, para sentirlo sin leer el mensaje.
+  if(text) haptic(ok?10:HAPTIC_ERR);
+}
 // Sugerencias de notas: tus descripciones mas frecuentes (ultimas ~400 txs).
 // datalist nativo (al teclear) + boton ▾ con dropdown propio (en mobile el
 // datalist no tiene flecha ni se abre sin escribir).
@@ -2043,7 +2048,7 @@ async function renameManualWallet(id){
   renderWallets(); populateWalletSelects(); renderTx(); renderSummary();
 }
 window.renameManualWallet=renameManualWallet;
-async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ snapshot(); w.balance=parseFloat(v.toFixed(2)); touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); }
+async function editManualWalletBal(id){ var w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; var isVes=w.currency==='VES'; var r=await appPrompt(isVes?'Balance in Bs':'New balance',escHtml(w.name)+(isVes?' · converted to $ automatically at the USDT rate':'')+' · accepts sums (1000+2500)',w.balance,{math:true}); if(!r) return; var v=evalMath(r.value); if(isNaN(v)) return; w=S.manualWallets.find(function(x){ return x.id===id; }); if(!w) return; /* re-fetch: un sync durante el await pudo reemplazar el array */ snapshot(); w.balance=parseFloat(v.toFixed(2)); touchItem('manualWallets',w); save(); renderWallets(); renderSummary(); haptic(); }
 // Fijar el balance de una wallet tracker SIN congelarlo: se guarda la base
 // equivalente (rebase) y las txs futuras siguen moviendo el balance solas.
 // (El viejo balanceOverride congelaba el valor y las txs nuevas no lo movian.)
@@ -4330,6 +4335,7 @@ window.refreshAllWallets=async function(){
   await Promise.allSettled(fns);
   save(); renderWallets(); renderSummary();
   if(btn){ btn.disabled=false; btn.textContent='↻ Refresh all'; }
+  haptic();   // solo este camino, el del boton: el refresco automatico no vibra
 };
 
 var WALLET_LOGOS={'Emily':'/logo-zelle.png?v=1','Zinli':'/logo-zinli.png?v=1','Provincial':'/logo-provincial.png?v=1','Roi':'/logo-roi.png?v=1','BDV':'/logo-bdv.png?v=1','Mercantil Panama':'/icon-merpa.png?v=2'};
@@ -5246,17 +5252,22 @@ if(!window._kbShortcuts){
 // Swipe-down to dismiss the bottom-sheet (only when scrolled to the top of the panel)
 function attachSheetDrag(panel, closeFn){
   if(!panel||panel._dragBound) return; panel._dragBound=true;
-  var startY=0, lastY=0, dragging=false;
+  var startY=0, lastY=0, dragging=false, pasado=false, CIERRA=120;
   panel.addEventListener('touchstart',function(e){
     var t=e.target;
     if(panel.scrollTop>0 || (t.closest&&t.closest('input,select,textarea,button,.preset-chip,.date-field,.receipt-attach'))){ dragging=false; return; }
-    startY=lastY=e.touches[0].clientY; dragging=true;
+    startY=lastY=e.touches[0].clientY; dragging=true; pasado=false;
     panel.style.transition='none';
   },{passive:true});
   panel.addEventListener('touchmove',function(e){
     if(!dragging) return;
     lastY=e.touches[0].clientY;
     var dy=lastY-startY;
+    // Al cruzar el punto en que soltar cierra, un toque: el mismo aviso que al
+    // deslizar una fila. Solo al entrar en la zona, no al volver.
+    var p=dy>CIERRA&&panel.scrollTop<=0;
+    if(p&&!pasado) haptic(8);
+    pasado=p;
     if(dy<=0 || panel.scrollTop>0){ panel.style.transform=''; return; }
     panel.style.transform='translate3d(-50%,'+dy+'px,0)';
   },{passive:true});
@@ -5265,7 +5276,7 @@ function attachSheetDrag(panel, closeFn){
     var dy=lastY-startY;
     panel.style.transition='';
     panel.style.transform='';
-    if(dy>120) closeFn();
+    if(dy>CIERRA) closeFn();
   }
   panel.addEventListener('touchend',end);
   panel.addEventListener('touchcancel',end);

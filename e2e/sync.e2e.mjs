@@ -2915,7 +2915,8 @@ await sleep(2500);
 cloudDoc = {};
 await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');var b=Date.now()-86400000;d.transactions=[];
   for(var i=0;i<60;i++){ d.transactions.push({id:b+i,createdAt:b+i,seq:i,date:'${hoy49}',desc:'mov'+i,wallet:'',type:'Debit',category:'Groceries',amountUSD:1,originalCurrency:'USD',imported:false,updatedAt:b+i}); }
-  d.transactionsUpdatedAt=Date.now(); localStorage.setItem('ft13',JSON.stringify(d));})()`);
+  d.transactionsUpdatedAt=Date.now(); d.manualWallets=[{id:77,name:'Caja49',balance:10,updatedAt:Date.now()}]; d.manualWalletsUpdatedAt=Date.now();
+  localStorage.setItem('ft13',JSON.stringify(d));})()`);
 await boot();
 await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 2, mobile: true });
 await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
@@ -3032,6 +3033,28 @@ const yv49 = await ev("scrollY");
 await drag49(f49.x, f49.y - 100, 200); await quieto49();
 check('arrastrar vertical sobre una fila sigue scrolleando', (await ev("scrollY")) < yv49 - 50, `${yv49} → ${await ev("scrollY")}`);
 check('y no mueve la fila de costado', (await ev("document.querySelectorAll('#tx-wrap tr.tx-row.sw').length")) === 0 && await hayTx49('mov5'));
+
+// Mas vibraciones: error al guardar (patron distinto), deshacer, saldo de wallet,
+// refrescar a mano y el umbral de cerrar el panel arrastrando.
+const vib49 = async () => JSON.parse(await ev("JSON.stringify(window.__vib)"));
+await ev("window.__vib=[]"); await ev("openTxForm()"); await sleep(350);
+await ev("document.getElementById('tx-desc').value='';document.getElementById('tx-amount').value='';addTxOrUpdate()"); await sleep(100);
+check('un rechazo al guardar vibra con el patron de error', JSON.stringify(await vib49()) === '[[12,70,12]]', JSON.stringify(await vib49()));
+await ev("closeTxForm()"); await sleep(400);
+await ev("window.__vib=[]"); await ev("doUndo()"); await sleep(200);
+check('deshacer vibra', (await vib49()).length === 1, JSON.stringify(await vib49()));
+await ev("window.__vib=[]"); await ev("editManualWalletBal(77)");
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el modal de saldo');
+await ev("(function(){var o=document.querySelector('.app-modal-overlay.open');o.querySelector('#_ami').value='25';o.querySelector('#_amo').click();})()"); await sleep(300);
+check('guardar el saldo de una wallet vibra', (await vib49()).length === 1 && await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').manualWallets||[]).some(function(w){return w.id===77&&w.balance===25;})"), JSON.stringify(await vib49()));
+await ev("window.__vib=[]"); await ev("refreshAllWallets()"); await sleep(400);
+check('refrescar a mano vibra al terminar', (await vib49()).length === 1, JSON.stringify(await vib49()));
+await ev("window.scrollTo(0,0)"); await quieto49();
+await ev("window.__vib=[]"); await ev("openTxForm()"); await sleep(450);
+const tope49 = JSON.parse(await ev("(function(){var r=document.getElementById('tx-form-panel').getBoundingClientRect();return JSON.stringify({x:Math.round(r.left+r.width/2),y:Math.round(r.top+12)});})()"));
+await drag49(tope49.x, tope49.y, 180); await sleep(450);
+check('arrastrar el panel mas alla del umbral vibra una vez', JSON.stringify(await vib49()) === '[8]', JSON.stringify(await vib49()));
+check('y al soltar se cierra', !(await ev("document.getElementById('tx-form-panel').classList.contains('open')")));
 await send('Emulation.setTouchEmulationEnabled', { enabled: false });
 
 // Modal con campo (Balance in Bs, snapshot): arriba, no centrado, para que el
