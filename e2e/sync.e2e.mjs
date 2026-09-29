@@ -2897,6 +2897,34 @@ check('y la fila sale animada', /tx-leaving/.test(bor49.clase), JSON.stringify(b
 await sleep(400);
 check('despues la fila desaparece', !(await ev("!!document.querySelector('#tx-wrap tr[data-id=\"4901\"]')")));
 
+// Movil: el sheet de nueva tx no bloquea el scroll (re-maqueta toda la pagina)
+// en el mismo tap que arranca el slide, sino al terminar; y el slide dura lo
+// suficiente como para que perder un par de frames no lo haga saltar.
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 2, mobile: true });
+await sleep(400);
+await ev("openTxForm()");
+const sh49 = JSON.parse(await ev("JSON.stringify({lock:document.documentElement.classList.contains('sheet-open'),dur:getComputedStyle(document.getElementById('tx-form-panel')).transitionDuration})"));
+check('el scroll no se bloquea durante el slide', !sh49.lock, JSON.stringify(sh49));
+check('el slide en movil dura .3s', sh49.dur === '0.3s', JSON.stringify(sh49));
+await sleep(450);
+check('y se bloquea al terminar', await ev("document.documentElement.classList.contains('sheet-open')"));
+await ev("closeTxForm()"); await sleep(400);
+check('cerrar desbloquea el scroll', !(await ev("document.documentElement.classList.contains('sheet-open')")));
+// Abrir y cerrar rapido: el lock diferido no puede quedar puesto con el sheet cerrado.
+await ev("openTxForm()"); await sleep(60); await ev("closeTxForm()"); await sleep(450);
+check('abrir y cerrar rapido no deja el scroll bloqueado', !(await ev("document.documentElement.classList.contains('sheet-open')")));
+
+// Modal con campo (Balance in Bs, snapshot): arriba, no centrado, para que el
+// teclado no tape los botones.
+await ev("recordSnapshot()");
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el modal del snapshot (movil)');
+await sleep(300);
+const pos49 = JSON.parse(await ev("(function(){var r=document.querySelector('.app-modal-overlay.open .app-modal').getBoundingClientRect();return JSON.stringify({top:Math.round(r.top),bot:Math.round(r.bottom),vh:innerHeight});})()"));
+check('en movil el modal va arriba', pos49.top < pos49.vh * 0.2, JSON.stringify(pos49));
+check('y termina antes de donde abre el teclado', pos49.bot < pos49.vh * 0.58, JSON.stringify(pos49));
+await ev("document.querySelector('.app-modal-overlay.open #_amc').click()"); await sleep(300);
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
+
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');
 process.exit(failures.length ? 1 : 0);

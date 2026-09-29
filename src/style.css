@@ -1304,7 +1304,11 @@ input::placeholder{color:var(--txt3)}
   .td-orig-m{display:block}
   .date-sep{display:block}
   .date-sep td{display:block;padding:18px 0 6px;border:none;background:none}
-  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transition-duration:.13s;transition-timing-function:cubic-bezier(.22,1,.36,1)}
+  /* .3s con la curva de hoja de iOS: con .13s, perder dos frames al arrancar era
+     perder media animacion y el panel se veia saltar */
+  .tx-form-panel{padding-bottom:80px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transition-duration:.3s;transition-timing-function:cubic-bezier(.32,.72,0,1)}
+  /* Sin el lock de <html> durante el slide, que el dedo sobre el fondo no lo scrollee */
+  .tx-overlay{touch-action:none}
   .tx-form-panel .field-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   /* Note full-width on top; Date + Wallet share one row to save space */
   .tx-form-panel .field-row .field[style*="span 2"]{order:-1}
@@ -1464,6 +1468,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   .page-in .dash-grid > div:nth-child(n),.page-in .bdg-cat:nth-child(n){animation-delay:0s}
   .page-in .hb-fill,.page-in .goal-bar i,.page-in .bdg-pf,.page-in .hld-bar i{animation-duration:.4s}
   .app-modal{backdrop-filter:none;-webkit-backdrop-filter:none}
+  /* Arriba y no centrado: el teclado no achica el viewport de layout, asi que un
+     modal centrado con un campo (Balance in Bs) quedaba con los botones debajo */
+  .app-modal-overlay:not(.mc-ov),.modal-out:not(.mc-ov){align-items:flex-start;padding-top:calc(env(safe-area-inset-top) + 9vh)}
 }
 
 /* ───────────────── Custom <select> dropdown (all selects) ─────────────────

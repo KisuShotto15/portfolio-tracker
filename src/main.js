@@ -1781,8 +1781,6 @@ document.addEventListener('click',function(e){
 });
 function _lockScroll(on){ document.documentElement.classList.toggle('sheet-open',!!on); }
 function openTxForm(){
-  _lockScroll(true);
-  populateNoteSuggestions();
   renderTxRecList();
   txMsg('');
   // Si el reset diferido del cierre anterior sigue pendiente, ejecutarlo ya
@@ -1796,6 +1794,15 @@ function openTxForm(){
   // then start the slide on the same tick — no deferred frames, so no perceived open delay.
   void panel.offsetHeight;
   panel.classList.add('open'); ov.classList.add('open');
+  // Despues del slide, no durante: bloquear el scroll (overflow:hidden en <html>)
+  // re-maqueta la pagina entera, y recorrer el historial para las sugerencias es
+  // trabajo que nadie mira en ese instante. Hechos en el mismo tap que arranca la
+  // animacion, en movil se comian los primeros frames y el panel "saltaba".
+  setTimeout(function(){
+    if(!panel.classList.contains('open')) return;
+    _lockScroll(true);
+    populateNoteSuggestions();
+  },320);
   // Web: enfoca la descripcion para escribir de una vez. En movil NO: abriria el
   // teclado y taparia el form apenas se abre.
   if(!editingTxId && window.matchMedia('(min-width:721px)').matches){
