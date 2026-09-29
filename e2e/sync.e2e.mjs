@@ -2185,6 +2185,10 @@ const legacy38 = {
   bybitBalance: null, bybitUpdated: null, okxBalance: null, okxUpdated: null,
   trezorBalance: 0, trezorUpdated: '2:31 AM', trezorAddress: '', trezorAddressUpdatedAt: null,
 };
+// Que aterrice el push del escenario 37 antes de reemplazar la nube: si llega
+// despues, el merge le suma sus exchanges y la wallet de este escenario deja de
+// ser la unica.
+await sleep(2500);
 cloudDoc = Object.assign({ transactions: [], deletedTxIds: [], snapshots: [], manualWallets: [], recurring: [],
   exchangeWallets: [{ id: 901, name: 'Binance', type: 'binance', balance: 500, fetchedAt: Date.now(), updatedAt: Date.now() }],
   exchangeWalletsUpdatedAt: Date.now(), exchangeMigrated: 1 }, legacy38);
@@ -2193,7 +2197,7 @@ await boot();
 const sigue38 = async () => JSON.parse(await ev(`(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify(${JSON.stringify(Object.keys(legacy38))}.filter(function(k){return k in S;}));})()`));
 check('el dispositivo no se queda con ningun campo legacy', JSON.stringify(await sigue38()) === '[]', JSON.stringify(await sigue38()));
 check('y la wallet de exchange de verdad sigue entera',
-  (await ev("(function(){var w=(JSON.parse(localStorage.getItem('ft13')||'{}').exchangeWallets||[])[0];return w?w.name+':'+w.balance:null;})()")) === 'Binance:500');
+  (await ev("(function(){var w=(JSON.parse(localStorage.getItem('ft13')||'{}').exchangeWallets||[]).find(function(x){return x.id===901;});return w?w.name+':'+w.balance:null;})()")) === 'Binance:500');
 
 // Un push los poda tambien de la nube: si no, el proximo pull se los devuelve.
 await ev('openTxForm()'); await sleep(250);
@@ -2956,6 +2960,42 @@ await ev("toggleNoteSuggest({stopPropagation:function(){},preventDefault:functio
 check('las sugerencias de notas siguen apareciendo', /mov\d/.test(await ev("(document.getElementById('note-suggest-pop')||{}).textContent||''")), String(await ev("(document.getElementById('note-suggest-pop')||{}).textContent||''")).slice(0, 80));
 await ev("toggleNoteSuggest({stopPropagation:function(){},preventDefault:function(){}})");
 await ev("closeTxForm()"); await sleep(400);
+
+// Los otros sheets (wallet, exchange) siguen el mismo camino que el de nueva tx.
+for (const [abrir, cerrar, panelId] of [['openWalletForm()', 'closeWalletForm()', 'wv-form-panel'], ['openExchangeForm()', 'closeExchangeForm()', 'xw-form-panel']]) {
+  await ev("window.scrollTo(0,300)"); await quieto49();
+  await ev(abrir); await sleep(450);
+  check(`${panelId}: no bloquea el scroll de la pagina`, !(await ev("document.documentElement.classList.contains('sheet-open')")));
+  const yw = await quieto49();
+  const pr = JSON.parse(await ev(`(function(){var r=document.getElementById('${panelId}').getBoundingClientRect();return JSON.stringify({x:Math.round(r.left+r.width/2),y:Math.round(r.top+40)});})()`));
+  await drag49(pr.x, pr.y, -200); await quieto49();
+  check(`${panelId}: arrastrar sobre el panel no mueve la pagina`, (await ev("scrollY")) === yw, `${yw} → ${await ev("scrollY")}`);
+  await ev(cerrar); await sleep(400);
+}
+
+// Cada tab recuerda su scroll: el Dashboard no aparece a la altura de la lista.
+await ev("window.scrollTo(0,420)"); await quieto49();
+const yTx49 = await ev("scrollY");
+await ev("showPage('summary',null)"); await sleep(300);
+check('una tab nueva arranca arriba', (await ev("scrollY")) === 0, String(await ev("scrollY")));
+await ev("showPage('transactions',null)"); await sleep(300);
+check('volver a una tab la deja donde estaba', Math.abs((await ev("scrollY")) - yTx49) <= 1, `${yTx49} → ${await ev("scrollY")}`);
+
+// Vibracion corta al guardar y al borrar.
+await ev("window.__vib=[];Object.defineProperty(navigator,'vibrate',{configurable:true,value:function(ms){window.__vib.push(ms);return true;}})");
+await ev("openTxForm()"); await sleep(350);
+await ev(`document.getElementById('tx-date').value='${hoy49}';document.getElementById('tx-desc').value='vibra49';document.getElementById('tx-amount').value='2';document.getElementById('tx-cat').value='Groceries';addTxOrUpdate()`);
+await sleep(300);
+check('guardar una tx vibra', (await ev("window.__vib.length")) === 1, String(await ev("JSON.stringify(window.__vib)")));
+const idVib49 = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).filter(function(t){return t.desc==='vibra49';})[0].id");
+await ev(`deleteTx(${idVib49})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de borrar (vibra)');
+await ev("document.querySelector('.app-modal-overlay.open #_amc').click()"); await sleep(200);
+check('cancelar no vibra', (await ev("window.__vib.length")) === 1, String(await ev("JSON.stringify(window.__vib)")));
+await ev(`deleteTx(${idVib49})`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de borrar (vibra 2)');
+await ev("document.querySelector('.app-modal-overlay.open #_amo').click()"); await sleep(300);
+check('borrar vibra', (await ev("window.__vib.length")) === 2, String(await ev("JSON.stringify(window.__vib)")));
 await send('Emulation.setTouchEmulationEnabled', { enabled: false });
 
 // Modal con campo (Balance in Bs, snapshot): arriba, no centrado, para que el

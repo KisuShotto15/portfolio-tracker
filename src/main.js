@@ -185,10 +185,14 @@ function ensureChart(){
   return _chartPromise;
 }
 var _mChartSig=null, _eChartSig=null;           // chart data signatures → skip recreate when unchanged
+var _tabScroll={};                               // scroll de cada tab (showPage)
 // Transicion de los graficos al cambiar datos (update, no recreate).
 var CHART_ANIM={duration:450,easing:'easeOutQuart'};
 
 function reduceMotion(){ try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } }
+// Vibracion corta al confirmar una accion. Android si; iPhone (Safari) no expone
+// la API y ahi simplemente no pasa nada.
+function haptic(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||10); }catch(e){} }
 // Cierra un modal con su salida animada. Quien llama ya resolvio su promesa: solo
 // lo visual espera. Pierde la clase y los ids en el acto, para que un modal que se
 // abre enseguida no choque con los del que se esta yendo.
@@ -1583,6 +1587,7 @@ async function addTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   _txFlashId=_now;
   save(); renderTx(); renderSummary();
+  haptic();
   closeTxForm();
   showTxToast();
 }
@@ -1618,6 +1623,7 @@ async function deleteTx(id){
   S.deletedTxIds.push({id:id,ts:stamp()});
   S.transactions=S.transactions.filter(function(x){ return x.id!==id; }); // por id: un sync durante el await no invalida el filtro
   S.transactionsUpdatedAt=stamp(); save(); renderSummary();
+  haptic();
   // El estado ya cambio y se guardo; solo la lista espera a que la fila salga.
   var fila=document.querySelector('#tx-wrap tr[data-id="'+id+'"]');
   if(!fila||reduceMotion()||document.hidden){ renderTx(); return; }
@@ -1799,6 +1805,14 @@ document.addEventListener('click',function(e){
   if(pop&&pop.classList.contains('open')&&!(e.target.closest&&e.target.closest('.note-field-wrap'))) _setNotePop(false);
 });
 function _lockScroll(on){ document.documentElement.classList.toggle('sheet-open',!!on); }
+// Bloquear el scroll (overflow:hidden en <html>) re-maqueta la pagina entera. En
+// movil no hace falta: el fondo no scrollea (touch-action en el overlay y
+// _containSheetTouch en el panel) y ese re-maquetado costaba frames al abrir y al
+// cerrar. En web si (la rueda del mouse), y despues del slide, no durante.
+function _lockAfterSlide(panel){
+  if(!window.matchMedia('(min-width:721px)').matches) return;
+  setTimeout(function(){ if(panel.classList.contains('open')) _lockScroll(true); },320);
+}
 function openTxForm(){
   renderTxRecList();
   txMsg('');
@@ -1813,13 +1827,7 @@ function openTxForm(){
   // then start the slide on the same tick — no deferred frames, so no perceived open delay.
   void panel.offsetHeight;
   panel.classList.add('open'); ov.classList.add('open');
-  // Bloquear el scroll (overflow:hidden en <html>) re-maqueta la pagina entera. En
-  // movil no hace falta: el fondo no scrollea (touch-action en el overlay, overscroll
-  // contenido en el panel) y ese re-maquetado costaba frames al abrir y al cerrar.
-  // En web si (la rueda del mouse), y despues del slide, no durante.
-  if(window.matchMedia('(min-width:721px)').matches){
-    setTimeout(function(){ if(panel.classList.contains('open')) _lockScroll(true); },320);
-  }
+  _lockAfterSlide(panel);
   // Web: enfoca la descripcion para escribir de una vez. En movil NO: abriria el
   // teclado y taparia el form apenas se abre.
   if(!editingTxId && window.matchMedia('(min-width:721px)').matches){
@@ -1867,11 +1875,11 @@ function closeTxForm(fromPop){
   if(fromPop!==true) _sheetPop();
 }
 function openWalletForm(type){
-  _lockScroll(true);
   if(type){ document.getElementById('wm-type').value=type; toggleWmBalField(); }
   var panel=document.getElementById('wv-form-panel'), ov=document.getElementById('wv-overlay');
   void panel.offsetHeight;
   panel.classList.add('open'); ov.classList.add('open');
+  _lockAfterSlide(panel);
   _sheetPush('wallet');
 }
 function closeWalletForm(fromPop){
@@ -1903,13 +1911,13 @@ function toggleWmBalField(){
   if(cy) cy.style.display=(t==='lent'||t==='debt')?'flex':'none';
 }
 function openExchangeForm(){
-  _lockScroll(true);
   var panel=document.getElementById('xw-form-panel'), ov=document.getElementById('xw-overlay');
   if(!panel) return;
   toggleXwFields();
   var st=document.getElementById('xw-status'); if(st) st.textContent='';
   void panel.offsetHeight;
   panel.classList.add('open'); ov.classList.add('open');
+  _lockAfterSlide(panel);
   _sheetPush('exchange');
 }
 function closeExchangeForm(fromPop){
@@ -1957,6 +1965,7 @@ function updateTx(){
   document.getElementById('tx-desc').value=''; document.getElementById('tx-amount').value='';
   if(t) _txFlashId=t.id;
   cancelEditTx(); save(); renderTx(); renderSummary();
+  haptic();
 }
 // Borrar una wallet NO borra sus transacciones: quedan apuntando a un nombre que
 // ya no existe y dejan de sumar a ningun saldo, asi que el patrimonio se mueve en
@@ -3628,6 +3637,7 @@ async function recordSnapshot(){
   // dispositivos en vez de que la lista entera de uno pise la del otro.
   nuevo.updatedAt=S.snapshotsUpdatedAt=stamp();
   save(); renderEquityChart();
+  haptic();
 }
 
 // Income BRUTO del periodo (prevSnap, snap]. La variacion del patrimonio es NETA
@@ -4829,6 +4839,9 @@ function showPage(id,btn,arg){
   // que a diferencia de un tab normal necesitamos recordar de donde se vino.
   var prevActive=document.querySelector('.page.active');
   var prevId=prevActive?prevActive.id.replace('page-',''):null;
+  // Cada tab recuerda su scroll: antes la pagina quedaba a la altura de la tab
+  // anterior (bajabas en Transactions y el Dashboard aparecia por la mitad).
+  if(prevId&&prevId!==id) _tabScroll[prevId]=window.scrollY;
   // Cambiar de tab cierra cualquier bottom-sheet abierto (en mobile quedaban
   // flotando sobre la tab nueva).
   try{
@@ -4878,6 +4891,8 @@ function showPage(id,btn,arg){
   else if(id==='settings'){ var ae=document.getElementById('acct-email'); if(ae) ae.textContent=sbGet('sb_email')||''; renderPasskeys(); }
   var sb=document.querySelector('.sb'); if(sb) sb.classList.remove('open');
   document.body.classList.remove('nav-open');
+  // Despues del render: la altura de la pagina nueva ya existe para volver ahi.
+  if(prevId!==id) window.scrollTo({top:_tabScroll[id]||0,behavior:'instant'});
 }
 window._historyView='snapshots';
 function renderHistory(view){
@@ -5193,17 +5208,18 @@ function attachSheetDrag(panel, closeFn){
   panel.addEventListener('touchcancel',end);
 }
 attachSheetDrag(document.getElementById('tx-form-panel'), function(){ closeTxForm(); });
-// El sheet de nueva tx ya no bloquea el scroll de <html> en movil (costaba un
-// re-maquetado de toda la pagina al abrir y al cerrar). overscroll-behavior solo
-// contiene a un panel que de verdad scrollea: si el form entra entero en pantalla,
-// arrastrar sobre el lo pasaba a la pagina de atras. Esto corta el gesto cuando ni
-// el panel ni algo scrolleable adentro (la lista de reglas) puede moverse hacia ahi.
+// Los sheets ya no bloquean el scroll de <html> en movil (costaba un re-maquetado
+// de toda la pagina al abrir y al cerrar). overscroll-behavior solo contiene a un
+// panel que de verdad scrollea: si el form entra entero en pantalla, arrastrar
+// sobre el lo pasaba a la pagina de atras. Esto corta el gesto cuando ni el panel
+// ni algo scrolleable adentro (la lista de reglas) puede moverse hacia ahi.
 function _canScrollY(el,dy){
   if(el.scrollHeight<=el.clientHeight+1) return false;
   var oy=getComputedStyle(el).overflowY; if(oy!=='auto'&&oy!=='scroll') return false;
   return dy>0?el.scrollTop>0:el.scrollTop+el.clientHeight<el.scrollHeight-1;
 }
-(function(panel){
+['tx-form-panel','wv-form-panel','xw-form-panel'].forEach(function(id){ _containSheetTouch(document.getElementById(id)); });
+function _containSheetTouch(panel){
   if(!panel) return;
   var lastY=0;
   panel.addEventListener('touchstart',function(e){ lastY=e.touches[0].clientY; },{passive:true});
@@ -5216,7 +5232,7 @@ function _canScrollY(el,dy){
     }
     if(e.cancelable) e.preventDefault();
   },{passive:false});
-})(document.getElementById('tx-form-panel'));
+}
 attachSheetDrag(document.getElementById('wv-form-panel'), function(){ closeWalletForm(); });
 attachSheetDrag(document.getElementById('xw-form-panel'), function(){ closeExchangeForm(); });
 // Keep the open bottom-sheet above the on-screen keyboard so the whole form stays scrollable
