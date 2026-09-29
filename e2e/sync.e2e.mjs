@@ -2996,6 +2996,42 @@ await ev(`deleteTx(${idVib49})`);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de borrar (vibra 2)');
 await ev("document.querySelector('.app-modal-overlay.open #_amo').click()"); await sleep(300);
 check('borrar vibra', (await ev("window.__vib.length")) === 2, String(await ev("JSON.stringify(window.__vib)")));
+
+// Deslizar una fila: corto no hace nada; largo a la izquierda borra (con
+// Deshacer); largo a la derecha abre la edicion; vertical sigue scrolleando.
+const swipe49 = async (x, y, dx) => {
+  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 12; i++) await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + dx * i / 12, y }] });
+  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+};
+const hayTx49 = (desc) => ev(`(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).some(function(t){return t.desc==='${desc}';})`);
+const filaDe49 = async (desc) => JSON.parse(await ev(`(function(){var t=(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).find(function(x){return x.desc==='${desc}';});var r=t&&document.querySelector('#tx-wrap tr[data-id="'+t.id+'"]');if(!r)return 'null';r.scrollIntoView({block:'center'});var b=r.getBoundingClientRect();return JSON.stringify({x:Math.round(b.left+b.width/2),y:Math.round(b.top+b.height/2)});})()`));
+await ev("window.scrollTo(0,0)"); await quieto49();
+
+let f49 = await filaDe49('mov3'); await quieto49(); f49 = await filaDe49('mov3');
+await swipe49(f49.x, f49.y, -40); await sleep(400);
+check('un deslizamiento corto no borra', await hayTx49('mov3'));
+check('y la fila vuelve a su lugar', (await ev("(function(){var r=document.querySelector('#tx-wrap tr.tx-row.sw');return r?r.style.transform:'';})()")) === '');
+
+await swipe49(f49.x, f49.y, -170); await sleep(600);
+check('deslizar largo a la izquierda borra', !(await hayTx49('mov3')));
+check('sin pedir confirmacion', (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) === 0);
+check('y ofrece deshacer', /Transaction deleted/.test(await ev("(document.querySelector('#tx-toast.show')||{}).textContent||''")));
+await ev("document.querySelector('#tx-toast button').click()"); await sleep(400);
+check('deshacer la devuelve', await hayTx49('mov3'));
+
+f49 = await filaDe49('mov4'); await quieto49(); f49 = await filaDe49('mov4');
+await swipe49(f49.x, f49.y, 170); await sleep(600);
+check('deslizar largo a la derecha abre la edicion', await ev("document.getElementById('tx-form-panel').classList.contains('open')&&document.getElementById('tx-desc').value==='mov4'"), await ev("document.getElementById('tx-desc').value"));
+check('editar no borra nada', await hayTx49('mov4'));
+await ev("closeTxForm()"); await sleep(400);
+
+f49 = await filaDe49('mov5'); await quieto49(); f49 = await filaDe49('mov5');
+const yv49 = await ev("scrollY");
+// Hacia abajo (la pagina sube): mov5 queda cerca del final y hacia arriba no hay recorrido.
+await drag49(f49.x, f49.y - 100, 200); await quieto49();
+check('arrastrar vertical sobre una fila sigue scrolleando', (await ev("scrollY")) < yv49 - 50, `${yv49} → ${await ev("scrollY")}`);
+check('y no mueve la fila de costado', (await ev("document.querySelectorAll('#tx-wrap tr.tx-row.sw').length")) === 0 && await hayTx49('mov5'));
 await send('Emulation.setTouchEmulationEnabled', { enabled: false });
 
 // Modal con campo (Balance in Bs, snapshot): arriba, no centrado, para que el

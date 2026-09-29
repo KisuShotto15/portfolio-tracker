@@ -1618,6 +1618,12 @@ async function deleteTx(id){
   var amt=(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD);
   var ok=await appConfirm('Delete transaction?',escHtml(t.desc)+' <span style="color:'+(t.type==='Credit'?'#5DCAA5':'#E24B4A')+'">'+amt+'</span>','Delete');
   if(!ok) return;
+  deleteTxNow(id,true);
+}
+// Sin confirmacion: la usa tambien el deslizar-para-borrar, que ofrece Deshacer
+// en su lugar. animar=false cuando la fila ya salio de pantalla con el gesto.
+function deleteTxNow(id,animar){
+  if(!S.transactions.some(function(x){ return x.id===id; })) return;
   snapshot(); // despues del confirm: cancelar no debe ensuciar el undo stack
   if(!S.deletedTxIds) S.deletedTxIds=[];
   S.deletedTxIds.push({id:id,ts:stamp()});
@@ -1626,7 +1632,7 @@ async function deleteTx(id){
   haptic();
   // El estado ya cambio y se guardo; solo la lista espera a que la fila salga.
   var fila=document.querySelector('#tx-wrap tr[data-id="'+id+'"]');
-  if(!fila||reduceMotion()||document.hidden){ renderTx(); return; }
+  if(!animar||!fila||reduceMotion()||document.hidden){ renderTx(); return; }
   fila.classList.add('tx-leaving');
   setTimeout(renderTx,180);
 }
@@ -5048,6 +5054,63 @@ if(!window._txSelListener){
   window._txSelListener=true;
   document.addEventListener('click',function(e){ if(!e.target.closest('.tx-row')) document.querySelectorAll('.tx-sel').forEach(function(r){ r.classList.remove('tx-sel'); }); });
 }
+// Deslizar una fila (solo tactil): a la izquierda borra, a la derecha edita.
+// touch-action:pan-y en la fila deja el scroll vertical al navegador (si el gesto
+// arranca vertical, el navegador cancela el puntero y aca no pasa nada), asi que
+// los listeners son pasivos y no frenan el scroll de la lista.
+// Borrar asi no pregunta: ofrece Deshacer, que es lo que resuelve un accidente.
+var SWIPE_ON=90;
+(function(wrap){
+  if(!wrap) return;
+  var row=null, x0=0, y0=0, dx=0, modo=null, pid=null;
+  wrap.addEventListener('pointerdown',function(e){
+    if(e.pointerType!=='touch'||row) return;
+    var r=e.target.closest('tr.tx-row'); if(!r||!r.dataset.id) return;
+    row=r; x0=e.clientX; y0=e.clientY; dx=0; modo=null; pid=e.pointerId;
+  },{passive:true});
+  wrap.addEventListener('pointermove',function(e){
+    if(!row||e.pointerId!==pid) return;
+    var mx=e.clientX-x0, my=e.clientY-y0;
+    if(!modo){
+      if(Math.abs(mx)<10&&Math.abs(my)<10) return;
+      modo=Math.abs(mx)>Math.abs(my)*1.3?'h':'v';
+      if(modo==='v'){ row=null; return; }
+      row.classList.add('sw');
+    }
+    dx=mx;
+    var on=Math.abs(dx)>=SWIPE_ON, del=dx<0;
+    row.classList.toggle('sw-del',del); row.classList.toggle('sw-edit',!del);
+    row.style.transform='translate3d('+dx+'px,0,0)';
+    // La sombra, corrida lo mismo que la fila pero al reves, pinta justo el hueco
+    // que deja: rojo para borrar, violeta para editar; tenue hasta pasar el umbral.
+    row.style.boxShadow=(-dx)+'px 0 0 0 rgba('+(del?'226,75,74':'155,112,240')+','+(on?1:.35)+')';
+    if(on!==!!row._on){ row._on=on; if(on) haptic(8); }
+  },{passive:true});
+  function fin(e){
+    if(!row||e.pointerId!==pid) return;
+    var r=row; row=null;
+    if(modo!=='h') return;
+    r._swiped=Date.now();
+    var id=+r.dataset.id, suelto=e.type==='pointerup';
+    r.classList.add('sw-back');
+    if(suelto&&dx<=-SWIPE_ON){
+      r.style.transform='translate3d(-100%,0,0)';
+      r.style.boxShadow=r.offsetWidth+'px 0 0 0 rgba(226,75,74,1)';
+      setTimeout(function(){ deleteTxNow(id,false); showUndoToast('Transaction deleted'); },200);
+      return;
+    }
+    r.style.transform=''; r.style.boxShadow='';
+    setTimeout(function(){ r.classList.remove('sw','sw-back','sw-del','sw-edit'); r._on=false; },240);
+    if(suelto&&dx>=SWIPE_ON) editTx(id);
+  }
+  wrap.addEventListener('pointerup',fin);
+  wrap.addEventListener('pointercancel',fin);
+  // El click que el navegador dispara al soltar no debe seleccionar la fila.
+  wrap.addEventListener('click',function(e){
+    var r=e.target.closest('tr.tx-row');
+    if(r&&r._swiped&&Date.now()-r._swiped<500){ e.stopPropagation(); e.preventDefault(); }
+  },true);
+})(document.getElementById('tx-wrap'));
 // Mobile: las acciones de una fila de holdings solo aparecen con la fila
 // seleccionada, igual que en Wallets. En desktop mandan :hover/:focus-within.
 window.selectHldRow = function(el){

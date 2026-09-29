@@ -1742,3 +1742,17 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
   .mc-row{font-size:12px}
 }
 .bdg-close-row{display:flex;justify-content:center;margin:26px 0 8px}
+
+/* Deslizar una fila de transaccion (movil). pan-y: el scroll vertical sigue siendo
+   del navegador y el gesto horizontal llega a JS sin frenar la lista. */
+@media(max-width:720px){
+  .tx-row{touch-action:pan-y;position:relative}
+  /* content-visibility:auto contiene el pintado: el icono y la sombra del hueco
+     quedarian recortados mientras la fila se mueve */
+  .tx-row.sw{transition:none;content-visibility:visible}
+  .tx-row.sw:active{transform:none}
+  .tx-row.sw-back{transition:transform .22s cubic-bezier(.32,.72,0,1),box-shadow .22s cubic-bezier(.32,.72,0,1)}
+  .tx-row.sw-del::after,.tx-row.sw-edit::before{content:'';position:absolute;top:50%;width:20px;height:20px;margin-top:-10px;background:no-repeat center/contain;pointer-events:none}
+  .tx-row.sw-del::after{left:calc(100% + 24px);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 6 5 6 21 6'/%3E%3Cpath d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/%3E%3Cpath d='M10 11v6M14 11v6'/%3E%3Cpath d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/%3E%3C/svg%3E")}
+  .tx-row.sw-edit::before{right:calc(100% + 24px);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='1.5'%3E%3Cpath d='M11 2l3 3-9 9H2v-3L11 2z'/%3E%3C/svg%3E")}
+}
