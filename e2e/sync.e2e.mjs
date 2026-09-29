@@ -3034,6 +3034,31 @@ await drag49(f49.x, f49.y - 100, 200); await quieto49();
 check('arrastrar vertical sobre una fila sigue scrolleando', (await ev("scrollY")) < yv49 - 50, `${yv49} → ${await ev("scrollY")}`);
 check('y no mueve la fila de costado', (await ev("document.querySelectorAll('#tx-wrap tr.tx-row.sw').length")) === 0 && await hayTx49('mov5'));
 
+// Borrado deslizando: pasado el Deshacer del toast, queda una alerta para
+// enterarse y poder devolverlo. Si se deshizo a tiempo, no hay alerta.
+const alertas49 = () => ev("(document.getElementById('alerts-wrap')||{}).textContent||''");
+const deslizaBorra49 = async (desc) => { let f = await filaDe49(desc); await quieto49(); f = await filaDe49(desc); await swipe49(f.x, f.y, -170); await sleep(500); };
+await deslizaBorra49('mov6');
+check('recien borrada, todavia no hay alerta (esta el Deshacer)', !/Deleted: mov6/.test(await alertas49()), await alertas49());
+await sleep(4300);
+check('vencido el Deshacer, aparece la alerta', /Deleted: mov6/.test(await alertas49()), (await alertas49()).slice(0, 200));
+await deslizaBorra49('mov7');
+await ev("document.querySelector('#tx-toast button').click()"); await sleep(4600);
+check('deshecho a tiempo, no queda alerta', await hayTx49('mov7') && !/Deleted: mov7/.test(await alertas49()), (await alertas49()).slice(0, 200));
+await ev(`document.querySelector('#alerts-wrap .alert-item[onclick*="reviewSwipeDelete"]').click()`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de restaurar');
+check('la alerta ofrece restaurar o dejarla borrada', /Restore/.test(await ev("document.querySelector('.app-modal-overlay.open').textContent")) && /Keep deleted/.test(await ev("document.querySelector('.app-modal-overlay.open').textContent")));
+await ev("document.querySelector('.app-modal-overlay.open #_amo').click()"); await sleep(500);
+check('restaurar la devuelve', await hayTx49('mov6'));
+check('y la alerta se va', !/Deleted: mov6/.test(await alertas49()), (await alertas49()).slice(0, 200));
+await waitFor(async () => (cloudDoc.transactions || []).some((t) => t.desc === 'mov6'), 8000, 250, 'mov6 restaurada en la nube').catch(() => false);
+check('y vuelve tambien en la nube (le gana al borrado)', (cloudDoc.transactions || []).some((t) => t.desc === 'mov6'));
+await deslizaBorra49('mov8'); await sleep(4300);
+await ev(`document.querySelector('#alerts-wrap .alert-item[onclick*="reviewSwipeDelete"]').click()`);
+await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de restaurar (2)');
+await ev("document.querySelector('.app-modal-overlay.open #_amc').click()"); await sleep(400);
+check('dejarla borrada quita la alerta', !/Deleted: mov8/.test(await alertas49()) && !(await hayTx49('mov8')), (await alertas49()).slice(0, 200));
+
 // Mas vibraciones: error al guardar (patron distinto), deshacer, saldo de wallet,
 // refrescar a mano y el umbral de cerrar el panel arrastrando.
 const vib49 = async () => JSON.parse(await ev("JSON.stringify(window.__vib)"));
