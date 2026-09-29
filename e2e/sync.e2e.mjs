@@ -174,6 +174,11 @@ ws.onmessage = async (e) => {
 };
 await new Promise((r) => (ws.onopen = r));
 await send('Page.enable');
+// Headless no le da el foco del sistema a la pestaña: document.hasFocus() da
+// false y :focus no aplica aunque activeElement sea el input, asi que las reglas
+// de estilo al enfocar no se podian probar. Hacen falta las dos llamadas.
+await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+await send('Page.bringToFront');
 await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*/api/blob-upload*' }, { urlPattern: '*/api/receipt*' }, { urlPattern: '*supabase.co/auth/*' }] });
 
 const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value;
@@ -2235,7 +2240,8 @@ console.log('E2E lapidas — llegan aunque la nube no traiga la lista');
 const idTx40 = Date.now() - 5000;
 const seed40 = `localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('ft13')||'{}'), {
   deletedTxIds: [], deletedWalletIds: [], manualWallets: [ { id: 91, name: 'Zinli', balance: 100, updatedAt: ${idTx40} } ],
-  transactions: [ { id: ${idTx40}, createdAt: ${idTx40}, seq: 0, date: '${dU(0)}', desc: 'E2E la borro el otro', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 8, originalCurrency: 'USD', imported: false, updatedAt: ${idTx40} } ],
+  transactions: [ { id: ${idTx40}, createdAt: ${idTx40}, seq: 0, date: '${dU(0)}', desc: 'E2E la borro el otro', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 8, originalCurrency: 'USD', imported: false, updatedAt: ${idTx40} },
+                  { id: ${idTx40 + 1}, createdAt: ${idTx40 + 1}, seq: 1, date: '${dU(0)}', desc: 'E2E sobrevive', wallet: '', type: 'Debit', category: 'Groceries', amountUSD: 4, originalCurrency: 'USD', imported: false, updatedAt: ${idTx40 + 1} } ],
   manualWalletsUpdatedAt: ${idTx40}, transactionsUpdatedAt: ${idTx40} })))`;
 // El push del escenario anterior sigue en vuelo: cuando el servidor responde, la
 // app adopta el doc merged y re-escribe localStorage, pisando lo que sembremos.
@@ -2243,13 +2249,12 @@ const seed40 = `localStorage.setItem('ft13', JSON.stringify(Object.assign(JSON.p
 // El doc puede traer ademas lo del escenario anterior (la nube lo conserva): se
 // mira SOLO lo sembrado aca, y de paso sirve para probar que lo demas no se cae.
 const estado40 = `(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');
-  return ((S.transactions||[]).some(function(t){return t.desc==='E2E la borro el otro';})?'tx':'-')
+  return ((S.transactions||[]).some(function(t){return t.desc==='E2E la borro el otro';})&&(S.transactions||[]).some(function(t){return t.desc==='E2E sobrevive';})?'tx':'-')
     +':'+((S.manualWallets||[]).some(function(w){return w.name==='Zinli';})?'w':'-');})()`;
 await waitFor(async () => { await ev(seed40); return (await ev(estado40)) === 'tx:w'; }, 8000, 400, 'sembrar el estado del escenario 40')
   .catch((e) => console.warn(`  ! ${e.message}`));
 await boot();
 check('antes del pull, la tx y la wallet estan', (await ev(estado40)) === 'tx:w', String(await ev(estado40)));
-const otros40 = await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length");
 
 // La nube: SOLO las lapidas, sin ninguna de las dos listas.
 cloudDoc = { deletedTxIds: [{ id: idTx40, ts: Date.now() }], deletedWalletIds: [{ id: 91, ts: Date.now() }] };
@@ -2258,7 +2263,9 @@ const tras40 = JSON.parse(await ev("(function(){var S=JSON.parse(localStorage.ge
 check('el borrado de la tx llega igual', tras40.txs.indexOf('E2E la borro el otro') < 0, JSON.stringify(tras40));
 check('y el de la wallet tambien', tras40.ws.indexOf('Zinli') < 0, JSON.stringify(tras40));
 // Y una lista ausente NO es una lista vacia: lo que no tiene lapida sigue vivo.
-check('lo que no se borro sobrevive a la lista ausente', tras40.txs.length === otros40 - 1, JSON.stringify(tras40) + ' antes:' + otros40);
+// Por nombre y no contando: un push del escenario anterior que aterriza tarde
+// puede sumarle a la nube una tx ajena, y eso no dice nada de esta regla.
+check('lo que no se borro sobrevive a la lista ausente', tras40.txs.indexOf('E2E sobrevive') >= 0, JSON.stringify(tras40));
 
 // ── escenario 41: deshacer alcanza a wallets, snapshots y reglas ────────────
 // El boton Undo estaba siempre disponible pero solo restauraba S.transactions:

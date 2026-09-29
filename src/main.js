@@ -1340,8 +1340,8 @@ function renderReceiptPreview(){
       }).catch(function(e){
         // La foto SI se guardo — lo que fallo es la firma para mostrarla. Decirlo
         // con esas palabras: un cuadro vacio se lee como "no se subio nada".
-        var st=document.getElementById('tx-receipt-status');
-        if(st&&!st.textContent.trim()) st.innerHTML='<span style="color:#EF9F27">Saved, but the preview could not load:</span> '+escHtml(String(e&&e.message||e).slice(0,160));
+        _rcpSignWarn='<span style="color:#EF9F27">Saved, but the preview could not load:</span> '+escHtml(String(e&&e.message||e).slice(0,160));
+        rcpShowSignWarn();
       });
     }
   }
@@ -1353,7 +1353,7 @@ function removeReceipt(){
   // La imagen ya subida no se borra aca: el barrido diario (api/backup.js) se
   // lleva la que quede sin transaccion que la referencie. Borrarla en el acto
   // dejaria sin foto al undo de un borrado.
-  pendingReceiptUrl=null; pendingReceiptPath=null; _receiptFile=null;
+  pendingReceiptUrl=null; pendingReceiptPath=null; _receiptFile=null; _rcpSignWarn='';
   document.getElementById('tx-receipt').value='';
   document.getElementById('tx-receipt-status').textContent='';
   renderReceiptPreview();
@@ -1391,6 +1391,16 @@ async function onReceiptPick(input){
 // editable. Si la lectura falla, no pasa nada — se escribe a mano como siempre.
 var _readingReceipt=false;
 function rcpStatus(html){ var st=document.getElementById('tx-receipt-status'); if(st) st.innerHTML=html; }
+// Aviso de "se guardo pero no se puede mostrar". La lectura corre en paralelo y
+// escribe en la misma linea: sin guardarlo aparte, su "Reading receipt…" hacia
+// que el aviso no se escribiera y el 503 (lectura sin configurar) borraba la linea.
+var _rcpSignWarn='';
+function rcpShowSignWarn(){
+  var st=document.getElementById('tx-receipt-status'); if(!st||!_rcpSignWarn) return;
+  if(!st.textContent.trim()||st.querySelector('.spin')) st.innerHTML=_rcpSignWarn;
+  else if(st.innerHTML.indexOf(_rcpSignWarn)<0) st.innerHTML+='<br>'+_rcpSignWarn;
+}
+function rcpDone(html){ rcpStatus(html); rcpShowSignWarn(); }
 async function readReceipt(){
   var file=_receiptFile; if(!file||_readingReceipt) return;
   _readingReceipt=true;
@@ -1399,13 +1409,13 @@ async function readReceipt(){
     var dataUrl=await compressImage(file);
     var r=await fetch(RECEIPT_READ,{method:'POST',headers:exchangeProxyHeaders(),
       body:JSON.stringify({dataB64:dataUrl.split(',')[1],contentType:'image/jpeg'})});
-    if(r.status===503){ rcpStatus(''); return; }   // no configurado: ni se menciona
+    if(r.status===503){ rcpDone(''); return; }   // no configurado: ni se menciona
     if(!r.ok) throw new Error('read failed');
     var x=await r.json();
-    if(!x||!x.found){ rcpStatus('<span style="color:var(--txt3)">Could not read this one — type it in</span>'); return; }
-    rcpStatus(fillFromReceipt(x));
+    if(!x||!x.found){ rcpDone('<span style="color:var(--txt3)">Could not read this one — type it in</span>'); return; }
+    rcpDone(fillFromReceipt(x));
   }catch(e){
-    rcpStatus('<span style="color:var(--txt3)">Could not read this one — type it in</span>');
+    rcpDone('<span style="color:var(--txt3)">Could not read this one — type it in</span>');
   }finally{ _readingReceipt=false; }
 }
 // Devuelve el texto de lo que completo, para que se vea que fue la foto y no vos.
@@ -1444,6 +1454,7 @@ async function srvError(r){
 // Retains the picked file so a failed upload can be retried instead of lost.
 async function _uploadReceipt(){
   var file=_receiptFile; if(!file) return false;
+  _rcpSignWarn='';
   var status=document.getElementById('tx-receipt-status');
   if(status) status.innerHTML='<span class="spin"></span> Uploading…';
   receiptUploading=true;
