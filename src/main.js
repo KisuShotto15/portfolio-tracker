@@ -347,6 +347,9 @@ function showStorageBanner(show,quota){
   if(b) b.classList.toggle('show', !!show);
   document.body.classList.toggle('has-store-banner', !!show);
 }
+// Para el e2e (como __bootDone): el guardado local es diferido, y leer
+// localStorage justo despues de un arranque podia ver el estado de antes.
+window.__localSavePending=function(){ return _slHandle!=null; };
 function saveLocal(){
   if(_slDisabled||_slHandle!=null) return;
   var run=function(){ _slHandle=null; _saveLocalNow(); };

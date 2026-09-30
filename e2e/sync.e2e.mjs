@@ -209,6 +209,12 @@ async function boot() {
     }
     console.warn(`  ! ${e.message}`);
   }
+  // El guardado local es diferido (requestIdleCallback): un chequeo que lee
+  // localStorage apenas termina el arranque podia ver el estado de antes del pull.
+  // Asi fallaban intermitente "la wallet de exchange sigue entera" y "tras
+  // recargar, el restore sigue puesto".
+  await waitFor(async () => !(await ev('!!(window.__localSavePending&&window.__localSavePending())')), 3000, 50, 'el guardado local tras el arranque')
+    .catch((e) => console.warn(`  ! ${e.message}`));
 }
 
 // ── escenario 1: dispositivo A escribe ──────────────────────────────────────
@@ -2186,14 +2192,13 @@ const legacy38 = {
   trezorBalance: 0, trezorUpdated: '2:31 AM', trezorAddress: '', trezorAddressUpdatedAt: null,
 };
 // Que aterrice el push del escenario 37 antes de reemplazar la nube: si llega
-// despues, el merge le suma sus exchanges y la wallet de este escenario deja de
-// ser la unica.
+// despues, el merge le suma sus exchanges al chequeo de la nube de mas abajo.
 await sleep(2500);
 cloudDoc = Object.assign({ transactions: [], deletedTxIds: [], snapshots: [], manualWallets: [], recurring: [],
   exchangeWallets: [{ id: 901, name: 'Binance', type: 'binance', balance: 500, fetchedAt: Date.now(), updatedAt: Date.now() }],
   exchangeWalletsUpdatedAt: Date.now(), exchangeMigrated: 1 }, legacy38);
 await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')");
-await boot();
+await boot();   // espera el guardado local diferido: sin eso esto leia un localStorage vacio
 const sigue38 = async () => JSON.parse(await ev(`(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify(${JSON.stringify(Object.keys(legacy38))}.filter(function(k){return k in S;}));})()`));
 check('el dispositivo no se queda con ningun campo legacy', JSON.stringify(await sigue38()) === '[]', JSON.stringify(await sigue38()));
 const xw38 = await ev("(function(){var l=JSON.parse(localStorage.getItem('ft13')||'{}').exchangeWallets;var w=(l||[]).find(function(x){return x.id===901;});return JSON.stringify({w:w?w.name+':'+w.balance:null,todas:(l||[]).map(function(x){return x.id+':'+x.name+':'+x.balance;}),nube:(__CLOUD__)});})()".replace('__CLOUD__', JSON.stringify((cloudDoc.exchangeWallets || []).map((x) => x.id + ':' + x.name + ':' + x.balance))));
