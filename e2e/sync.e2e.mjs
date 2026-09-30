@@ -2196,8 +2196,8 @@ await ev("localStorage.removeItem('ft13');localStorage.removeItem('ft13_dirty')"
 await boot();
 const sigue38 = async () => JSON.parse(await ev(`(function(){var S=JSON.parse(localStorage.getItem('ft13')||'{}');return JSON.stringify(${JSON.stringify(Object.keys(legacy38))}.filter(function(k){return k in S;}));})()`));
 check('el dispositivo no se queda con ningun campo legacy', JSON.stringify(await sigue38()) === '[]', JSON.stringify(await sigue38()));
-check('y la wallet de exchange de verdad sigue entera',
-  (await ev("(function(){var w=(JSON.parse(localStorage.getItem('ft13')||'{}').exchangeWallets||[]).find(function(x){return x.id===901;});return w?w.name+':'+w.balance:null;})()")) === 'Binance:500');
+const xw38 = await ev("(function(){var l=JSON.parse(localStorage.getItem('ft13')||'{}').exchangeWallets;var w=(l||[]).find(function(x){return x.id===901;});return JSON.stringify({w:w?w.name+':'+w.balance:null,todas:(l||[]).map(function(x){return x.id+':'+x.name+':'+x.balance;}),nube:(__CLOUD__)});})()".replace('__CLOUD__', JSON.stringify((cloudDoc.exchangeWallets || []).map((x) => x.id + ':' + x.name + ':' + x.balance))));
+check('y la wallet de exchange de verdad sigue entera', JSON.parse(xw38).w === 'Binance:500', xw38);
 
 // Un push los poda tambien de la nube: si no, el proximo pull se los devuelve.
 await ev('openTxForm()'); await sleep(250);
@@ -2997,6 +2997,9 @@ await ev(`deleteTx(${idVib49})`);
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de borrar (vibra 2)');
 await ev("document.querySelector('.app-modal-overlay.open #_amo').click()"); await sleep(300);
 check('borrar vibra', (await ev("window.__vib.length")) === 2, String(await ev("JSON.stringify(window.__vib)")));
+// Borrar con el boton (que ya confirmo) tambien deja la alerta, y sin esperar.
+check('borrar con el boton deja la alerta en el acto', /Deleted: vibra49 .*Removed just now/.test(await ev("(document.getElementById('alerts-wrap')||{}).textContent||''")), (await ev("(document.getElementById('alerts-wrap')||{}).textContent||''")).slice(0, 200));
+check('cancelar el borrado no deja alerta', (await ev("(document.getElementById('alerts-wrap')||{}).textContent||''")).split('Deleted: vibra49').length === 2);
 
 // Deslizar una fila: corto no hace nada; largo a la izquierda borra (con
 // Deshacer); largo a la derecha abre la edicion; vertical sigue scrolleando.
@@ -3045,7 +3048,8 @@ check('vencido el Deshacer, aparece la alerta', /Deleted: mov6/.test(await alert
 await deslizaBorra49('mov7');
 await ev("document.querySelector('#tx-toast button').click()"); await sleep(4600);
 check('deshecho a tiempo, no queda alerta', await hayTx49('mov7') && !/Deleted: mov7/.test(await alertas49()), (await alertas49()).slice(0, 200));
-await ev(`document.querySelector('#alerts-wrap .alert-item[onclick*="reviewSwipeDelete"]').click()`);
+const tocaAlerta49 = (desc) => ev(`[...document.querySelectorAll('#alerts-wrap .alert-item[onclick*="reviewDeleted"]')].find(function(a){return a.textContent.indexOf('Deleted: ${desc} ')>=0;}).click()`);
+await tocaAlerta49('mov6');
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de restaurar');
 check('la alerta ofrece restaurar o dejarla borrada', /Restore/.test(await ev("document.querySelector('.app-modal-overlay.open').textContent")) && /Keep deleted/.test(await ev("document.querySelector('.app-modal-overlay.open').textContent")));
 await ev("document.querySelector('.app-modal-overlay.open #_amo').click()"); await sleep(500);
@@ -3054,7 +3058,7 @@ check('y la alerta se va', !/Deleted: mov6/.test(await alertas49()), (await aler
 await waitFor(async () => (cloudDoc.transactions || []).some((t) => t.desc === 'mov6'), 8000, 250, 'mov6 restaurada en la nube').catch(() => false);
 check('y vuelve tambien en la nube (le gana al borrado)', (cloudDoc.transactions || []).some((t) => t.desc === 'mov6'));
 await deslizaBorra49('mov8'); await sleep(4300);
-await ev(`document.querySelector('#alerts-wrap .alert-item[onclick*="reviewSwipeDelete"]').click()`);
+await tocaAlerta49('mov8');
 await waitFor(async () => (await ev("document.querySelectorAll('.app-modal-overlay.open').length")) > 0, 3000, 60, 'el confirm de restaurar (2)');
 await ev("document.querySelector('.app-modal-overlay.open #_amc').click()"); await sleep(400);
 check('dejarla borrada quita la alerta', !/Deleted: mov8/.test(await alertas49()) && !(await hayTx49('mov8')), (await alertas49()).slice(0, 200));

@@ -123,8 +123,7 @@ var S = {
   // Guarda el NUMERO, no un booleano: asi el aviso vuelve solo si la proyeccion
   // empeora un escalon (ver PACE_SNOOZE_STEP), en vez de callarse para siempre.
   paceSnooze:{}, paceSnoozeUpdatedAt:null,
-  // Borrados por deslizamiento (copia de la tx): pasado el Deshacer del toast,
-  // quedan como alerta para poder devolverlos. Ver noteSwipeDelete.
+  // Txs borradas (copia): quedan como alerta para poder devolverlas. Ver noteDeleted.
   swipeDeleted:[], swipeDeletedUpdatedAt:null,
   notePins:[], notePinsUpdatedAt:null, // notas fijadas con estrella: siempre primero en sugerencias
   // BDV Limits salio de produccion (la tool ya no existe). El campo se queda:
@@ -1622,26 +1621,30 @@ async function deleteTx(id){
   var amt=(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD);
   var ok=await appConfirm('Delete transaction?',escHtml(t.desc)+' <span style="color:'+(t.type==='Credit'?'#5DCAA5':'#E24B4A')+'">'+amt+'</span>','Delete');
   if(!ok) return;
+  var t2=S.transactions.find(function(x){ return x.id===id; }); // re-fetch: un sync durante el await
+  if(t2) noteDeleted(t2,false);
   deleteTxNow(id,true);
 }
-// Borrado por deslizamiento: el Deshacer dura lo que el toast. Pasado eso queda
-// una alerta con la tx, para enterarse de un borrado sin querer y poder
-// devolverla. Siete dias y se olvida; como mucho las cinco mas nuevas.
+// Todo borrado de una tx deja una alerta con su copia, para enterarse de un
+// borrado sin querer y poder devolverla. Con toast (deslizar) espera a que venza
+// su Deshacer; con el boton, que ya pidio confirmacion, sale en el acto. Siete
+// dias y se olvida; como mucho las cinco mas nuevas. (El campo se llama
+// swipeDeleted porque nacio con el deslizar; renombrarlo pediria migrar docs.)
 var UNDO_TOAST_MS=4000, SWIPE_DEL_KEEP_MS=7*24*3600*1000, SWIPE_DEL_MAX=5;
-function noteSwipeDelete(t){
+function noteDeleted(t,conToast){
   var now=Date.now(), vivas={};
   S.transactions.forEach(function(x){ vivas[x.id]=1; });
   var l=(S.swipeDeleted||[]).filter(function(e){ return e.id!==t.id&&!vivas[e.id]&&now-e.at<SWIPE_DEL_KEEP_MS; });
-  l.unshift({id:t.id,at:now,tx:JSON.parse(JSON.stringify(t))});
+  l.unshift({id:t.id,at:now,toast:!!conToast,tx:JSON.parse(JSON.stringify(t))});
   S.swipeDeleted=l.slice(0,SWIPE_DEL_MAX); S.swipeDeletedUpdatedAt=stamp();
-  setTimeout(renderAlerts,UNDO_TOAST_MS+150);
+  if(conToast) setTimeout(renderAlerts,UNDO_TOAST_MS+150);
 }
 function _haceTxt(ms){
-  var m=Math.round(ms/60000); if(m<60) return m<=1?'a minute ago':m+' min ago';
+  var m=Math.round(ms/60000); if(m<1) return 'just now'; if(m<60) return m===1?'a minute ago':m+' min ago';
   var h=Math.round(m/60); if(h<24) return h+'h ago';
   var d=Math.round(h/24); return d===1?'yesterday':d+' days ago';
 }
-window.reviewSwipeDelete=async function(id){
+window.reviewDeleted=async function(id){
   var e=(S.swipeDeleted||[]).find(function(x){ return x.id===id; }); if(!e) return;
   var t=e.tx||{}, cred=t.type==='Credit';
   var ok=await appConfirm('Restore transaction?',
@@ -2984,18 +2987,20 @@ function getActiveAlerts(){
     });
   });
 
-  // 6. Borrados deslizando, una vez vencido el Deshacer del toast. Arriba de
-  // todo: es lo unico de la lista que se puede perder sin darse cuenta.
+  // 6. Txs borradas (las deslizadas, una vez vencido el Deshacer del toast).
+  // Arriba de todo: es lo unico de la lista que se puede perder sin darse cuenta.
+  // toast undefined = entrada de antes de que existiera el boton: era deslizada.
   var ahora=Date.now(), vivas={};
   S.transactions.forEach(function(t){ vivas[t.id]=1; });
   (S.swipeDeleted||[]).slice().reverse().forEach(function(e){
-    if(vivas[e.id]||ahora-e.at<UNDO_TOAST_MS||ahora-e.at>=SWIPE_DEL_KEEP_MS) return;
+    var desliz=e.toast!==false;
+    if(vivas[e.id]||(desliz&&ahora-e.at<UNDO_TOAST_MS)||ahora-e.at>=SWIPE_DEL_KEEP_MS) return;
     var t=e.tx||{};
     alerts.unshift({
       sev:'warn',
       msg:'Deleted: '+(t.desc||'transaction')+' · '+(t.type==='Credit'?'+':'-')+fmtUSD(t.amountUSD||0),
-      action:'Swiped away '+_haceTxt(ahora-e.at)+' · tap to restore or keep it deleted',
-      onClick:'reviewSwipeDelete('+e.id+')'
+      action:(desliz?'Swiped away ':'Removed ')+_haceTxt(ahora-e.at)+' · tap to restore or keep it deleted',
+      onClick:'reviewDeleted('+e.id+')'
     });
   });
 
@@ -5157,7 +5162,7 @@ var SWIPE_ON=90;
       r.style.boxShadow=r.offsetWidth+'px 0 0 0 rgba(226,75,74,1)';
       setTimeout(function(){
         var tx=S.transactions.find(function(x){ return x.id===id; });
-        if(tx) noteSwipeDelete(tx);
+        if(tx) noteDeleted(tx,true);
         deleteTxNow(id,false); showUndoToast('Transaction deleted');
       },200);
       return;
