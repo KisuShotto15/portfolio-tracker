@@ -179,6 +179,9 @@ await send('Page.enable');
 // de estilo al enfocar no se podian probar. Hacen falta las dos llamadas.
 await send('Emulation.setFocusEmulationEnabled', { enabled: true });
 await send('Page.bringToFront');
+// El cierre de mes automatico depende del dia real: solo corre cuando una prueba
+// lo pide con su fecha (autoMonthSnapshot(h, min, 'YYYY-MM-DD')).
+await send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__noAutoClose=1;' });
 await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/sync*' }, { urlPattern: '*/api/blob-upload*' }, { urlPattern: '*/api/receipt*' }, { urlPattern: '*supabase.co/auth/*' }] });
 
 const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, returnByValue: true })).result?.result?.value;
@@ -1505,17 +1508,11 @@ await ev(`localStorage.setItem('ft13', JSON.stringify(Object.assign(
       { id: ${idTx05}, createdAt: ${idTx05}, seq: 0, date: '${dia05}', desc: 'mercado', wallet: 'Efectivo', type: 'Debit', category: 'Groceries', amountUSD: 100, originalCurrency: 'USD', imported: false, updatedAt: ${idTx05} } ],
     snapshotsUpdatedAt: Date.now(), manualWalletsUpdatedAt: Date.now(), transactionsUpdatedAt: Date.now() })))`);
 await boot();
-// La hora entra por parametro: sin esto el escenario solo pasaria si la suite corre
-// el ultimo dia del mes despues de las 20:00. El DIA lo sigue decidiendo la app
-// (localToday), asi que igual se prueba contra la fecha real.
-await ev("autoMonthSnapshot(22)"); await sleep(400);
-const hoyEsFinDeMes = (() => { const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') === finMesActual; })();
+// Con fecha fija y no la real: con la real, el resultado dependia del dia en que
+// corria la suite (el ultimo dia de noche, o el dia 1, crea el cierre).
+await ev(`autoMonthSnapshot(22,20,'${finMesActual.slice(0, 8)}15')`); await sleep(400);
 const auto27 = JSON.parse(await ev("(function(){var s=(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]);return JSON.stringify(s.map(function(x){return {date:x.date,total:x.total,auto:!!x.auto,der:x.derivedIncome,id:x.id};}));})()"));
-
-// Con la fecha real: solo cierra si HOY es el ultimo dia del mes.
-check(hoyEsFinDeMes ? 'hoy es fin de mes: lo crea' : 'fuera del ultimo dia no crea nada',
-  auto27.length === (hoyEsFinDeMes ? 2 : 1), JSON.stringify(auto27));
+check('a mitad de mes no crea nada', auto27.length === 1, JSON.stringify(auto27));
 
 // Y forzando el dia, se prueba como queda el snapshot creado (corra cuando corra).
 await ev(`autoMonthSnapshot(22,20,'${finMesActual}')`); await sleep(400);
@@ -2508,7 +2505,9 @@ await cancelModal(); await sleep(300);
 check('cancelar no anota nada', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 3);
 // Con fecha de HOY no molesta: el mes en curso no esta cerrado.
 await ev(`document.getElementById('tx-date').value='${hoy44}';addTxOrUpdate()`); await sleep(600);
-check('con fecha de hoy no pregunta nada', (await ev("document.querySelectorAll('.app-modal-overlay').length")) === 0);
+// Sin contar el resumen de cierre de mes: el dia 1 el "ayer" sembrado cae en el
+// mes anterior y ese resumen se abre solo al arrancar; no es un aviso de esta tx.
+check('con fecha de hoy no pregunta nada', (await ev("[...document.querySelectorAll('.app-modal-overlay')].filter(function(m){return m.id!=='month-close';}).length")) === 0);
 check('y la transaccion entra', (await ev("(JSON.parse(localStorage.getItem('ft13')||'{}').transactions||[]).length")) === 4);
 await ev("closeTxForm()"); await sleep(300);
 
@@ -3089,6 +3088,16 @@ const tope49 = JSON.parse(await ev("(function(){var r=document.getElementById('t
 await drag49(tope49.x, tope49.y, 180); await sleep(450);
 check('arrastrar el panel mas alla del umbral vibra una vez', JSON.stringify(await vib49()) === '[8]', JSON.stringify(await vib49()));
 check('y al soltar se cierra', !(await ev("document.getElementById('tx-form-panel').classList.contains('open')")));
+
+// Un arrastre que arranca en un select del panel (Category) no se cancela: su
+// desplegable scrollea en ::picker(select), que el bloqueo de toques no ve.
+await ev("openTxForm()"); await sleep(450);
+await ev("window.__prev=[];document.addEventListener('touchmove',function(e){window.__prev.push(e.defaultPrevented);},{passive:true})");
+const cat49 = JSON.parse(await ev("(function(){var r=document.getElementById('tx-cat').getBoundingClientRect();return JSON.stringify({x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)});})()"));
+await drag49(cat49.x, cat49.y, -120); await sleep(200);
+check('arrastrar sobre Category no se bloquea', (await ev("window.__prev.length")) > 0 && !(await ev("window.__prev.some(function(x){return x;})")), await ev("JSON.stringify(window.__prev)"));
+await ev("closeTxForm()"); await sleep(400);
+
 await send('Emulation.setTouchEmulationEnabled', { enabled: false });
 
 // Modal con campo (Balance in Bs, snapshot): arriba, no centrado, para que el
@@ -3101,6 +3110,26 @@ check('en movil el modal va arriba', pos49.top < pos49.vh * 0.2, JSON.stringify(
 check('y termina antes de donde abre el teclado', pos49.bot < pos49.vh * 0.58, JSON.stringify(pos49));
 await ev("document.querySelector('.app-modal-overlay.open #_amc').click()"); await sleep(300);
 await send('Emulation.clearDeviceMetricsOverride'); await sleep(300);
+
+// Va despues del modal de snapshot de arriba: el cierre que crea le agregaria
+// el aviso de periodo a ese modal y lo haria mas alto.
+// Cierre de mes tardio: el dia 1 cierra el mes anterior si esa noche no se hizo.
+const mesHoy49 = hoy49.slice(0, 7);
+const finAnt49 = await ev(`(function(){var p='${mesHoy49}'.split('-');return new Date(Date.UTC(+p[0],+p[1]-1,0)).toISOString().slice(0,10);})()`);
+await ev(`(function(){var d=JSON.parse(localStorage.getItem('ft13')||'{}');return 1;})()`);
+await ev(`autoMonthSnapshot(9,20,'${mesHoy49}-02')`); await sleep(200);
+check('el dia 2 ya no cierra el mes anterior', !(await ev(`(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).some(function(s){return s.date==='${finAnt49}'&&s.lateOn==='${mesHoy49}-02';})`)));
+const tenia49 = await ev(`(JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).some(function(s){return s.date==='${finAnt49}';})`);
+if (!tenia49) {
+  await ev(`autoMonthSnapshot(9,20,'${mesHoy49}-01')`); await sleep(300);
+  const late49 = JSON.parse(await ev(`JSON.stringify((JSON.parse(localStorage.getItem('ft13')||'{}').snapshots||[]).find(function(s){return s.date==='${finAnt49}';})||null)`));
+  check('el dia 1, a la manana, cierra el mes anterior', !!late49 && late49.auto === true && late49.lateOn === `${mesHoy49}-01`, JSON.stringify(late49));
+  await ev("showPage('summary',null);renderSummary()"); await sleep(300);
+  check('y la alerta dice que se tomo tarde', /taken late/.test(await ev("(document.getElementById('alerts-wrap')||{}).textContent||''")), (await ev("(document.getElementById('alerts-wrap')||{}).textContent||''")).slice(0, 300));
+} else {
+  console.warn('  ! ya habia snapshot de cierre del mes anterior: el chequeo del cierre tardio no aplica en esta corrida');
+}
+
 
 ws.close();
 console.log(failures.length ? `\nFAIL: ${failures.length} chequeo(s) fallaron` : '\nPASS: sync E2E completo');

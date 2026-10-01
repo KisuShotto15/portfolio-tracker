@@ -2970,7 +2970,10 @@ function getActiveAlerts(){
       action:'Placeholder '+fmtUSD(s.total)+' — verify the real amount in History'
         // La foto se toma esa noche, no al terminar el dia: lo que anotes despues
         // pertenece a ese mes pero ya no esta en el total.
-        +' · taken that evening, so anything logged later that night is not in it'
+        +(s.lateOn
+          // Cierre tardio: el total es el del dia siguiente, no el del cierre.
+          ?' · taken late, on '+fmtDate(s.lateOn)+', so anything that moved since the month ended is in it'
+          :' · taken that evening, so anything logged later that night is not in it')
         +(caidos?' · no fresh balance from '+caidos+' when it was taken':'')
         +(atras?' · '+atras+' older one'+(atras===1?'':'s')+' still to verify':'')
         +' · tap to dismiss',
@@ -3742,23 +3745,35 @@ function derivedIncomeFor(prevSnap,snap){
 // La hora y el dia entran por parametro (default: los reales) para que el e2e
 // pueda ejercitar la creacion sin esperar al ultimo dia del mes.
 function autoMonthSnapshot(hour,minHour,todayISO){
-  var date=autoSnapshotDueCore(S.snapshots,todayISO||localToday(),hour==null?new Date().getHours():hour,minHour);
+  // El e2e corre con el calendario real: el dia 1 (o el ultimo dia de noche) cada
+  // arranque crearia un cierre y romperia las pruebas que cuentan snapshots. Ahi
+  // solo corre cuando una prueba lo llama con su propia fecha.
+  if(window.__noAutoClose&&!todayISO) return;
+  var hoy=todayISO||localToday();
+  var date=autoSnapshotDueCore(S.snapshots,hoy,hour==null?new Date().getHours():hour,minHour);
   if(!date) return;
   // id = 23:59:59 de ESE dia, no Date.now(). Los periodos se arman comparando ids
   // (txInPeriodCore): con el id del momento de creacion, un snapshot fechado el 31
   // se tragaba dentro de su periodo las transacciones del mes siguiente.
   var snap={id:Date.parse(date+'T23:59:59'),date:date,total:getTotalBalance(),holdingsValue:holdingsTotalUsd(),auto:true};
+  // Tomado al dia siguiente: el total es el de hoy, no el del cierre. La alerta lo dice.
+  if(date!==hoy) snap.lateOn=hoy;
   // Quien no estaba respondiendo EN ESE MOMENTO. Se guarda en el snapshot y no se
   // recalcula al renderizar la alerta: para cuando la leas, el exchange puede
   // estar andando de nuevo y el total igual quedo mal.
   var caidos=staleExchanges();
   if(caidos.length) snap.staleExchanges=caidos.map(function(x){ return x.name; });
-  var sorted=(S.snapshots||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+  // El anterior por FECHA, no el ultimo de la lista: el de cierre tardio puede
+  // llegar despues de un snapshot de hoy.
+  var sorted=(S.snapshots||[]).filter(function(s){ return s.date<date; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
   var prev=sorted[sorted.length-1];
   // Sin snapshot previo no hay periodo: este es la linea base y no deriva income.
   if(prev) snap.derivedIncome=derivedIncomeFor(prev,snap);
   snap.updatedAt=S.snapshotsUpdatedAt=stamp();
   S.snapshots.push(snap);
+  // Si ya habia uno posterior (hoy), su periodo ahora arranca en este cierre.
+  var sig=nextSnapAfter(date);
+  if(sig&&typeof sig.derivedIncome==='number'){ sig.derivedIncome=derivedIncomeFor(snap,sig); sig.updatedAt=stamp(); }
   undoKeepAdded('snapshots',[snap]);
   save();
 }
@@ -5365,6 +5380,9 @@ function _containSheetTouch(panel){
   panel.addEventListener('touchmove',function(e){
     var y=e.touches[0].clientY, dy=y-lastY; lastY=y;
     if(!dy) return;
+    // El desplegable de un select (Category, Wallet) scrollea en ::picker(select),
+    // un pseudo-elemento que el recorrido de abajo no ve: sin esto se bloqueaba.
+    if(e.target.closest&&e.target.closest('select')) return;
     for(var el=e.target; el&&el.nodeType===1; el=el.parentElement){
       if(_canScrollY(el,dy)) return;
       if(el===panel) break;
@@ -5630,9 +5648,15 @@ async function bootAfterAuth(firstLogin){
     schedulePull();
     // Pull immediately whenever the tab regains focus or visibility, y corre las
     // recurrentes por si una pestana quedo abierta cruzando el dia de cobro.
-    window.addEventListener('focus', function(){ resetPullPace(); fetchUsdtRate(); autoPull().then(applyRecurring); });
+    // El cierre de mes corria solo al arrancar: en el telefono la PWA casi siempre
+    // vuelve del segundo plano sin re-arrancar, y la noche del ultimo dia pasaba
+    // sin snapshot. Ahora tambien al volver al frente y cada 15 min con la app
+    // abierta, despues del pull (otro dispositivo pudo haberlo creado ya).
+    var _cierre=function(){ try{ var n=(S.snapshots||[]).length; autoMonthSnapshot(); if((S.snapshots||[]).length!==n){ renderSummary(); renderEquityChart(); } }catch(e){ console.error('month close:',e); } };
+    setInterval(function(){ if(!document.hidden) autoPull().then(_cierre); }, 15*60*1000);
+    window.addEventListener('focus', function(){ resetPullPace(); fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); _cierre(); }); });
     document.addEventListener('visibilitychange', function(){
-      if(!document.hidden){ resetPullPace(); fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
+      if(!document.hidden){ resetPullPace(); fetchUsdtRate(); autoPull().then(function(){ applyRecurring(); _cierre(); autoFetchExchangeWallets(); fetchCoinPrices().then(function(){ renderManualHoldings(); renderEquityChart(); }).catch(function(){}); }); }
     });
   }
 }

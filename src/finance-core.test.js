@@ -732,8 +732,18 @@ describe('snapshot automatico de cierre de mes', () => {
 
   it('no toca ningun otro dia del mes', () => {
     expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-08-30', 23)).toBe(null);
-    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-09-01', 23)).toBe(null);
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-09-02', 23)).toBe(null);
     expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-09-05', 23)).toBe(null);
+  });
+
+  // La noche del 31 la app no se abrio: el dia 1 todavia cierra agosto, a
+  // cualquier hora. Si ya existe el del 31, nada.
+  it('el dia 1 cierra el mes anterior si quedo sin cerrar', () => {
+    expect(autoSnapshotDueCore([snap('2026-08-12')], '2026-09-01', 8)).toBe('2026-08-31');
+    expect(autoSnapshotDueCore([snap('2026-08-31')], '2026-09-01', 8)).toBe(null);
+    expect(autoSnapshotDueCore([], '2026-10-01', 0)).toBe('2026-09-30');
+    expect(autoSnapshotDueCore([], '2026-01-01', 9)).toBe('2025-12-31');
+    expect(autoSnapshotDueCore([], '2028-03-01', 9)).toBe('2028-02-29');
   });
 
   // Que el mes ya tenga snapshots no importa: uno del 12 no cierra agosto.

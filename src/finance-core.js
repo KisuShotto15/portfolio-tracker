@@ -459,10 +459,19 @@ export function monthEndISO(month) {
 // No mira si el mes ya tiene otros snapshots: uno del 12 no cierra nada, y el
 // del ultimo dia es el que hace que el income derivado caiga en el mes correcto.
 // Lo unico que frena es que YA exista uno con esa misma fecha.
+//
+// Excepcion: el dia 1 cierra el mes anterior si esa noche no se hizo (la app no
+// se abrio, o quedo en segundo plano sin volver al frente). Un dia de atraso
+// todavia se parece al cierre, y el snapshot sale marcado para verificarlo; mas
+// atras ya no.
 export function autoSnapshotDueCore(snapshots, todayISO, hour, minHour) {
-  var target = monthEndISO(String(todayISO).slice(0, 7));
-  if (todayISO !== target) return null;
-  if (!(hour >= (minHour == null ? 20 : minHour))) return null;
+  var hoy = String(todayISO);
+  var target = monthEndISO(hoy.slice(0, 7));
+  if (hoy !== target) {
+    if (hoy.slice(8, 10) !== '01') return null;
+    var p = hoy.split('-');
+    target = new Date(Date.UTC(+p[0], +p[1] - 1, 0)).toISOString().slice(0, 10);
+  } else if (!(hour >= (minHour == null ? 20 : minHour))) return null;
   if ((snapshots || []).some(function (s) { return s && s.date === target; })) return null;
   return target;
 }
